@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: govai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - govai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: govai-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - govai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: govai-s3mock
+    restart: unless-stopped
+    environment:
+      initialBuckets: govai-documents
+      root: /data
+    ports:
+      - "${S3MOCK_PORT}:9090"
+    volumes:
+      - s3mock_data:/data
+    networks:
+      - govai-network
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: govai-chromadb
+    restart: unless-stopped
+    ports:
+      - "${CHROMA_PORT}:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - govai-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: govai-pgadmin
+    restart: unless-stopped
+    profiles:
+      - tools
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - govai-network
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: govai-redisinsight
+    restart: unless-stopped
+    profiles:
+      - tools
+    ports:
+      - "${REDIS_INSIGHT_PORT}:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - govai-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  s3mock_data:
+  chroma_data:
+  pgadmin_data:
+  redisinsight_data:
+
+networks:
+  govai-network:
+    driver: bridge
