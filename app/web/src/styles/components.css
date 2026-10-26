@@ -1,0 +1,29 @@
+/* Shared controls: imported once by main.tsx for every page. */
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand > img { object-fit: contain; }
+.brand p { color: #666; font-size: 13px; margin-top: 4px; }
+.wordmark { font: 800 26px/1 Montserrat, 'Segoe UI', sans-serif; letter-spacing: -.5px; }
+.wordmark span:first-child { background: linear-gradient(#a30f2d, #80040f); background-clip: text; color: transparent; }
+.wordmark span:last-child { background: linear-gradient(#f5a915, #d97706); background-clip: text; color: transparent; }
+.icon { width: 18px; height: 18px; flex-shrink: 0; }
+.input-group { display: flex; flex-direction: column; gap: 6px; }
+.input-group > label { font-size: 13px; font-weight: 500; }
+.input-shell { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 2px 14px; min-height: 46px; box-shadow: 0 1px 4px #0000000a; }
+.input-shell:focus-within { border-color: #2166b1; }
+.input-shell.invalid { border-color: var(--brand); }
+.input-shell input { width: 100%; min-width: 0; padding: 12px 0; border: 0; background: transparent; color: inherit; font-size: 14px; }
+.input-shell input:focus-visible { outline-offset: 0; }
+.icon-button { display: flex; align-items: center; justify-content: center; min-width: 36px; min-height: 40px; border: 0; background: transparent; border-radius: 8px; }
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.5; }
+.checkbox-label input { accent-color: var(--brand); width: 22px; height: 22px; flex-shrink: 0; margin: 0; }
+.checkbox-label small { display: block; color: #666; font-size: 11px; }
+.primary-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; width: 100%; border: 0; border-radius: 999px; padding: 14px 24px; background: var(--brand); color: white; font-size: 16px; font-weight: 600; box-shadow: 0 6px 8px #8b1a2e40; }
+.primary-button:hover:not(:disabled) { background: #80040f; }
+.primary-button:disabled { opacity: .7; }
+.spinner { width: 18px; height: 18px; border: 2px solid #ffffff70; border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.field-error { color: #a30f2d; font-size: 12px; line-height: 1.5; }
+.status-message { font-size: 13px; line-height: 1.5; padding: 10px; border-radius: 8px; background: #f1f5f9; }
+.status-message.error { color: #a30f2d; background: #fff1f2; }
+.status-message.success { color: #166534; background: #f0fdf4; }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

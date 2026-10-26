@@ -1,0 +1,49 @@
+.login-layout { display: grid; grid-template-columns: 600px minmax(0, 1fr); min-height: 100svh; }
+.form-panel { padding: 24px 40px; display: flex; flex-direction: column; gap: 24px; }
+.top-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.language { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 999px; padding: 10px 16px; font-size: 14px; }
+.login-content { width: 100%; max-width: 440px; margin: auto; }
+.demo-banner { font-size: 12px; line-height: 1.5; color: #624400; background: #fff7df; padding: 10px 14px; border-radius: 12px; margin-bottom: 12px; }
+.login-card { border: 1px solid var(--border); border-radius: 20px; padding: 28px 32px; box-shadow: 0 2px 8px #00000008; display: flex; flex-direction: column; gap: 16px; }
+.heading { text-align: center; }
+h1 { font: 700 26px/1.1 Fraunces, Georgia, serif; letter-spacing: -.3px; }
+.heading p { font-size: 14px; line-height: 1.4; color: #666; margin-top: 4px; }
+.login-method { display: flex; padding: 4px; background: #f5f5f5; border-radius: 14px; align-self: center; max-width: 100%; }
+.login-method > span { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 10px 12px; border-radius: 999px; font-size: 13px; }
+.selected-method { background: var(--brand); color: white; font-weight: 600; }
+.unavailable-method { color: #555; flex-wrap: wrap; }
+.unavailable-method small { flex-basis: 100%; text-align: center; font-size: 10px; }
+.options { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
+.unavailable-text { color: #666; font-size: 12px; max-width: 115px; }
+.human-check { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+.security-badge { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #666; }
+.security-badge .icon { width: 22px; height: 22px; }
+.helper { font-size: 11px; color: #666; line-height: 1.5; margin-top: -10px; }
+.create-account { text-align: center; font-size: 12px; line-height: 1.5; color: #666; }
+.create-account span { display: inline-block; }
+.demo-options { max-width: 100%; font-size: 12px; color: #555; text-align: left; }
+.demo-options summary { cursor: pointer; padding: 4px 0; }
+.demo-options label { display: block; margin: 10px 0 6px; }
+.demo-options select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 8px 16px; font-size: 12px; line-height: 1.5; color: #666; text-align: center; }
+.photo-panel { position: relative; overflow: hidden; }
+.login-photo { position: absolute; width: 122.26%; height: 162.6%; left: -19.56%; top: -62.6%; object-fit: cover; }
+.photo-scrim { position: absolute; inset: 0; background: linear-gradient(transparent 45%, #000c); }
+.slide-caption { position: absolute; bottom: 120px; left: 56px; right: 32px; color: white; }
+.slide-caption h2 { font-size: 36px; line-height: 1.15; letter-spacing: -.5px; }
+.slide-caption p { font-size: 16px; line-height: 1.5; margin-top: 10px; }
+.slide-caption .slide-note { font-size: 12px; }
+.help-badge { position: absolute; bottom: 40px; right: 32px; left: 32px; width: fit-content; max-width: calc(100% - 64px); margin-left: auto; display: flex; gap: 8px; align-items: center; background: white; padding: 8px 16px 8px 10px; border-radius: 999px; font-size: 13px; }
+.help-badge small { display: block; font-size: 11px; color: #666; }
+@media (max-width: 1100px) { .login-layout { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); } .form-panel { padding: 24px; } .slide-caption { left: 24px; right: 24px; } .slide-caption h2 { font-size: 30px; } }
+@media (max-width: 900px) { .login-layout { display: block; } .photo-panel { display: none; } .form-panel { min-height: 100svh; gap: 32px; } .login-content { margin-block: auto; } }
+@media (max-width: 480px) { .form-panel { padding: 20px 16px; } .login-card { padding: 24px 16px; } .brand p { font-size: 11px; } .language { padding: 8px 12px; font-size: 12px; } .login-method > span { padding: 10px 8px; gap: 4px; font-size: 12px; } .human-check { padding: 12px; } }
+/* Reduce surrounding space on short viewports; content still determines page height. */
+@media (max-height: 800px) {
+  .form-panel { padding-block: 16px; gap: 16px; }
+  .login-card { padding-block: 20px; gap: 12px; }
+}
+@media (max-width: 480px) {
+  .login-method { flex-wrap: wrap; justify-content: center; }
+  .human-check { flex-wrap: wrap; }
+}

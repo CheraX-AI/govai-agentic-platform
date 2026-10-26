@@ -1,0 +1,108 @@
+/* Fonts are scoped to the shell to preserve the existing login preview. */
+@font-face { font-family: 'GovAI Inter'; src: url('/assets/fonts/Inter.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'GovAI Montserrat'; src: url('/assets/fonts/Montserrat.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'GovAI Fraunces'; src: url('/assets/fonts/Fraunces.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+.application-layout { --surface: #fff; --warm: #fcfbf9; --subtle-border: #f1f5f9; --muted: #f5f5f5; --brand-subtle: #fcf3f5; --secondary: #444; --tertiary: #666; --sidebar-width: 264px; font-family: 'GovAI Inter', sans-serif; color: #142033; background: var(--warm); height: 100svh; display: flex; flex-direction: column; }
+.application-layout button, .application-layout a { -webkit-tap-highlight-color: transparent; }
+.application-layout button { color: inherit; }
+.application-layout button:disabled { opacity: 1; }
+.application-layout a { color: var(--brand); }
+.application-layout .wordmark { font-family: 'GovAI Montserrat', sans-serif; }
+.shell-icon { display: block; flex: none; max-width: none; }
+.application-header { height: 76px; flex: none; background: var(--surface); border-bottom: 1px solid var(--subtle-border); padding: 0 32px 0 24px; display: flex; align-items: center; gap: 20px; }
+.header-brand { display: flex; align-items: center; gap: 20px; flex: none; }
+.brand-divider { width: 1px; height: 32px; background: var(--border); flex: none; }
+.brand-slogan { color: var(--tertiary); font-size: 13px; line-height: 1.5; }
+.header-account { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.shell-language { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--border); background: white; border-radius: 999px; font-size: 14px; line-height: 1.5; }
+.notification-preview { border: 0; background: transparent; padding: 0; }
+.synthetic-user { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.synthetic-user small { display: block; font-size: 11px; line-height: 1.5; color: var(--tertiary); margin-top: 2px; }
+.user-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-subtle); color: var(--brand); font-weight: 700; }
+.application-body { display: flex; flex: 1; min-height: 0; }
+.desktop-sidebar { width: var(--sidebar-width); flex: none; min-height: 0; }
+.application-sidebar { width: 100%; min-height: 100%; display: flex; flex-direction: column; padding: 16px 12px; background: white; border-right: 1px solid var(--subtle-border); font-size: 14px; line-height: 1.5; }
+.desktop-sidebar { overflow-y: auto; }
+.navigation-item { display: flex; align-items: center; gap: 12px; border: 0; background: transparent; border-radius: 12px; padding: 10px 12px; text-decoration: none; width: 100%; font-size: 14px; font-weight: 500; line-height: 1.5; text-align: left; }
+.application-layout .navigation-item { color: var(--secondary); }
+.navigation-item.new-chat { gap: 10px; padding: 11px 14px; background: var(--muted); color: #142033; font-weight: 600; }
+.navigation-item.active:not(.new-chat) { background: var(--brand-subtle); color: var(--brand); font-weight: 600; }
+.navigation-item[href]:hover { background: var(--brand-subtle); }
+.primary-navigation { display: grid; gap: 2px; margin-top: 18px; }
+.sidebar-recent { padding-top: 20px; }
+.sidebar-recent > p { padding: 6px 12px; color: var(--tertiary); font-size: 12px; font-weight: 600; }
+.sidebar-recent small { font-size: 10px; font-weight: 400; }
+.sample-recent { display: flex; align-items: center; gap: 10px; padding: 8px 12px; color: var(--secondary); margin-top: 2px; }
+.sidebar-utilities { margin-top: auto; padding-top: 16px; }
+.unavailable-note { border-top: 1px solid var(--border); padding: 8px 12px 0; color: var(--tertiary); font-size: 10px; }
+.plan-preview { margin-top: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; border-radius: 12px; background: #f8fafc; }
+.plan-preview strong { font-size: 14px; font-weight: 600; }
+.plan-preview small { display: block; color: var(--tertiary); font-size: 13px; }
+.plan-preview button { padding: 0; border: 0; background: transparent; color: var(--brand); font-size: 14px; font-weight: 600; margin-left: auto; }
+.crown-tile { display: grid; place-items: center; width: 28px; height: 28px; background: #fff8ea; border-radius: 50%; flex: none; }
+.login-preview-link { display: block; font-size: 12px; padding: 10px 12px 0; }
+.application-content { flex: 1; min-width: 0; overflow-y: auto; position: relative; padding: 40px 48px; }
+.layout-preview-label { font-size: 11px; color: #666; line-height: 1.5; }
+.home-content { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; padding-bottom: 64px; }
+.home-content .layout-preview-label { position: absolute; top: 12px; left: 24px; right: 24px; text-align: center; }
+.home-hero { text-align: center; }
+.application-layout h1, .application-layout h2, .home-hero > p:first-child { font-family: 'GovAI Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 0, 'WONK' 1; font-optical-sizing: none; font-weight: 700; }
+.home-hero > p:first-child { font-size: 30px; line-height: 1.1; letter-spacing: -.3px; }
+.home-hero h1 { font-size: 44px; line-height: 1.1; letter-spacing: -.5px; margin-top: 10px; }
+.home-hero > p:last-child { margin-top: 10px; font-size: 20px; line-height: 1.4; color: var(--tertiary); }
+.composer-preview { width: 100%; max-width: 876px; display: flex; align-items: center; gap: 14px; padding: 10px; border: 1px solid var(--subtle-border); border-radius: 999px; background: white; box-shadow: 0 4px 14px #17203312; }
+.composer-preview > span { flex: 1; min-width: 0; color: #666; font-size: 16px; line-height: 1.5; }
+.composer-preview button { border: 0; background: transparent; border-radius: 50%; padding: 0; display: grid; place-items: center; width: 40px; height: 40px; flex: none; }
+.composer-preview button:first-child { width: 48px; height: 48px; background: var(--muted); }
+.composer-preview .send-preview { width: 52px; height: 52px; background: var(--brand); box-shadow: 0 6px 16px #8b1a2e40; }
+.suggestion-previews { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; width: 100%; max-width: 876px; }
+.suggestion-preview { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--subtle-border); border-radius: 16px; background: white; box-shadow: 0 2px 4px #00000008; }
+.suggestion-preview > span { width: 40px; height: 40px; flex: none; border-radius: 50%; background: #f1f7fc; display: grid; place-items: center; }
+.suggestion-preview.status > span { background: #f2f8f4; }
+.suggestion-preview.request > span { background: #fff8ea; }
+.suggestion-preview.documents > span { background: var(--brand-subtle); }
+.suggestion-preview strong { font-size: 14px; line-height: 1.5; font-weight: 600; }
+.guidance-disclaimer { text-align: center; font-size: 11px; line-height: 1.5; color: var(--tertiary); }
+.recent-content { display: flex; flex-direction: column; gap: 28px; }
+.recent-content .layout-preview-label { position: absolute; top: 12px; left: 48px; right: 24px; }
+.recent-preview-heading h1 { font-size: 30px; line-height: 1.1; letter-spacing: -.3px; }
+.recent-preview-heading p { margin-top: 6px; color: var(--tertiary); font-size: 16px; line-height: 1.5; }
+.history-unavailable { padding: 24px; border: 1px solid var(--subtle-border); border-radius: 16px; background: white; }
+.history-unavailable h2 { font-size: 24px; }
+.history-unavailable p { margin: 12px 0; line-height: 1.6; max-width: 60ch; }
+.menu-toggle { display: none; }
+.navigation-dialog { padding: 0; border: 0; margin: 0; width: min(340px, 100%); max-width: 100%; height: 100svh; max-height: 100svh; color: inherit; background: white; }
+.navigation-dialog::backdrop { background: #14203380; }
+.navigation-drawer { min-height: 100%; background: white; }
+.drawer-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; }
+.drawer-heading h2 { font: 600 16px 'GovAI Inter', sans-serif; }
+.drawer-heading button, .menu-toggle { border: 1px solid var(--border); background: white; border-radius: 8px; padding: 10px; }
+.skip-link { position: fixed; top: -100px; left: 16px; z-index: 5; padding: 12px; background: white; }
+.skip-link:focus { top: 8px; }
+.unknown-preview { padding: 32px; }
+@media (max-width: 1200px) { .suggestion-previews { grid-template-columns: repeat(2, minmax(0,1fr)); } .brand-slogan, .header-brand > .brand-divider { display: none; } }
+/* Proposed responsive adaptation: no approved tablet/mobile frames supplied. */
+@media (max-width: 900px) {
+  .menu-toggle { display: block; }
+  .desktop-sidebar { display: none; }
+  .application-header { padding: 12px 16px; height: auto; min-height: 76px; flex-wrap: wrap; gap: 12px; }
+  .header-account { gap: 12px; }
+  .header-account > .brand-divider, .notification-preview { display: none; }
+  .application-content { padding: 48px 24px 32px; }
+  .home-content { justify-content: safe center; }
+  .home-hero h1 { font-size: clamp(28px, 5vw, 44px); }
+  .home-hero > p:last-child { font-size: 16px; }
+}
+@media (max-width: 580px) {
+  .header-account { width: 100%; justify-content: space-between; }
+  .application-header .header-brand { margin-left: auto; }
+  .application-content { padding-inline: 16px; }
+  .home-content { gap: 24px; justify-content: flex-start; }
+  .home-content .layout-preview-label { position: static; }
+  .suggestion-previews { grid-template-columns: 1fr; }
+  .composer-preview { gap: 8px; border-radius: 20px; flex-wrap: wrap; }
+  .composer-preview > span { flex-basis: calc(100% - 70px); }
+  .composer-preview button:nth-last-child(2) { margin-left: auto; }
+  .home-hero > p:first-child { font-size: 26px; }
+}
+@media (max-height: 720px) and (min-width: 581px) { .home-content { justify-content: flex-start; padding-top: 56px; } }
