@@ -1,0 +1,12 @@
+# PDF text extraction (PyPDFLoader)
+langchain-community==0.4.2
+pypdf==6.21.2
+
+# Text chunking (RecursiveCharacterTextSplitter)
+langchain-text-splitters==1.1.3
+
+# Shared LangChain Document type
+langchain-core==1.7.0
+
+# Tests
+pytest==9.1.1
