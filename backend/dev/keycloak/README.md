@@ -26,8 +26,9 @@ http://localhost:8180/realms/GovAI/account/ . Do not substitute lowercase `govai
 | SMTP SSL / STARTTLS / authentication | All disabled for this isolated local setup only |
 | Mailpit inbox | http://localhost:8025 |
 
-The 8-character password boundary has **not been tested**. Configured token and
-session lifetimes are not evidence that expiry, refresh or logout semantics have
+The operator confirmed rejection of a 7-character password and acceptance of an
+8-character password followed by successful login. Configured token and session
+lifetimes are not evidence that expiry, refresh or logout semantics have
 been tested. The existing realm settings were configured through Keycloak; the
 Compose file does not automatically recreate them on a fresh volume.
 
@@ -145,7 +146,8 @@ the Go service's environment file.
 Do not bypass verification with an admin toggle. Do not enable password/direct
 access grants to obtain tokens for a test. This uses Keycloak's built-in account
 client; application/test-client coverage remains future work. Invalid/expired
-verification links and the new password-length boundary need separate tests.
+verification links still need separate tests. Password boundary results are
+recorded below.
 
 ## Persistence, logs, shutdown and resume
 
@@ -194,7 +196,12 @@ rerun identity flows or modify runtime settings:
 | First user's verification completion | Confirmed |
 | Verification enforced for second unverified user | Confirmed |
 | Second user's final verification completion | Not explicitly confirmed |
-| New 8-character password boundary | Not tested; do not infer from earlier 15-character-policy tests |
+| 7-character password rejection | Operator-confirmed on 2026-10-27 |
+| 8-character password acceptance and subsequent login | Operator-confirmed on 2026-10-27 |
+
+The password boundary results were explicitly confirmed by the operator for the
+current 8-character minimum policy. They were not rerun during this documentation
+update; no passwords or other credentials are recorded here.
 
 Read-only Docker inspection during this update confirmed the Keycloak and Mailpit
 containers are running and Mailpit shares the Keycloak network. This replaces the
@@ -212,7 +219,7 @@ Remaining work:
   signed access tokens validated offline.
 - Implement and test Go JWT validation and role/verified-email authorization later.
 - Complete the second user's verification and test invalid/expired verification
-  links and the 8-character password boundary explicitly.
+  links.
 - Coordinate PostgreSQL integration with the database teammate in a separate step;
   no databases, users, schemas or migrations were changed here.
 
