@@ -15,7 +15,8 @@ const description = 'Enter your NIC number. Password recovery is not connected i
 const disconnectedNotice = 'Password recovery is not connected. No request was sent and no password was changed.';
 type Viewport = { width: number; height: number };
 
-export function ForgotPasswordScreen({ onLogin }: { onLogin: () => void }) {
+export function ForgotPasswordScreen({ onLogin, onDemoValidated }: { onLogin: () => void; onDemoValidated?: () => void }) {
+  const transitioning = useRef(false);
   const [nic, setNic] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [notice, setNotice] = useState('');
@@ -146,8 +147,15 @@ export function ForgotPasswordScreen({ onLogin }: { onLogin: () => void }) {
     Keyboard.dismiss(); onLogin();
   }
   function submit() {
+    if (transitioning.current) return;
     setSubmitted(true);
     if (!nic.trim()) { setNotice(''); input.current?.focus(); return; }
+    if (__DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1' && onDemoValidated) {
+      transitioning.current = true;
+      input.current?.clear(); setNic(''); setSubmitted(false); setNotice('');
+      setFocused(false); fieldFocused.current = false;
+      Keyboard.dismiss(); onDemoValidated(); return;
+    }
     Keyboard.dismiss(); setNotice(disconnectedNotice);
   }
   return <View style={styles.root}>

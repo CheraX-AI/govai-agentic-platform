@@ -4,6 +4,7 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
+    "demo:connected-ui": "node scripts/demo-connected-ui.cjs",
     "start": "node scripts/expo.cjs start --go --lan",
     "android": "node scripts/expo.cjs start --go --android",
     "typecheck": "tsc --noEmit",

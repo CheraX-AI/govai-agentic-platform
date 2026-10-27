@@ -32,7 +32,8 @@ const requiredMessages: Record<Field, string> = {
   phone: 'Enter your phone number.', password: 'Enter a password.', confirmPassword: 'Re-enter your password.',
 };
 
-export function RegisterScreen({ onLogin }: { onLogin: () => void }) {
+export function RegisterScreen({ onLogin, onDemoValidated }: { onLogin: () => void; onDemoValidated?: () => void }) {
+  const transitioning = useRef(false);
   // UI-only values stay in this mounted screen. No storage, logs or requests.
   const [values, setValues] = useState<Values>(emptyValues);
   const [submitted, setSubmitted] = useState(false);
@@ -141,11 +142,19 @@ export function RegisterScreen({ onLogin }: { onLogin: () => void }) {
     Keyboard.dismiss(); onLogin();
   }
   function submit() {
+    if (transitioning.current) return;
     setSubmitted(true);
     const invalid = fields.find(field => field.key === 'password' || field.key === 'confirmPassword'
       ? values[field.key].length === 0 : values[field.key].trim().length === 0);
     if (invalid) { inputRefs.current[invalid.key]?.focus(); return; }
     if (values.password !== values.confirmPassword) { inputRefs.current.confirmPassword?.focus(); return; }
+    if (__DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1' && onDemoValidated) {
+      transitioning.current = true;
+      Object.values(inputRefs.current).forEach(input => input?.clear());
+      setValues(emptyValues()); setSubmitted(false); setAgreement(false);
+      setRevealed({ password: false, confirmPassword: false });
+      Keyboard.dismiss(); onDemoValidated(); return;
+    }
     // Agreement is optional: approved Terms and consent validation are pending.
     Keyboard.dismiss();
     setNotice('Registration is not connected yet. No registration request was sent. No account was created.');

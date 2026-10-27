@@ -1,5 +1,142 @@
 # GovAI mobile
 
+## Connected development-only UI demo - October 27, 2026
+
+From app/mobile in Windows PowerShell, launch the connected flow with:
+
+```powershell
+npm.cmd run demo:connected-ui
+```
+
+Optional free port: `npm.cmd run demo:connected-ui -- --port 8095`.
+The launcher enables EXPO_PUBLIC_CONNECTED_UI_DEMO=1 only for its child process
+and disables all four standalone preview flags there. It writes no environment
+file. The app requires both __DEV__ and the exact dedicated flag value '1'.
+Without both, Register and Forgot Password retain their disconnected notices.
+Production ignores the flag. Login submission is unchanged and disconnected.
+The normal Welcome/onboarding entry remains, so every Login origin can be tested.
+
+Connected routes:
+
+- Login -> Sign up -> Register. Existing required-field and raw password-matching
+  validation runs first. Valid entries are cleared before Account Created opens.
+- Account Created visibly says "UI demo — no account was created". Continue to
+  GovAI opens a fresh Login. Exit preview is hidden in this mode. Android Back
+  also opens fresh Login, never the submitted Register form.
+- Login -> Forgot Password. Existing nonblank NIC validation runs first. Valid
+  input is cleared before Check Email opens.
+- Check Email visibly says "Preview — no email was sent" and always displays
+  sample@example.test. Back, Use a different NIC, and Android Back open a fresh,
+  empty Forgot Password form. No email is derived from the NIC.
+- Forgot Password Back/Log in return to fresh Login. Login retains its original
+  Welcome/onboarding return destination through both flows.
+- Android Back dismisses an open keyboard before navigating. Local form values,
+  errors, password visibility, and agreement state are discarded on leaving.
+  A submission latch and route-aware callbacks ignore repeated/stale submissions.
+
+No accounts/passwords are stored, no requests are sent, no tokens are generated,
+and no authentication or email delivery is performed. Resend and Open email app
+remain unavailable. There is no Home, OTP, or connection to Reset Password or
+Password Updated. Sample account text remains static design content.
+
+The two existing confirmation designs now have one shared presentation each in
+components/AccountCreatedContent.tsx and components/CheckEmailContent.tsx.
+Standalone preview wrappers keep their original flags, labels, disabled actions,
+and exit destinations. Their launch commands are unchanged; standalone previews
+retain priority if flags are combined manually. Presentation entry points also
+check development mode and the appropriate flag. Assets, styles, image crops,
+shared layout helpers, English-only behavior, and form keyboard helpers remain.
+The approved demo changes only confirmation labels, hides Account Created Exit,
+and enables its Continue action with a caption identifying Login as its destination.
+
+Repeat checks:
+
+```powershell
+npm.cmd run typecheck
+npm.cmd run check:expo
+node scripts/check-register.cjs
+node scripts/check-connected-ui-demo.cjs
+node scripts/check-forgot-password.cjs
+node scripts/check-account-created-preview.cjs
+node scripts/check-email-preview.cjs
+node scripts/check-reset-password-preview.cjs
+node scripts/check-password-updated-preview.cjs
+```
+
+The Register harness defines __DEV__ explicitly. Its direct command runs the
+unchanged form/navigation assertions in separate production and development
+processes with all demo/preview flags disabled. The connected-demo checker also
+covers both modes with the dedicated flag absent, 0, 1 and true.
+
+The Reset Password and Password Updated checkers retain their optional task-time
+snapshot assertions. On October 28, 2026, exactly four reviewed expectations in
+each existing local snapshot were updated for the approved connected-demo work:
+AccountCreatedPreviewScreen.tsx and CheckEmailPreviewScreen.tsx now delegate to
+shared guarded presentations; RegisterScreen.tsx and ForgotPasswordScreen.tsx
+add validated development-demo callbacks and cleanup. No other snapshot values
+were changed; existing App.tsx/package.json exemptions were not expanded.
+Snapshots remain ignored local cache files and are excluded from commits.
+These two files are optional local audit evidence, not required test fixtures.
+They compare local source bytes with a particular implementation-time baseline;
+they are not the expected results for form behavior, navigation, guards, assets,
+or production exclusion. No developer needs to obtain or recreate them. If an
+audit file exists, all its existing assertions run and a mismatch still fails.
+If absent, the checker prints an explicit INFO message that this historical audit
+is unavailable. Required assertions execute independently in either case.
+Portability verified on October 28, 2026: both files were physically moved aside,
+then TypeScript, Expo compatibility, all seven direct checkers, and all five
+export-aware checkers against each fresh flag-off/flag-on export passed. No
+filesystem mocks or assertion overrides were used. Both local audit files were
+restored byte-for-byte afterward. This simulates missing local evidence in the
+existing installed checkout; it is not a separate clean dependency installation.
+
+A fresh checkout needs only the tracked source/assets, package.json and lockfile;
+run npm.cmd ci to install dependencies, then the direct commands above.
+Export checks additionally require generating the Android export being inspected.
+
+Run the commands above directly: no filesystem overrides, hidden snapshots,
+skipped assertions, or generated whole-snapshot replacements are needed.
+
+Validation on October 28, 2026: all seven direct checkers, TypeScript and Expo
+compatibility passed without skips. The Register command passed in both modes.
+New connected checks cover 8 mode/flag combinations, real form handlers, invalid
+submissions, raw matching, cleanup, duplicate submissions, all 6 Login origins,
+keyboard-first Back, both confirmation destinations, fresh recovery forms,
+standalone priority, 36 synthetic confirmation layouts, and launcher arguments.
+Mocks are not native rendering or accessibility verification.
+
+Production-exclusion validation was rerun against fresh Android/Hermes exports
+in dist/review-demo-off (flag absent) and dist/review-demo-on (flag=1):
+
+```powershell
+node scripts/check-connected-ui-demo.cjs --export dist/review-demo-off
+node scripts/check-connected-ui-demo.cjs --export dist/review-demo-on
+node scripts/check-account-created-preview.cjs --export dist/review-demo-on
+node scripts/check-email-preview.cjs --export dist/review-demo-on
+node scripts/check-reset-password-preview.cjs --export dist/review-demo-on
+node scripts/check-password-updated-preview.cjs --export dist/review-demo-on
+```
+
+All five export-aware checkers passed against both fresh outputs with snapshots
+active. Android/Hermes production exports were checked with the dedicated demo flag
+absent and set to 1. Exclusion checks cover demo screen names, unique notices,
+sample email/name, and both exclusive confirmation images. Exports are not APKs.
+The actual documented demo command was started with --port 8095: Metro status and
+an Android development bundle returned HTTP 200; the bundle contained both demo
+screens and notices. Only that verification server was stopped. Hermes execution
+required sandbox execution permission. No dependency installation or EAS setup.
+
+Pending physical Android checks: scan the QR in compatible Expo Go; compare the
+400x772 reference; test narrow/short/tall/wide windows and default/enlarged text;
+inspect both confirmation labels and hidden Exit, image crops, safe areas,
+scrolling, TalkBack, keyboard Next/Done and Back, both complete flows, cleared
+re-entry, and Login Back to each original destination. No phone/emulator rendering
+was performed during this change.
+
+Earlier sections below are historical implementation notes; the current connected
+demo behavior above supersedes earlier statements about unavailable transitions.
+
+
 Expo + React Native + TypeScript implementation of the completed Figma loading
 page (`47:3`) and welcome page (`278:709`). The original loading component and
 its artwork/styles are preserved. Startup loads all eight bundled images and

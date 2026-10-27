@@ -1,3 +1,7 @@
+function presentation(tree) {
+  while (tree && typeof tree.type === 'function' && ['AccountCreatedContent','CheckEmailContent','ContentBody'].includes(tree.type.name)) tree = tree.type(tree.props);
+  return tree;
+}
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -29,7 +33,7 @@ function loader(rt,env,overrides={}){const cache={};return function load(file){i
   throw Error('Unexpected dependency '+name);
  },module,module.exports,env.dev,{env:{EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW:env.flag}});return cache[file]=module.exports;
 };}
-const previewSource=read('AccountCreatedPreviewScreen.tsx');
+const previewSource=read('AccountCreatedPreviewScreen.tsx') + read('components/AccountCreatedContent.tsx');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|console)\b/.test(previewSource));
 assert(!/allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines/.test(previewSource));
 assert(!/AccountCreated|ACCOUNT_CREATED_PREVIEW/.test(read('RegisterScreen.tsx')),'Register has no preview entry');
@@ -47,7 +51,7 @@ for(const dev of[false,true])for(const flag of[undefined,'0','1','true']){
  if(enabled){assert(env.back());tree=draw();assert.equal(tree.type,'WelcomeScreen','Android Back exits to Welcome');}
  tree.props.onLogin();tree=draw();tree.props.onSignUp();tree=draw();assert.equal(tree.type,'RegisterScreen','normal navigation preserved');tree.props.onLogin();tree=draw();assert.equal(tree.type,'LoginScreen','Register return never opens preview');rt.unmount();
  const direct=runtime(),component=loader(direct,env,overrides)('AccountCreatedPreviewScreen.tsx');
- const directTree=direct.render(()=>component.AccountCreatedPreviewScreen({onExit(){}}));assert.equal(directTree===null,!enabled,'direct-mount defence');guardCases++;
+ const directTree=direct.render(()=>presentation(component.AccountCreatedPreviewScreen({onExit(){}})));assert.equal(directTree===null,!enabled,'direct-mount defence');guardCases++;
 }
 // Separate on-screen exit test, since Back already closed the first instance.
 {
@@ -57,7 +61,7 @@ for(const dev of[false,true])for(const flag of[undefined,'0','1','true']){
 let layouts=0;
 for(const[width,height]of[[320,568],[360,640],[360,800],[412,915],[600,960],[400,772]])for(const fontScale of[1,2,3]){
  const rt=runtime(),env={dev:true,flag:'1',dimensions:{width,height,fontScale},previewImports:0};
- const{AccountCreatedPreviewScreen}=loader(rt,env,overrides)('AccountCreatedPreviewScreen.tsx');let exits=0;const draw=()=>rt.render(()=>AccountCreatedPreviewScreen({onExit(){exits++;}}));let tree=draw();
+ const{AccountCreatedPreviewScreen}=loader(rt,env,overrides)('AccountCreatedPreviewScreen.tsx');let exits=0;const draw=()=>rt.render(()=>presentation(AccountCreatedPreviewScreen({onExit(){exits++;}})));let tree=draw();
  function measure(){
   nodes(tree,'View').find(n=>n.props.onLayout&&flat(n.props.style).flex===1).props.onLayout({nativeEvent:{layout:{width:Math.min(480,width-32),height:height-80}}});
   nodes(tree,'View').find(n=>n.props.onLayout&&flat(n.props.style).borderColor==='#f5a915').props.onLayout({nativeEvent:{layout:{height:72*fontScale*fontScale}}});
@@ -87,7 +91,7 @@ assert(!launched.args.some(a=>/export|build|gradle|run:android/.test(a)),'launch
 
 if(process.argv.includes('--export')){
  const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');const iconHash=hash(path.join(root,'assets/figma/account-created/check-circle.png'));
- const exportRoot=path.join(root,'dist/android');let files=[];function walk(dir){for(const item of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,item.name);if(item.isDirectory())walk(file);else files.push(file);}}walk(exportRoot);
+ const exportRoot=path.resolve(root,process.argv[process.argv.indexOf('--export')+1]||'dist/android');let files=[];function walk(dir){for(const item of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,item.name);if(item.isDirectory())walk(file);else files.push(file);}}walk(exportRoot);
  assert(!files.some(file=>hash(file)===iconHash),'preview-only icon excluded from production assets');
  const bundles=files.filter(f=>f.endsWith('.hbc')||f.endsWith('.js'));assert(bundles.length>0);
  for(const file of bundles){const data=fs.readFileSync(file);for(const marker of['Rathishan','AccountCreatedPreviewScreen','Development preview — sample content. No account has been created.']){

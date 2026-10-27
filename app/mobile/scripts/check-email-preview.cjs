@@ -1,10 +1,14 @@
+function presentation(tree) {
+  while (tree && typeof tree.type === 'function' && ['AccountCreatedContent','CheckEmailContent','ContentBody'].includes(tree.type.name)) tree = tree.type(tree.props);
+  return tree;
+}
 // React/native mocks and artifact inspection; no physical-device or native-layout claim.
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict'), vm = require('node:vm'), crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 global.__DEV__ = false;
 const { runtime, environment, loader, nodes } = require('./check-register.cjs');
 const flat = style => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
-const source = fs.readFileSync(path.join(root, 'CheckEmailPreviewScreen.tsx'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'CheckEmailPreviewScreen.tsx'), 'utf8') + fs.readFileSync(path.join(root, 'components/CheckEmailContent.tsx'), 'utf8');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|Linking|console|setTimeout|setInterval)\b/.test(source));
 assert(!/allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines|0:45|30 minutes|We sent/.test(source));
 assert(!/CheckEmail|CHECK_EMAIL_PREVIEW/.test(fs.readFileSync(path.join(root, 'ForgotPasswordScreen.tsx'), 'utf8')), 'Forgot submission has no preview entry');
@@ -30,7 +34,7 @@ for (const dev of [false,true]) for (const flag of [undefined,'0','1','true']) {
   flags(dev, flag); const f = appFixture(), enabled = dev && flag === '1';
   assert.equal(f.tree.type, enabled ? 'CheckEmailPreviewScreen' : 'WelcomeScreen'); assert.equal(f.imports, enabled ? 1 : 0);
   const rt = runtime(), env = environment(); const { CheckEmailPreviewScreen } = loader(rt,env)('CheckEmailPreviewScreen.tsx');
-  assert.equal(rt.render(()=>CheckEmailPreviewScreen({onBack(){},onDifferentNic(){},onExit(){}})) === null, !enabled, 'direct mount guard');
+  assert.equal(rt.render(()=>presentation(CheckEmailPreviewScreen({onBack(){},onDifferentNic(){},onExit(){}}))) === null, !enabled, 'direct mount guard');
   f.rt.unmount(); rt.unmount(); guardCases++;
 }
 flags(true,'1','1'); const both = appFixture(); assert.equal(both.tree.type,'AccountCreatedPreviewScreen'); assert.equal(both.imports,0); both.tree.props.onExit(); assert.equal(both.draw().type,'WelcomeScreen'); both.rt.unmount();
@@ -44,7 +48,7 @@ for (const action of ['onBack','onDifferentNic','onExit','androidBack']) {
 let layouts=0;
 for(const [width,height]of [[320,568],[360,640],[360,800],[412,915],[600,960],[400,772]])for(const fontScale of[1,2,3]){
   flags(true,'1');const rt=runtime(),env=environment(width,height,fontScale),{CheckEmailPreviewScreen}=loader(rt,env)('CheckEmailPreviewScreen.tsx');let tree,backs=0,others=0,exits=0;
-  const draw=()=>{tree=rt.render(()=>CheckEmailPreviewScreen({onBack(){backs++;},onDifferentNic(){others++;},onExit(){exits++;}}));rt.effects();};draw();
+  const draw=()=>{tree=rt.render(()=>presentation(CheckEmailPreviewScreen({onBack(){backs++;},onDifferentNic(){others++;},onExit(){exits++;}})));rt.effects();};draw();
   function measure(){
     nodes(tree,'View').find(n=>n.props.onLayout&&flat(n.props.style).flex===1).props.onLayout({nativeEvent:{layout:{width:Math.min(480,width-32),height:height-80}}});
     nodes(tree,'Text').find(n=>n.props.onLayout).props.onLayout({nativeEvent:{layout:{height:18*fontScale*fontScale}}});
@@ -75,7 +79,7 @@ for(const [args,status]of [[[],0],[['--port','8082'],7],[[],null]]){
 }
 const svg=fs.readFileSync(path.join(root,'assets/figma/check-email/mail.svg'));assert.equal(crypto.createHash('sha256').update(svg).digest('hex'),'cdbae6793b123dbb6e5e5f7bc111d84df0fd7eaa03563a07d5d030ae96620bcb');const png=fs.readFileSync(path.join(root,'assets/figma/check-email/mail.png'));assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');assert.equal(png.readUInt32BE(16),136);assert.equal(png.readUInt32BE(20),136);
 if(process.argv.includes('--export')){
-  let files=[];function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=path.join(d,e.name);if(e.isDirectory())walk(f);else files.push(f);}}walk(path.join(root,'dist/android'));
+  let files=[];function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=path.join(d,e.name);if(e.isDirectory())walk(f);else files.push(f);}}walk(path.resolve(root,process.argv[process.argv.indexOf('--export')+1]||'dist/android'));
   const iconHash=crypto.createHash('sha256').update(png).digest('hex');assert(!files.some(f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')===iconHash),'exclusive mail asset excluded from production');
   const bundles=files.filter(f=>/\.(hbc|js)$/.test(f));assert(bundles.length);for(const f of bundles){const b=fs.readFileSync(f);for(const marker of ['sample@example.test','CheckEmailPreviewScreen','No email sent'])assert(!b.includes(Buffer.from(marker))&&!b.includes(Buffer.from(marker,'utf16le')),'preview marker in release');}
   console.log('PASS current production artifact: Check Email module/sample copy/mail asset excluded.');

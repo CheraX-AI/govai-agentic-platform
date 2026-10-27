@@ -104,7 +104,8 @@ const startupAssets = [...Object.values(assets), ...Object.values(welcomeAssets)
 type OriginScreen = 'welcome' | 'meet' | 'discover' | 'ask' | 'track' | 'pay';
 
 function Startup() {
-  const [screen, setScreen] = useState<OriginScreen | 'login' | 'register' | 'forgot'>('welcome');
+  const [screen, setScreen] = useState<OriginScreen | 'login' | 'register' | 'forgot' | 'demo-account' | 'demo-email'>('welcome');
+  const connectedDemo = __DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1';
   const [loginOrigin, setLoginOrigin] = useState<OriginScreen>('welcome');
   const [accountPreviewOpen, setAccountPreviewOpen] = useState(() =>
     __DEV__ && process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW === '1');
@@ -148,8 +149,10 @@ function Startup() {
     }
     if (screen === 'welcome') return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (Keyboard.isVisible()) { Keyboard.dismiss(); return true; }
+      if (connectedDemo && screen === 'demo-account') { setScreen('login'); return true; }
+      if (connectedDemo && screen === 'demo-email') { setScreen('forgot'); return true; }
       if (screen === 'register' || screen === 'forgot') {
-        if (Keyboard.isVisible()) { Keyboard.dismiss(); return true; }
         setScreen('login'); return true;
       }
       if (screen === 'login') { setScreen(loginOrigin); return true; }
@@ -157,7 +160,7 @@ function Startup() {
       return true;
     });
     return () => subscription.remove();
-  }, [screen, loginOrigin, accountPreviewOpen, checkEmailPreviewOpen, resetPasswordPreviewOpen, passwordUpdatedPreviewOpen]);
+  }, [screen, loginOrigin, connectedDemo, accountPreviewOpen, checkEmailPreviewOpen, resetPasswordPreviewOpen, passwordUpdatedPreviewOpen]);
   const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
     Yaldevi_400Regular: require('./assets/figma/onboarding-ask/fonts/Yaldevi.ttf'),
     NotoSansTamil_400Regular: require('./assets/figma/onboarding-ask/fonts/NotoSansTamil.ttf'),
@@ -194,8 +197,19 @@ function Startup() {
       return <PasswordUpdatedPreviewScreen onLogin={() => closePasswordUpdatedPreview('login')} />;
     }
   }
-  if (ready && screen === 'register') return <RegisterScreen onLogin={() => setScreen('login')} />;
-  if (ready && screen === 'forgot') return <ForgotPasswordScreen onLogin={() => setScreen('login')} />;
+  if (__DEV__) {
+    if (ready && connectedDemo && screen === 'demo-account') {
+      const { AccountCreatedDemoScreen } = require('./AccountCreatedPreviewScreen') as typeof import('./AccountCreatedPreviewScreen');
+      return <AccountCreatedDemoScreen onContinue={() => setScreen(current => current === 'demo-account' ? 'login' : current)} />;
+    }
+    if (ready && connectedDemo && screen === 'demo-email') {
+      const { CheckEmailDemoScreen } = require('./CheckEmailPreviewScreen') as typeof import('./CheckEmailPreviewScreen');
+      const returnToForgot = () => setScreen(current => current === 'demo-email' ? 'forgot' : current);
+      return <CheckEmailDemoScreen onBack={returnToForgot} onDifferentNic={returnToForgot} />;
+    }
+  }
+  if (ready && screen === 'register') return <RegisterScreen onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? () => setScreen(current => current === 'register' ? 'demo-account' : current) : undefined} />;
+  if (ready && screen === 'forgot') return <ForgotPasswordScreen onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? () => setScreen(current => current === 'forgot' ? 'demo-email' : current) : undefined} />;
   if (ready && screen === 'login') return <LoginScreen onBack={() => setScreen(loginOrigin)} onSignUp={() => setScreen('register')} onForgotPassword={() => setScreen('forgot')} />;
   if (ready && screen === 'pay') return <OnboardingPayScreen onLogin={() => openLogin('pay')} onBack={() => setScreen('track')} />;
   if (ready && screen === 'track') return <OnboardingTrackScreen onLogin={() => openLogin('track')} onBack={() => setScreen('ask')} onNext={() => setScreen('pay')} />;

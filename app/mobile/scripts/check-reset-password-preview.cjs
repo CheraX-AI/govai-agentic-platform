@@ -138,6 +138,9 @@ if (process.argv.includes('--export')) {
 if (fs.existsSync(path.join(root, '.cache/reset-preview-before.json'))) {
   const baseline = JSON.parse(read('.cache/reset-preview-before.json'));
   for (const [file, hash] of Object.entries(baseline)) if (!['App.tsx','package.json'].includes(file)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex'), hash, 'existing source preserved: ' + file);
+  console.log('PASS optional local historical source audit: reset-preview-before.json');
+} else {
+  console.log('INFO optional local historical audit unavailable: reset-preview-before.json is absent. Required behavior and requested export checks still run.');
 }
 flags(previousDev, ...previous);
-console.log(`PASS Reset Password: ${guards} guard/precedence cases, direct guard, raw matching, independent toggles, keyboard-first Back and clearing, ${layouts} synthetic layout/keyboard cases, launcher isolation, unchanged existing screen sources. No native/device rendering.`);
+console.log(`PASS Reset Password: ${guards} guard/precedence cases, direct guard, raw matching, independent toggles, keyboard-first Back and clearing, ${layouts} synthetic layout/keyboard cases, launcher isolation. Optional historical audit reported separately. No native/device rendering.`);

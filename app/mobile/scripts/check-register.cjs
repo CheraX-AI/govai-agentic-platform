@@ -1,4 +1,24 @@
 // Node/TypeScript-only checks. Native layout, fonts and IME behaviour require a phone.
+// Direct runs verify disconnected behavior in both Metro modes. Imported suites
+// provide their own mode; no assertion or optional snapshot is skipped.
+if (require.main === module && process.env.GOVAI_REGISTER_TEST_MODE === undefined) {
+  const { spawnSync } = require('node:child_process');
+  for (const mode of ['production', 'development']) {
+    const env = { ...process.env, GOVAI_REGISTER_TEST_MODE: mode };
+    for (const key of ['EXPO_PUBLIC_CONNECTED_UI_DEMO', 'EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW', 'EXPO_PUBLIC_CHECK_EMAIL_PREVIEW', 'EXPO_PUBLIC_RESET_PASSWORD_PREVIEW', 'EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW']) env[key] = '0';
+    console.log('Register harness mode:', mode);
+    const result = spawnSync(process.execPath, [__filename], { env, stdio: 'inherit' });
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  }
+  process.exit(0);
+}
+if (require.main === module) {
+  if (!['production', 'development'].includes(process.env.GOVAI_REGISTER_TEST_MODE)) throw Error('Invalid Register test mode');
+  global.__DEV__ = process.env.GOVAI_REGISTER_TEST_MODE === 'development';
+} else if (typeof global.__DEV__ !== 'boolean') {
+  global.__DEV__ = false;
+}
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -38,7 +58,7 @@ function loader(rt,env,overrides={}) {
     const module={exports:{}};cache[file]=module.exports;
     const native=new Proxy({StyleSheet:{create:s=>s,absoluteFill:{}},useWindowDimensions:()=>env.dimensions,Keyboard:env.keyboard,
       BackHandler:{addEventListener:(_name,fn)=>{env.back=fn;return{remove(){env.back=undefined;}};}}},{get:(o,k)=>o[k]??k});
-    new Function('require','module','exports','requestAnimationFrame','cancelAnimationFrame','setTimeout','clearTimeout',output)(name=>{
+    new Function('require','module','exports','requestAnimationFrame','cancelAnimationFrame','setTimeout','clearTimeout','__DEV__',output)(name=>{
       if(name in overrides)return overrides[name];
       if(name==='react')return rt.react;if(name==='react/jsx-runtime')return{jsx,jsxs:jsx};if(name==='react-native')return native;
       if(name==='expo-status-bar')return{StatusBar:'StatusBar'};if(name==='expo-font')return{useFonts:()=>[true,null]};
@@ -47,7 +67,7 @@ function loader(rt,env,overrides={}) {
       if(/\.(png|jpg|ttf)$/.test(name))return 1;
       if(name.startsWith('.')){const target=path.relative(root,path.resolve(root,path.dirname(file),name));return load(target+(fs.existsSync(path.join(root,target+'.ts'))?'.ts':'.tsx'));}
       throw Error('Unexpected dependency: '+name);
-    },module,module.exports,rt.raf,rt.cancel,rt.timeout,rt.clear);return cache[file]=module.exports;
+    },module,module.exports,rt.raf,rt.cancel,rt.timeout,rt.clear,global.__DEV__);return cache[file]=module.exports;
   }return load;
 }
 function environment(width=360,height=800,fontScale=1){const env={dimensions:{width,height,fontScale},insets:{top:24,bottom:24,left:0,right:0},visible:false,metrics:undefined,listeners:{},dismisses:0};
