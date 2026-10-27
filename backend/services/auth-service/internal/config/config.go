@@ -7,13 +7,18 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/oidccheck"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port        string
-	CORSOrigins []string
+	Port             string
+	CORSOrigins      []string
+	OIDCIssuerURL    string
+	OIDCCheckTimeout time.Duration
 }
 
 // LoadLocalEnv loads only the explicitly named file; existing process settings win.
@@ -49,5 +54,17 @@ func Load() (Config, error) {
 			allowed = append(allowed, origin)
 		}
 	}
-	return Config{Port: strconv.Itoa(number), CORSOrigins: allowed}, nil
+	issuer := os.Getenv("OIDC_ISSUER_URL")
+	if issuer != "" && oidccheck.ValidateURL(issuer) != nil {
+		return Config{}, fmt.Errorf("OIDC_ISSUER_URL must be an absolute HTTPS URL without credentials, query or fragment (HTTP allowed only on loopback)")
+	}
+	timeout := 5 * time.Second
+	if value, ok := os.LookupEnv("OIDC_CHECK_TIMEOUT"); ok {
+		var err error
+		timeout, err = time.ParseDuration(value)
+		if err != nil || timeout <= 0 || timeout > 30*time.Second {
+			return Config{}, fmt.Errorf("OIDC_CHECK_TIMEOUT must be a positive duration at most 30s")
+		}
+	}
+	return Config{Port: strconv.Itoa(number), CORSOrigins: allowed, OIDCIssuerURL: issuer, OIDCCheckTimeout: timeout}, nil
 }

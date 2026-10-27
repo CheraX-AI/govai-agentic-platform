@@ -6,3 +6,7 @@ Other service directories remain placeholders.
 
 The root README still describes the older Node backend; use this backend guide
 for current instructions. The teammate-owned web app still uses Node/npm.
+
+Local identity-environment setup is separate from the Go API. See
+[Keycloak development step 1](dev/keycloak/README.md) for its isolated Compose
+configuration, synthetic citizen setup, verification checklist, and runtime limits.

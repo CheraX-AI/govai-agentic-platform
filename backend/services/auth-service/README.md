@@ -142,3 +142,67 @@ GET /api/health returned HTTP 200 with {"status":"ok"} and X-Request-ID.
 Ctrl+C emitted both shutdown and server-stopped logs; the PTY wrapper reported
 exit code 1 for the interrupted command, so this verifies the shutdown path ran,
 not a clean shell exit code or draining under concurrent load.
+
+## OIDC discovery and JWKS connectivity check
+
+`cmd/oidc-check` is a separate read-only diagnostic. It never runs during API
+startup or health requests and does not change /health or /api/health. No admin
+password, user password, client secret or token is needed. Existing local dotenv
+loading and process-environment precedence apply.
+
+From the repository root:
+
+```powershell
+cd backend/services/auth-service
+$env:OIDC_ISSUER_URL = "http://localhost:8180/realms/GovAI"
+$env:OIDC_CHECK_TIMEOUT = "5s"
+go run ./cmd/oidc-check
+```
+
+Alternatively put those settings into this service's ignored .env. Do not copy
+Keycloak bootstrap credentials into the Go service. OIDC_ISSUER_URL is optional
+for the API; when provided it is validated without contacting Keycloak. The
+check command requires it. OIDC_CHECK_TIMEOUT defaults to 5s and must be positive,
+at most 30s. This is one total deadline for discovery plus JWKS, not 5s each.
+
+The realm identifier is case-sensitive: this user's realm is `GovAI`, so the
+expected issuer is exactly http://localhost:8180/realms/GovAI. The earlier local
+setup example used lowercase `govai`; use the actual realm identifier, not its
+display name. Do not change realm data to make the check pass. Hostname, case,
+port and trailing slash must match the provider's discovery issuer exactly.
+
+The checker fetches issuer/.well-known/openid-configuration, compares its issuer
+exactly, then fetches jwks_uri. Each JSON document is capped at 1 MiB. Redirects
+are rejected. For this Keycloak integration, jwks_uri must use the same origin as
+the configured issuer (a deliberately stricter policy than generic OIDC).
+HTTPS uses normal certificate verification; HTTP is allowed only for localhost
+or literal loopback IPs for development. URLs cannot contain user credentials,
+queries or fragments. The configured issuer is trusted operator configuration,
+never request input. There are no retries or credential forwarding.
+
+Exit 0 reports matching discovery and a nonempty JWKS with key-type entries.
+Exit nonzero reports a safe stage-specific configuration, HTTP, JSON, issuer,
+connection/TLS, or deadline failure without raw URLs, response bodies, key
+material or underlying transport errors. Check that Keycloak is running, the
+realm spelling is exact, and its hostname setting agrees with the configured
+issuer. A canceled/expired request does not leave background requests running.
+
+This checks reachability and metadata shape only: it does not cryptographically
+validate JWKs or JWTs, authenticate a citizen, establish API audience policy,
+exercise login/refresh/logout, or enable authorization. Real JWT verification
+will use a maintained OIDC/JWT library in a later phase. No PostgreSQL changes
+are required. Keycloak availability remains independent from public liveness.
+
+Run deterministic tests from this module with go test ./... and go vet ./...;
+go test -race ./... checks concurrent HTTP test behavior. Tests cover exact
+issuer mismatch, discovery/JWKS failures, size limits, invalid JSON, redirects,
+unsafe JWKS origins, cancellation, offline providers, and bounded timeouts.
+
+References: [Keycloak OIDC endpoints](https://www.keycloak.org/securing-apps/oidc-layers)
+and [OIDC Discovery validation](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigValidation).
+
+Verification on 2026-10-27: gofmt, go test ./..., go vet ./..., and
+ go test -race ./... passed. The live command above passed against
+http://localhost:8180/realms/GovAI: discovery matched and nonempty JWKS was
+retrieved. Existing health tests passed; no live login, JWT validation, or
+Keycloak outage manipulation was performed. No identity configuration changed.
