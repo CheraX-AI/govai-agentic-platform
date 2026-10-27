@@ -1,0 +1,30 @@
+{
+  "name": "govai-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "node scripts/expo.cjs start --go --lan",
+    "android": "node scripts/expo.cjs start --go --android",
+    "typecheck": "tsc --noEmit",
+    "check:expo": "node scripts/expo.cjs install --check",
+    "export:android": "node scripts/expo.cjs export --platform android --output-dir dist/android",
+    "preview:account-created:dev": "node scripts/preview-account-created.cjs",
+    "preview:check-email:dev": "node scripts/preview-check-email.cjs",
+    "preview:reset-password:dev": "node scripts/preview-reset-password.cjs",
+    "preview:password-updated:dev": "node scripts/preview-password-updated.cjs"
+  },
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "expo": "~57.0.31",
+    "expo-font": "~57.0.4",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}

@@ -1,0 +1,36 @@
+node_modules/
+.npm-cache/
+.expo/
+.cache/
+dist/
+*.tgz
+*.log
+
+
+# Signing credentials (never commit private signing material)
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.p8
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+credentials.json
+keystore.properties
+signing.properties
+
+# Temporary/editor and patch leftovers
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+*.swp
+*.swo
+.tmp/
+.temp/
+tmp/
+temp/
