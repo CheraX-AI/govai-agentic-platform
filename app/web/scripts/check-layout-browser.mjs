@@ -87,7 +87,7 @@ try {
     for (const [width,height] of [[1440,820],[1920,1080],[1024,768],[900,900],[768,900],[375,667],[320,568],[720,410]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       await delay(100);
-      const metrics = await evaluate(`(() => {const header=document.querySelector('.application-header').getBoundingClientRect();const sidebar=document.querySelector('.desktop-sidebar').getBoundingClientRect();return {horizontal:document.documentElement.scrollWidth-innerWidth,header:header.height,sidebar:sidebar.width,accountRight:document.querySelector('.header-account').getBoundingClientRect().right, images:[...document.images].every(i=>i.complete&&i.naturalWidth>0), fonts:['GovAI Inter','GovAI Montserrat','GovAI Fraunces'].every(f=>document.fonts.check('700 16px "'+f+'"')),selected:document.querySelector('.desktop-sidebar [aria-current=page]')?.textContent}})()`);
+      const metrics = await evaluate(`(() => {const header=document.querySelector('.application-header').getBoundingClientRect();const sidebar=document.querySelector('.desktop-sidebar').getBoundingClientRect();return {horizontal:document.documentElement.scrollWidth-innerWidth,header:header.height,sidebar:sidebar.width,accountRight:document.querySelector('.header-account').getBoundingClientRect().right, images:[...document.images].every(i=>i.complete&&i.naturalWidth>0), fonts:['GovAI Inter','GovAI Montserrat'].every(f=>document.fonts.check('700 16px "'+f+'"')),selected:document.querySelector('.desktop-sidebar [aria-current=page]')?.textContent}})()`);
       assert.equal(metrics.horizontal,0, page+' '+width+' overflow');
       assert.ok(metrics.images,'all image assets loaded');
       assert.ok(metrics.fonts,'local font families loaded');
@@ -114,7 +114,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:820,deviceScaleFactor:1,mobile:false});
   await evaluate('location.hash = "#/home"'); await delay(100);
   const documentNode = (await send('DOM.getDocument')).root.nodeId;
-  for (const [selector, expected] of [['.home-hero h1','Fraunces'],['.header-brand .wordmark','Montserrat'],['.synthetic-user strong','Inter']]) {
+  for (const [selector, expected] of [['.home-hero h1','Inter'],['.header-brand .wordmark','Montserrat'],['.synthetic-user strong','Inter']]) {
     const {nodeId} = await send('DOM.querySelector',{nodeId:documentNode,selector});
     const {fonts} = await send('CSS.getPlatformFontsForNode',{nodeId});
     assert.ok(fonts.some(f=>f.isCustomFont&&f.familyName.includes(expected)&&f.glyphCount>0), `${expected} actually renders ${selector}`);
@@ -196,7 +196,7 @@ try {
   assert.equal(exceptions.length,0,'no runtime exceptions');
   assert.deepEqual(await evaluate('({local:localStorage.length,session:sessionStorage.length,cookies:document.cookie})'),{local:0,session:0,cookies:''},'no session persistence');
   await writeFile('node_modules/.tmp/ga51-layout-measurements.json',JSON.stringify(measurements,null,2));
-  console.log('PASS: 16 layout cases; desktop header/sidebar/right-aligned accounts and active colours; all 21 shell assets at exact exported dimensions; Inter/Montserrat/Fraunces actually render; keyboard skip link and navigation; 320/375/768/900px website menu, Tab/Shift+Tab containment, Escape/Close/selection focus return and resize; history/direct links/unknown preview; no API/runtime errors or stored sessions');
+  console.log('PASS: 16 layout cases; desktop header/sidebar/right-aligned accounts and active colours; all 21 shell assets at exact exported dimensions; Inter/Montserrat actually render; keyboard skip link and navigation; 320/375/768/900px website menu, Tab/Shift+Tab containment, Escape/Close/selection focus return and resize; history/direct links/unknown preview; no API/runtime errors or stored sessions');
   await send('Browser.close');
 } finally {
   for (const call of pending.values()) clearTimeout(call.timer)

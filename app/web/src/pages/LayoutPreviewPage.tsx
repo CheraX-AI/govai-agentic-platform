@@ -2,9 +2,13 @@ import { Icon } from '../components/Icon'
 import { ApplicationLayout } from '../components/layout/ApplicationLayout'
 import type { LayoutPreview } from '../components/layout/Sidebar'
 import { demoUser } from '../data/demoUser'
+import { useEffect } from 'react'
 
-export default function LayoutPreviewPage({ page }: { page: LayoutPreview }) {
-  return <ApplicationLayout page={page}>{page === 'home' ? <>
+export default function LayoutPreviewPage({ page, demoSession = false, onDemoLogout }: { page: LayoutPreview; demoSession?: boolean; onDemoLogout?: () => void }) {
+  useEffect(() => { if (demoSession) document.getElementById('application-content')?.focus() }, [demoSession])
+  return <ApplicationLayout page={page} onDemoLogout={demoSession ? onDemoLogout : undefined}>
+    {demoSession && <div className="demo-session-notice"><p role="status">Demo session - not authenticated. Synthetic user details only.</p><button type="button" onClick={onDemoLogout}>Demo logout</button></div>}
+    {page === 'home' ? <>
     <div className="home-hero"><p>Hello, {demoUser.displayName} 👋</p><h1>How can I help you today?</h1><p>Ask me anything about government services in Sri Lanka.</p></div>
     <div className="composer-preview" aria-label="Message composer preview; messaging unavailable"><button disabled aria-label="Attachments unavailable"><Icon collection="shell" name="plus" /></button><span>Ask about a service, fee or document</span><button disabled aria-label="Voice unavailable"><Icon collection="shell" name="mic" /></button><button className="send-preview" disabled aria-label="Sending unavailable"><Icon collection="shell" name="send" /></button></div>
     <div className="suggestion-previews">{[['search','Find government services'],['status','Check application status'],['request','Submit a request'],['documents','Get required documents']].map(([icon,label]) => <div className={`suggestion-preview ${icon}`} key={icon}><span><Icon collection="shell" name={`suggest-${icon}`} /></span><strong>{label}</strong></div>)}</div>

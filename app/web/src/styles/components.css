@@ -2,7 +2,7 @@
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand > img { object-fit: contain; }
 .brand p { color: #666; font-size: 13px; margin-top: 4px; }
-.wordmark { font: 800 26px/1 Montserrat, 'Segoe UI', sans-serif; letter-spacing: -.5px; }
+.wordmark { font: 800 26px/1 'GovAI Montserrat', 'Segoe UI', sans-serif; letter-spacing: -.5px; }
 .wordmark span:first-child { background: linear-gradient(#a30f2d, #80040f); background-clip: text; color: transparent; }
 .wordmark span:last-child { background: linear-gradient(#f5a915, #d97706); background-clip: text; color: transparent; }
 .icon { width: 18px; height: 18px; flex-shrink: 0; }

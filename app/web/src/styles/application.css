@@ -1,12 +1,10 @@
-/* Fonts are scoped to the shell to preserve the existing login preview. */
-@font-face { font-family: 'GovAI Inter'; src: url('/assets/fonts/Inter.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: 'GovAI Montserrat'; src: url('/assets/fonts/Montserrat.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: 'GovAI Fraunces'; src: url('/assets/fonts/Fraunces.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
 .application-layout { --surface: #fff; --warm: #fcfbf9; --subtle-border: #f1f5f9; --muted: #f5f5f5; --brand-subtle: #fcf3f5; --secondary: #444; --tertiary: #666; --sidebar-width: 264px; font-family: 'GovAI Inter', sans-serif; color: #142033; background: var(--warm); height: 100svh; display: flex; flex-direction: column; }
 .application-layout button, .application-layout a { -webkit-tap-highlight-color: transparent; }
 .application-layout button { color: inherit; }
 .application-layout button:disabled { opacity: 1; }
 .application-layout a { color: var(--brand); }
+.demo-session-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; font-size: 13px; line-height: 1.5; }
+.demo-session-notice button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; background: white; }
 .application-layout .wordmark { font-family: 'GovAI Montserrat', sans-serif; }
 .shell-icon { display: block; flex: none; max-width: none; }
 .application-header { height: 76px; flex: none; background: var(--surface); border-bottom: 1px solid var(--subtle-border); padding: 0 32px 0 24px; display: flex; align-items: center; gap: 20px; }
@@ -17,6 +15,11 @@
 .shell-language { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--border); background: white; border-radius: 999px; font-size: 14px; line-height: 1.5; }
 .notification-preview { border: 0; background: transparent; padding: 0; }
 .synthetic-user { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.synthetic-user { border: 0; padding: 2px; min-height: 44px; border-radius: 8px; background: transparent; text-align: left; }
+.account-disclosure { position: relative; }
+.account-actions { position: absolute; right: 0; top: calc(100% + 8px); z-index: 6; width: 240px; max-width: calc(100vw - 32px); padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: white; box-shadow: 0 4px 16px #0002; font-size: 13px; line-height: 1.5; }
+.account-actions button, .account-actions a { display: block; width: 100%; min-height: 44px; padding: 10px; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; background: white; text-align: left; }
+.account-actions button:disabled { color: #666; }
 .synthetic-user small { display: block; font-size: 11px; line-height: 1.5; color: var(--tertiary); margin-top: 2px; }
 .user-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-subtle); color: var(--brand); font-weight: 700; }
 .application-body { display: flex; flex: 1; min-height: 0; }
@@ -46,7 +49,7 @@
 .home-content { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; padding-bottom: 64px; }
 .home-content .layout-preview-label { position: absolute; top: 12px; left: 24px; right: 24px; text-align: center; }
 .home-hero { text-align: center; }
-.application-layout h1, .application-layout h2, .home-hero > p:first-child { font-family: 'GovAI Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 0, 'WONK' 1; font-optical-sizing: none; font-weight: 700; }
+.application-layout h1, .application-layout h2, .home-hero > p:first-child { font-weight: 700; }
 .home-hero > p:first-child { font-size: 30px; line-height: 1.1; letter-spacing: -.3px; }
 .home-hero h1 { font-size: 44px; line-height: 1.1; letter-spacing: -.5px; margin-top: 10px; }
 .home-hero > p:last-child { margin-top: 10px; font-size: 20px; line-height: 1.4; color: var(--tertiary); }

@@ -1,5 +1,7 @@
+@font-face { font-family: 'GovAI Inter'; src: url('/assets/fonts/Inter.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'GovAI Montserrat'; src: url('/assets/fonts/Montserrat.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
 :root {
-  font-family: Inter, 'Segoe UI', Arial, sans-serif;
+  font-family: 'GovAI Inter', 'Segoe UI', Arial, sans-serif;
   color: #142033;
   background: white;
   font-synthesis: none;

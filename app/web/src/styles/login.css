@@ -6,10 +6,16 @@
 .demo-banner { font-size: 12px; line-height: 1.5; color: #624400; background: #fff7df; padding: 10px 14px; border-radius: 12px; margin-bottom: 12px; }
 .login-card { border: 1px solid var(--border); border-radius: 20px; padding: 28px 32px; box-shadow: 0 2px 8px #00000008; display: flex; flex-direction: column; gap: 16px; }
 .heading { text-align: center; }
-h1 { font: 700 26px/1.1 Fraunces, Georgia, serif; letter-spacing: -.3px; }
+.login-layout a:not(.primary-button) { color: var(--brand); text-decoration-line: underline; text-underline-offset: 0.2em; text-decoration-thickness: 0.08em; text-decoration-skip-ink: auto; }
+.login-layout a:not(.primary-button):visited { color: var(--brand); }
+.login-layout a:not(.primary-button):hover { color: #80040f; }
+.login-layout a:not(.primary-button):focus-visible { color: var(--brand); }
+h1 { font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: -.3px; }
 .heading p { font-size: 14px; line-height: 1.4; color: #666; margin-top: 4px; }
 .login-method { display: flex; padding: 4px; background: #f5f5f5; border-radius: 14px; align-self: center; max-width: 100%; }
-.login-method > span { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 10px 12px; border-radius: 999px; font-size: 13px; }
+.login-method > button { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 10px 12px; border-radius: 999px; font-size: 13px; }
+.login-method > button { border: 0; font-family: inherit; line-height: inherit; }
+.available-method { background: transparent; color: #555; }
 .selected-method { background: var(--brand); color: white; font-weight: 600; }
 .unavailable-method { color: #555; flex-wrap: wrap; }
 .unavailable-method small { flex-basis: 100%; text-align: center; font-size: 10px; }
@@ -26,8 +32,12 @@ h1 { font: 700 26px/1.1 Fraunces, Georgia, serif; letter-spacing: -.3px; }
 .demo-options label { display: block; margin: 10px 0 6px; }
 .demo-options select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: white; }
 footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 8px 16px; font-size: 12px; line-height: 1.5; color: #666; text-align: center; }
-.photo-panel { position: relative; overflow: hidden; }
-.login-photo { position: absolute; width: 122.26%; height: 162.6%; left: -19.56%; top: -62.6%; object-fit: cover; }
+/* Keep the scene/overlays independent of form height; only the form grows. */
+.photo-panel { position: sticky; top: 0; align-self: start; height: 100svh; overflow: hidden; }
+/* The derived asset excludes the source's logo above the coastal scene.
+   Top/right anchoring retains the flag and lighthouse on desktop panel ratios;
+   cover may crop left-hand sea or lower rocks, never stretch the source. */
+.login-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 100% 0%; }
 .photo-scrim { position: absolute; inset: 0; background: linear-gradient(transparent 45%, #000c); }
 .slide-caption { position: absolute; bottom: 120px; left: 56px; right: 32px; color: white; }
 .slide-caption h2 { font-size: 36px; line-height: 1.15; letter-spacing: -.5px; }
@@ -37,7 +47,7 @@ footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-i
 .help-badge small { display: block; font-size: 11px; color: #666; }
 @media (max-width: 1100px) { .login-layout { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); } .form-panel { padding: 24px; } .slide-caption { left: 24px; right: 24px; } .slide-caption h2 { font-size: 30px; } }
 @media (max-width: 900px) { .login-layout { display: block; } .photo-panel { display: none; } .form-panel { min-height: 100svh; gap: 32px; } .login-content { margin-block: auto; } }
-@media (max-width: 480px) { .form-panel { padding: 20px 16px; } .login-card { padding: 24px 16px; } .brand p { font-size: 11px; } .language { padding: 8px 12px; font-size: 12px; } .login-method > span { padding: 10px 8px; gap: 4px; font-size: 12px; } .human-check { padding: 12px; } }
+@media (max-width: 480px) { .form-panel { padding: 20px 16px; } .login-card { padding: 24px 16px; } .brand p { font-size: 11px; } .language { padding: 8px 12px; font-size: 12px; } .login-method > button { padding: 10px 8px; gap: 4px; font-size: 12px; } .human-check { padding: 12px; } }
 /* Reduce surrounding space on short viewports; content still determines page height. */
 @media (max-height: 800px) {
   .form-panel { padding-block: 16px; gap: 16px; }
