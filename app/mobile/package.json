@@ -13,7 +13,8 @@
     "preview:account-created:dev": "node scripts/preview-account-created.cjs",
     "preview:check-email:dev": "node scripts/preview-check-email.cjs",
     "preview:reset-password:dev": "node scripts/preview-reset-password.cjs",
-    "preview:password-updated:dev": "node scripts/preview-password-updated.cjs"
+    "preview:password-updated:dev": "node scripts/preview-password-updated.cjs",
+    "preview:chat-home:dev": "node scripts/preview-chat-home.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

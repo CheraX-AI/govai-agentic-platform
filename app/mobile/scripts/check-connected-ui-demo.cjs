@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 global.__DEV__ = false;
 const { runtime, environment, loader, nodes } = require('./check-register.cjs');
+const { fixture: chatFixture } = require('./check-chat-home-preview.cjs');
 const root = path.resolve(__dirname, '..');
 const keys = ['EXPO_PUBLIC_CONNECTED_UI_DEMO', 'EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW', 'EXPO_PUBLIC_CHECK_EMAIL_PREVIEW', 'EXPO_PUBLIC_RESET_PASSWORD_PREVIEW', 'EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW'];
 const saved = keys.map(k => process.env[k]);
@@ -43,7 +44,7 @@ function mount(name, props, width = 400, height = 772, fontScale = 1) {
     rt, env, draw, clears, focuses, scrolls,
     get tree() { return tree; },
     set(i, value) { nodes(tree, 'TextInput')[i].props.onChangeText(value); draw(); },
-    submit() { const action = nodes(tree, 'Pressable').find(n => /^(Sign up\.|Send reset link\.)/.test(n.props.accessibilityLabel)); const handler = action.props.onPress; handler(); draw(); rt.flush(); draw(); return handler; },
+    submit() { const action = nodes(tree, 'Pressable').find(n => /^(Sign up\.|Send reset link\.|Log In\.)/.test(n.props.accessibilityLabel)); const handler = action.props.onPress; handler(); draw(); rt.flush(); draw(); return handler; },
     text() { return nodes(tree, 'Text').flatMap(n => [n.props.children].flat(Infinity)).filter(s => typeof s === 'string'); },
     unmount() { rt.unmount(); assert.equal(rt.frames.size, 0); assert.equal(rt.timers.size, 0); },
   };
@@ -55,6 +56,7 @@ function app() {
   overrides['./AccountCreatedPreviewScreen'] = { AccountCreatedPreviewScreen:'AccountCreatedPreviewScreen', AccountCreatedDemoScreen:'AccountCreatedDemoScreen' };
   overrides['./CheckEmailPreviewScreen'] = { CheckEmailPreviewScreen:'CheckEmailPreviewScreen', CheckEmailDemoScreen:'CheckEmailDemoScreen' };
   overrides['./ResetPasswordPreviewScreen'] = { ResetPasswordPreviewScreen:'ResetPasswordPreviewScreen' };
+  overrides['./ChatHomePreviewScreen'] = { ChatHomePreviewScreen:'ChatHomePreviewScreen', ChatHomeDemoScreen:'ChatHomeDemoScreen' };
   overrides['./PasswordUpdatedPreviewScreen'] = { PasswordUpdatedPreviewScreen:'PasswordUpdatedPreviewScreen' };
   const { Startup } = loader(rt,env,overrides)('App.tsx');
   const draw = () => { const t=rt.render(()=>Startup()); rt.effects(); return t; };
@@ -67,11 +69,11 @@ try {
     flags(dev,flag); const enabled=dev && flag==='1'; const a=app(); let t=a.tree;
     t.props.onLogin();t=a.tree;t.props.onSignUp();t=a.tree;
     assert.equal(typeof t.props.onDemoValidated === 'function',enabled);
-    for(const name of ['RegisterScreen','ForgotPasswordScreen']) {
+    for(const name of ['RegisterScreen','ForgotPasswordScreen','LoginScreen']) {
       let calls=0;const f=mount(name,{onLogin(){},onDemoValidated(){calls++;}});
-      if(name==='RegisterScreen')validRegister(f);else f.set(0,' arbitrary NIC ');
+      if(name==='RegisterScreen')validRegister(f);else if(name==='LoginScreen'){f.set(0,'sample id');f.set(1,'sample password');}else f.set(0,' arbitrary NIC ');
       f.submit();assert.equal(calls,enabled?1:0);
-      if(!enabled)assert(f.text().some(s=>/No (registration )?request was sent/.test(s)));
+      if(!enabled)assert(f.text().some(s=>/No (registration |sign-in )?request was sent/.test(s)));
       f.unmount();
     }
     for(const [file,name,props] of [['AccountCreatedPreviewScreen','AccountCreatedDemoScreen',{onContinue(){}}],['CheckEmailPreviewScreen','CheckEmailDemoScreen',{onBack(){},onDifferentNic(){}}]]) {
@@ -82,6 +84,15 @@ try {
     a.rt.unmount();
   }
   flags(true,'1');
+  for(const label of ['Back to previous screen','Sign up','Forgot Password?']) {
+    let exits=0,calls=0;
+    const f=mount('LoginScreen',{onBack(){exits++;},onSignUp(){exits++;},onForgotPassword(){exits++;},onDemoValidated(){calls++;}});
+    f.set(0,'sample id');f.set(1,'sample password');
+    const replay=nodes(f.tree,'Pressable').find(n=>n.props.accessibilityLabel.startsWith('Log In.')).props.onPress;
+    nodes(f.tree,'Pressable').find(n=>n.props.accessibilityLabel===label).props.onPress();f.draw();
+    assert.equal(exits,1);assert(nodes(f.tree,'TextInput').every(n=>n.props.value===''));
+    replay();assert.equal(calls,0,'a submission from a departed form is ignored');f.unmount();
+  }
   const origins=['WelcomeScreen','OnboardingMeetScreen','OnboardingDiscoverScreen','OnboardingAskScreen','OnboardingTrackScreen','OnboardingPayScreen'];
   for(let i=0;i<origins.length;i++) {
     const a=app();let t=a.tree;
@@ -97,6 +108,28 @@ try {
     t=a.tree; if(i%2){a.env.back();}else{const done=t.props.onContinue;done();done();}t=a.tree;assert.equal(t.type,'LoginScreen');
     registerProps.onDemoValidated();assert.equal(a.tree.type,'LoginScreen','stale transition ignored');
     const fresh=mount('RegisterScreen',{onLogin(){}});assert(nodes(fresh.tree,'TextInput').every(n=>n.props.value===''));assert(!fresh.text().includes('Passwords do not match.'));fresh.unmount();
+    const loginProps=t.props;
+    const login=mount('LoginScreen',loginProps);login.submit();assert.equal(a.tree.type,'LoginScreen');assert(login.focuses.includes(0));
+    login.set(0,'sample identifier');login.set(1,'   ');login.submit();assert.equal(a.tree.type,'LoginScreen');assert(login.focuses.includes(1));
+    login.set(1,'sample password');const replay=login.submit();replay();
+    t=a.tree;assert.equal(t.type,'ChatHomeDemoScreen');assert(nodes(login.tree,'TextInput').every(n=>n.props.value===''));assert(nodes(login.tree,'TextInput')[1].props.secureTextEntry);assert.equal(login.clears.length,2);
+    assert(!JSON.stringify(t.props).includes('sample password'));login.unmount();replay();
+    const oldChat=t.props;
+    const chat=chatFixture(400,772,1,{mode:'demo',onExit:oldChat.onExit});chat.set('Local draft');
+    nodes(chat.tree,'Pressable').find(n=>n.props.accessibilityLabel==='How do I renew my NIC?').props.onPress();chat.draw();
+    assert.equal(chat.rt.timers.size,1);nodes(chat.tree,'Pressable').find(n=>n.props.accessibilityLabel==='Back to Chat Home').props.onPress();chat.draw();
+    assert.equal(chat.rt.timers.size,0);assert.equal(nodes(chat.tree,'TextInput')[0].props.value,'Local draft');
+    nodes(chat.tree,'Pressable').find(n=>n.props.accessibilityLabel==='Open menu').props.onPress();chat.draw();
+    const logout=nodes(chat.tree,'Pressable').find(n=>n.props.accessibilityLabel==='Logout').props.onPress;
+    logout();logout();chat.draw();assert.equal(chat.exits,1);assert.equal(nodes(chat.tree,'TextInput')[0].props.value,'');chat.unmount();
+    t=a.tree;assert.equal(t.type,'LoginScreen');const loggedOut=t.props;
+    const emptyLogin=mount('LoginScreen',loggedOut);assert(nodes(emptyLogin.tree,'TextInput').every(n=>n.props.value===''));emptyLogin.unmount();
+    a.env.back();assert.equal(a.tree.type,origins[i],'Back after Logout preserves original origin');
+    // Re-enter Login from the same origin; no route history may reopen Chat Home.
+    a.tree.props.onLogin();
+    t=a.tree;assert.equal(t.type,'LoginScreen');loginProps.onDemoValidated();assert.equal(a.tree.type,'LoginScreen','old Login visit cannot navigate a new visit');
+    t.props.onDemoValidated();t=a.tree;assert.equal(t.type,'ChatHomeDemoScreen');logout();oldChat.onExit();assert.equal(a.tree.type,'ChatHomeDemoScreen','old Chat/Logout cannot exit a later visit');t.props.onExit();t=a.tree;
+    const freshLogin=mount('LoginScreen',t.props);assert(nodes(freshLogin.tree,'TextInput').every(n=>n.props.value===''));freshLogin.unmount();
     t.props.onForgotPassword();t=a.tree;
     for(const method of ['onBack','onDifferentNic','androidBack']){
       const props=t.props,g=mount('ForgotPasswordScreen',props);g.set(0,'   ');g.submit();assert.equal(a.tree.type,'ForgotPasswordScreen');
@@ -140,11 +173,11 @@ try {
     const dir=path.resolve(root,process.argv[process.argv.indexOf('--export')+1]||'dist/android');const files=[];
     function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=path.join(d,e.name);e.isDirectory()?walk(f):files.push(f);}}walk(dir);
     const bundles=files.filter(f=>/\.(js|hbc)$/.test(f));assert(bundles.length);
-    for(const f of bundles){const bytes=fs.readFileSync(f);for(const marker of ['AccountCreatedDemoScreen','CheckEmailDemoScreen','UI demo \u2014 no account was created','Preview \u2014 no email was sent','sample@example.test','Rathishan'])for(const encoding of ['utf8','utf16le'])assert(!bytes.includes(Buffer.from(marker,encoding)),marker+' in '+f);}
+    for(const f of bundles){const bytes=fs.readFileSync(f);for(const marker of ['ChatHomeDemoScreen','ChatHomeContent','UI demo only. Credentials are not verified; valid fields open Chat Home.','Log In. Open Chat Home in UI demo only; credentials are not verified.','UI demo \u00b7 Credentials were not verified. AI and actions are disconnected.','AccountCreatedDemoScreen','CheckEmailDemoScreen','UI demo \u2014 no account was created','Preview \u2014 no email was sent','sample@example.test','Rathishan'])for(const encoding of ['utf8','utf16le'])assert(!bytes.includes(Buffer.from(marker,encoding)),marker+' in '+f);}
     for(const icon of ['assets/figma/account-created/check-circle.png','assets/figma/check-email/mail.png']){const hash=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,icon))).digest('hex');assert(!files.some(f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')===hash));}
     console.log('PASS connected demo excluded from production artifact:',dir);
   }
-  console.log('PASS connected demo: 8 mode/flag cases, both actual form submissions, validation/cleanup/repeated events, all 6 Login origins, keyboard-first Back, confirmation Back/Continue, fresh recovery forms, standalone precedence, 36 synthetic confirmation layouts, launcher args/environment. No native/device rendering.');
+  console.log('PASS connected demo: 8 mode/flag cases, all three actual form submissions, validation/cleanup/repeated events, all 6 Login origins, keyboard-first Back, Login visit guards, Chat Back, confirmation Back/Continue, fresh recovery forms, standalone precedence, 36 synthetic confirmation layouts, launcher args/environment. No native/device rendering.');
 } finally {
   global.__DEV__=savedDev;keys.forEach((k,i)=>saved[i]===undefined?delete process.env[k]:process.env[k]=saved[i]);
 }

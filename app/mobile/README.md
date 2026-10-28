@@ -1,5 +1,457 @@
 # GovAI mobile
 
+## Official website reference - October 28, 2026
+
+The approved NIC sample reference is now a link to the fixed homepage
+`https://drp.gov.lk/`. Visible text is exactly "Official website · Demo reference,
+not verification of this response". This supersedes earlier documentation saying
+the reference is noninteractive/pending implementation. It does not verify the mock
+reply, its sample steps or service details, and no checked date is claimed.
+
+OfficialSourceReference.tsx owns the reference interaction. ChatMessage.tsx replaces
+its plain source row with this component using the existing globe. The link has a
+minimum 48x48dp target, wrapping/scalable underlined burgundy text, link semantics,
+a department-specific accessibility label including the disclaimer, and an external
+browser hint. Unimplemented service actions remain disabled. Other notices, chat
+navigation/draft/scroll state, keyboard handling and production guards are unchanged.
+
+Only an explicit tap calls React Native Linking.openURL with the constant homepage.
+No chat text, credentials, identifiers, query parameters or fragments are passed.
+The app does not fetch the website or embed a browser. Android handles the URL in
+its external handler/browser or chooser. Repeated taps are blocked while opening.
+Handoff rejection or a synchronous failure produces the accessible inline alert
+"Couldn’t open the official website. Please try again." The link is available for
+retry; a new attempt clears the error. Late completion after unmount cannot update
+state or reopen anything. Subsequent network/site errors belong to the browser;
+a successful handoff does not mean the website loaded or verified the response.
+
+The five-file scope is OfficialSourceReference.tsx, ChatMessage.tsx, the Chat Home
+fixture and conversation checker, and this README. Linking is mocked in automated
+tests; those tests never open the browser or contact the government site. Coverage
+includes exact URL/disclaimer, link role/target, success, rejected/thrown opening,
+successful retry, duplicate taps, late/unmounted callbacks and both entry modes'
+conversation/draft/scroll retention. TypeScript, drawer/connected navigation and
+conversation regressions accompany flag-on/off production exclusion checks for
+the new module, disclaimer and URL. Production artifacts use
+dist/source-reference-production-1 and dist/source-reference-production-0.
+
+Pending Android device checks: activate the NIC reference in standalone/connected
+demo, verify the external browser/chooser and exact homepage URL, then return with
+browser Back and confirm the conversation/draft/reading position. Test real browser
+handoff failure where reproducible, retry, TalkBack label/hint/error announcement,
+48dp reachability and enlarged text. No device verification is claimed. The Jira
+source-link interaction is implemented locally; Android acceptance remains pending.
+The mock content stays unverified and the status-bar issue remains deferred.
+
+## GA-22 local conversation demo - October 28, 2026
+
+Implements conversation frame 97:26 inside the existing guarded Chat Home owner.
+Both explicit development entry modes support it; normal Login remains disconnected
+and all chat code/assets remain excluded from production. App.tsx and LoginScreen.tsx
+are unchanged by this task. This section supersedes older statements that landing
+suggestions, Send and drawer New chat are disabled. Other destinations stay disabled.
+
+Shared ChatHeader, ChatComposer and ChatBottomNavigation retain landing presentation
+and provide conversation variants. ChatMessage exports CitizenMessage and AiResponse;
+ChatConversation owns list scrolling. chatDemo.ts contains typed local fixtures and
+conversation assets. No network transport, authentication, persisted history or
+credential storage exists. The local AGENTS.md context now includes these frames
+and retains its Git exclusion and all safeguards.
+
+Suggestion taps send exactly that prompt and preserve an unrelated landing draft.
+Landing Send rejects blank/whitespace with accessible "Enter a message." Valid Send
+clears the submitted draft and starts a local thread. Follow-up Send appends one
+citizen message, clears the composer and prepares a canned response after 800ms.
+Draft typing stays available during responding; Send is disabled until responding
+or its recoverable error is resolved. Synchronous request/version guards reject
+duplicate and stale submissions. Retry reuses the citizen message and prepares
+one response. The development-only "Simulate next response error" switch sits in
+a labelled Demo controls strip outside the conversation content; it fails the next
+response once. Pending text and error explicitly say "local mock response".
+
+All responses are marked "Local demo · Mock response". The visible notice states
+"Local demo · Responses are samples, not verified government advice. AI is disconnected."
+Connected mode also retains the credentials-not-verified notice. The exact NIC
+suggestion receives a sample five-step layout and sample service card. Every step
+says "demonstration only"; card values say "Not verified". Other prompts receive
+a generic mock response without an unrelated NIC card or invented source. The
+original Figma fee, duration, actionable instructions and verification date are not
+presented as guidance. No AI streaming or server success is simulated.
+
+**GA-22 Jira source-link requirement: pending.** "Design reference: drp.gov.lk ·
+Not verified" is plain, noninteractive text. No hyperlink, checked date or verified
+advice claim is implemented. An approved verified destination and external-browser
+interaction still need definition before enabling source links. Start renewal,
+Ask next chips, attachment, microphone, Services, My Requests and Profile remain
+accessibly disabled. Figma destinations 114:2, 230:76 and 186:464 are outside scope.
+
+Conversation Back and Home dismiss the keyboard, cancel pending work and clear the
+thread/follow-up draft, returning to landing with an unrelated unsent landing draft
+preserved. Header/drawer New chat cancels work, resets all chat drafts and error-test
+state and opens empty landing. Drawer remains available on landing only, matching
+the conversation's Back/New chat header. Its fixed footer, overflow fallback,
+background isolation and focus restoration are retained. Logout from landing clears
+all remaining chat state and returns to fresh Login with its original Back origin.
+Standalone Logout stays disabled. Android Back closes a drawer first, dismisses
+keyboard next, then conversation -> landing -> existing Login/Welcome destination.
+Unmount also cancels response timers; stale results cannot recreate departed threads.
+
+The conversation list follows new content only when within 96dp of the bottom.
+Reading older messages retains position; new messages expose a 48dp Jump to latest
+action. Keyboard overlap resizes the conversation shell; when controls overflow,
+only the outer shell scrolls to expose the composer, preserving the inner history
+offset. Header/composer/navigation and the demo strip use
+intrinsic measured heights, with at least 96dp for list/Jump controls. Short windows
+or enlarged text allow outer-shell overflow so fixed controls stay reachable.
+Existing safe-area ownership and status-bar handling remain unchanged; the unresolved
+Android top-status-bar issue is still deferred. Text scales/wraps; controls have
+minimum 48dp targets and images explicit dimensions. Source/crop/hash details are
+in assets/figma/chat-conversation/README.md.
+
+Repeat checks: `npm.cmd run typecheck`, `node scripts/check-chat-conversation.cjs`,
+`node scripts/check-chat-home-menu.cjs`, `node scripts/check-connected-ui-demo.cjs`
+and existing registration/recovery/confirmation checks. Conversation coverage uses
+mocked native APIs for both modes, prompt/typed/blank/follow-up input, responding,
+recoverable error/Retry, duplicates, cancellation and stale results, drafts,
+Back/New chat/Logout, scroll retention/Jump, disabled services/source and 15 synthetic
+viewport/text cases. Asset hashes and reused PNG equality are checked. Optional
+`node scripts/check-chat-home-preview.cjs --conversation-visual` creates browser
+approximations; these do not prove Android rendering. Android/Hermes exports with
+all flags enabled/disabled are checked with `--export dist/conversation-production-1`
+and `--export dist/conversation-production-0` on conversation and existing guard suites.
+
+Launcher verification uses `npm.cmd run preview:chat-home:dev -- --port 8098` on a
+free port; /status and Android development bundle must return HTTP 200 and contain
+the conversation/demo controls. Existing user Metro on 8097 is preserved. Expo may
+report its existing DevTools-download fallback warning; no dependency install is needed.
+
+Actual results: TypeScript, conversation/menu/connected-demo and all existing form
+and confirmation regression suites passed. Both flag-on/off Android/Hermes exports
+passed conversation, Chat Home/menu, connected-demo and older preview exclusion
+checks. Browser approximations at reference, narrow, wide and 2x text were inspected,
+including service-card/source/footer content. Launcher 8098 started, /status and its
+Android bundle returned HTTP 200 with conversation/demo-control markers. Only that
+verification server was stopped afterward; 8097 still returned HTTP 200. These are
+automated/build/browser checks, not Android device tests.
+
+Pending physical Android tests: open standalone and connected demo; exercise all
+suggestions and typed messages, whitespace errors, pending-draft typing, simulated
+error/Retry, Back/New chat/Logout during pending work, fresh Login and original
+Welcome/onboarding origins. Scroll up before a response: position must stay put and
+Jump to latest must work. Test actual keyboard resize/overlay, short landscape and
+multiwindow, enlarged/max text and full service-card/chip reachability. With TalkBack,
+verify errors/responding announcements, reading order, source noninteraction, disabled
+actions and drawer focus restoration. Check avatar crop and Android safe areas.
+Automated callbacks/calculations/browser approximations are separate from these
+unperformed native/device checks. Source-link completion and status-bar remediation
+remain pending; neither is claimed complete.
+
+## Fixed drawer header/footer - October 28, 2026
+
+The drawer normally keeps its logo/Close header and Citizen/Logout footer outside
+the scrollable menu/history middle. This supersedes earlier whole-drawer scrolling
+descriptions. The shell owns top inset + 4dp, bottom inset + 8dp, left inset + 20dp
+and 20dp right padding; existing drawer width leaves the right safe area outside.
+Insets are not duplicated on the middle or fixed regions. The footer has natural
+height, stays above the bottom safe area and includes the existing Logout notice.
+
+Compact spacing: header bottom 8dp, primary rows minimum 48dp with 10dp vertical
+padding, middle gaps 4dp, history groups 8dp apart, history row vertical padding
+8dp with minimum 48dp height, Citizen top padding 8dp. The decorative flexible
+spacer is removed. Existing text sizes, system scaling, wrapping, images and
+minimum targets remain unchanged; no whole-interface scaling was added.
+
+Intrinsic header/footer and actual drawer heights are measured. If those regions
+plus safe-area padding cannot leave 48dp for the middle, the same mounted shell
+scrolls the whole drawer and the inner scroll is disabled. Switching uses the same
+header/footer/control tree and focus refs. The fixed-region measurements do not
+depend on the flexible middle height. Taller windows or smaller text restore
+middle-only scrolling after native remeasurement. This fallback keeps all content
+reachable when fixed regions themselves cannot fit.
+
+Only ChatHomeMenu.tsx, the menu/preview checkers and this README changed for this
+layout task. ChatHomeContent, Logout cleanup, App navigation, Back priority, draft
+retention, disabled destinations, production guards and deferred status-bar issue
+are unchanged. TypeScript, menu and connected-demo regression checks cover these
+behaviors. Menu checks simulate 21 viewport/font-scale cases, intrinsic measurement
+changes, scroll ownership/recovery, footer placement, safe areas and preserved
+font sizes/targets. Browser approximations cover 400x772, 320x568, 400x772 at 2x,
+600x960 and an extreme 320x240 at 3x. They do not establish native Android layout.
+Production Android/Hermes flag-on/off builds and exclusion checks use
+dist/drawer-layout-production-1 and dist/drawer-layout-production-0.
+
+Pending phone checks: confirm header/footer remain visible while scrolling history;
+check whether normal-size content fits on the actual phone; verify Logout without
+scrolling the normal drawer. Test short landscape/multiwindow and maximum text:
+all middle items must remain reachable, and if fixed regions cannot fit the whole
+drawer must scroll to Logout and back to Close. Recheck TalkBack focus after opening,
+closing and layout changes, safe areas with gesture/three-button navigation, draft
+retention and Logout/Back. No physical-device or emulator test was performed.
+
+## Drawer Logout - October 28, 2026
+
+The drawer now includes an outlined burgundy **Logout** action below the Citizen
+footer, with "UI demo only · Returns to Login." It is enabled only in the guarded
+connected development demo. The standalone preview disables it accessibly and shows
+"Unavailable: no login occurred in this preview." This supersedes the earlier
+menu section's statement that only Close and the backdrop are active.
+
+Logout cancels pending menu animation/focus and keyboard-layout work, closes the
+drawer, clears the native input and local draft, resets temporary menu/keyboard
+state and dismisses the keyboard before calling the existing guarded Chat exit.
+A synchronous leaving latch rejects duplicate, departed and unmounted callbacks.
+Fresh Login retains its original Welcome/onboarding Back destination; Back cannot
+reopen the logged-out Chat Home. There is no persisted session or server-side logout.
+Normal X/outside/Back drawer closing still retains the draft and returns focus.
+Production guards, other screens, safe-area ownership and pending status-bar work
+are unchanged. No new assets, dependencies, backend calls or storage are involved.
+
+Validation: TypeScript; Chat Home/menu and connected-demo regressions; existing
+registration, recovery and confirmation suites; Android/Hermes exports with all
+preview/demo flags enabled and disabled and their production-exclusion checks.
+Logout checks cover disabled standalone behavior, cleared state before exit,
+duplicate actions, pending focus cancellation, callbacks after unmount and after
+later Login visits, fresh Login, and all six original Back destinations. Synthetic
+layout checks include the new 48dp action and natural overflow at enlarged text.
+
+Pending phone tests: use dummy Login inputs, type a draft, open the menu and tap
+Logout; verify fresh empty Login, dismissed keyboard and Back to the original
+Welcome/onboarding screen. Log in again and verify an empty draft/closed drawer.
+Check rapid Logout taps, ordinary drawer close/draft retention, disabled standalone
+Logout, TalkBack focus/disabled announcements, and scrolling to Logout on short,
+landscape and enlarged-text screens. These are not claimed as device-tested.
+
+## Chat Home menu - October 28, 2026
+
+Figma frame 306:1388, drawer instance 306:1501. This section supersedes older
+statements that the Chat Home menu control is disabled. The existing standalone
+and connected-demo guards still apply; normal Login and production stay disconnected.
+
+`components/ChatHomeMenu.tsx` is an in-tree overlay owned by
+`components/ChatHomeContent.tsx`, not a navigation destination or native Modal.
+The top-left button opens it after assets load. Opening blurs the composer and
+dismisses the keyboard without clearing its local draft or remounting Chat Home.
+Background touches and accessibility descendants are blocked while open, including
+the closing fade. X, outside tap and Android Back close it; another Back follows
+the existing keyboard-first/exit behavior. Close receives accessibility focus on
+layout; closing restores focus to the opener without focusing the input. Reduced
+motion skips the fade. TalkBack and actual keyboard timing need device verification.
+
+The drawer follows the white 340dp reference panel, 24dp right corners, 55% scrim,
+original brand/icons, primary rows and grouped Today/Yesterday history. Width
+shrinks on narrow screens, retaining at least 48dp outside area; drawer content
+owns its safe-area insets and scrolls naturally when text/content grows. Main Chat
+Home inset ownership and the deferred status-bar issue are unchanged. Targets are
+at least 48dp; artwork uses explicit dimensions and contain sizing.
+
+Visible sample label: "Sample chat history · Actions unavailable". Footer:
+"Citizen" / "Development preview", with the existing neutral profile icon.
+New chat, Recent chats, My applications, all five sample history rows and the
+profile/settings row remain accessibly disabled. Ellipsis icons have no separate
+action. No account, chat creation, backend, authentication or storage was added.
+Figma prototype links describe future destinations only: New chat/Close/scrim
+to 77:4, Recent chats to 308:1734, My applications to 890:5808, history to 97:26,
+profile to 186:464. Ellipsis/settings have no established separate destinations.
+Only approved Close/scrim behavior is implemented.
+
+Assets/provenance: `assets/figma/chat-home-menu/README.md` and `sha256.json`.
+`scripts/rasterize-chat-home-menu-icons.ps1` reproduces native PNG icons from the
+original SVGs using existing Chrome/System.Drawing; no runtime dependency added.
+
+Checks: `npm.cmd run typecheck`, `node scripts/check-chat-home-menu.cjs`,
+`node scripts/check-chat-home-preview.cjs`, and all existing registration,
+recovery, confirmation and connected-demo regression checks. The menu checker
+covers both entry modes, retained input identity/draft, keyboard dismissal,
+X/outside/Back, background isolation, focus restoration, repeat cycles, reduced
+motion, nine disabled destinations, asset hashes and 18 synthetic layouts.
+Optional `--menu-visual` on the Chat Home checker creates browser approximations
+at 400x772, 320x568, 400x772 with 2x text and 600x960; these are not native renders.
+Production Android/Hermes exports with all preview/demo flags on and off are
+checked with `--export dist/menu-production-on` and `--export dist/menu-production-off`
+on the menu, Chat Home, connected-demo and existing preview checkers.
+
+Actual launcher verification: `npm.cmd run preview:chat-home:dev -- --port 8098`
+started Metro; /status and an Android development bundle returned HTTP 200,
+including menu/sample copy. Only that verification server was stopped; the existing
+8097 development server was preserved. Expo used its DevTools-download fallback.
+
+Pending physical Android testing: open both standalone and connected-demo entries;
+type a dummy draft, open the menu, verify keyboard dismissal and unchanged draft;
+close independently through X/outside/Back and verify background cannot be tapped.
+With TalkBack, verify Close focus, hidden background and return to the opener.
+Test narrow/short/landscape screens, cutouts/navigation insets, default/enlarged/max
+text, overflow to Yesterday/footer, reduced motion and rapid open/close. Then check
+existing Chat Back to fresh Login/Welcome and credential/draft cleanup on exit.
+No physical-device, emulator or native accessibility/rendering verification was
+performed for this menu. The unresolved Android status-bar issue remains pending.
+
+## Greeting and Login demo - October 28, 2026
+
+This section supersedes older statements below that Login never opens Chat Home
+or that the greeting contains a fixed sample name. Normal authentication remains
+disconnected. The eventual production destination requires backend-confirmed Login;
+no production authentication route, persistent session, credential storage or API
+was added here.
+
+ChatHomePreviewScreen.tsx now contains separately guarded standalone/demo wrappers.
+The shared presentation is components/ChatHomeContent.tsx. Its optional
+`authenticatedDisplayName` is reserved for a future backend-authenticated adapter.
+Without a nonblank trusted name, both visual/accessibility greeting text is "Hello".
+A supplied name is trimmed and displayed as text, with wrapping. Current wrappers
+supply no name; no identifier/email/registration-derived identity is passed.
+Original assets, crop, styles, disabled actions and local-draft handling remain.
+
+Connected mode requires both __DEV__ and exact EXPO_PUBLIC_CONNECTED_UI_DEMO=1.
+Local required identifier/password checks run first, then both native inputs and
+state, password visibility, errors and keyboard focus are cleared before navigating.
+No credentials are passed to App or Chat Home. Submission/unmount latches plus
+Login-visit guards reject repeats and callbacks from earlier Login/Chat visits.
+Sign up, Forgot Password, explicit Back and unmount preserve credential cleanup.
+
+Login notice in demo: "UI demo only. Credentials are not verified; valid fields open
+Chat Home." Chat Home notice: "UI demo - Credentials were not verified. AI and actions
+are disconnected." (The UI uses a middle dot separator.) Normal Login retains its
+original disconnected notice and does not navigate, even with flag 1 in production.
+
+Back: demo Chat Home dismisses its keyboard first; next Back clears the draft and
+returns to fresh Login. Login keeps its original Welcome/onboarding origin.
+Standalone Chat Home still returns to Welcome. Registration/Account Created and
+NIC recovery/Check Email flows are preserved. No visible Exit button was added.
+
+### Android top status bar - pending
+
+The phone still shows a black top strip without readable status icons. The cause
+is unresolved: actual native visibility, appearance, safe-area insets and window
+measurements were not obtained. ADB and the Wi-Fi inspector had no connected phone.
+The experimental SystemBars helper/backing, explicit-visibility policy, plugin
+entry and investigation-only checker/instructions have been removed. Login and
+Chat Home again use their previous expo-status-bar dark-icon declaration. Existing
+safe-area owners, layout and keyboard handling are unchanged. No fix is claimed;
+further investigation is deferred. The active development server is preserved.
+
+### Navigation checks on a phone
+
+Use the active demo server, or launch a separate available port with
+`npm.cmd run demo:connected-ui -- --port 8097`. With dummy inputs, blank fields
+must stay on Login; nonblank local fields open Chat Home with Hello and the
+unverified-credentials notice. Keyboard Back dismisses the keyboard; another Back
+returns to cleared Login, whose Back retains its original Welcome/onboarding origin.
+The standalone `npm.cmd run preview:chat-home:dev` still exits to Welcome. No visible
+Exit button is added. Native status-bar remediation is outside this deferred work.
+
+### Checks actually run
+
+TypeScript, Expo dependency compatibility, the Chat Home checker and all seven
+previous regression suites passed for the greeting/Login demo. Coverage includes trusted
+name fallback, both direct mount guards, required fields, cleanup on all exits,
+repeat/stale submit and stale Chat exit, all six Login origins, Chat Back, preview
+precedence and preserved safe-area/layout behavior.
+Android/Hermes production exports were built with every flag enabled and disabled;
+all six production-exclusion suites passed against both outputs. Checks reject demo
+routes/notices in production and exclude Chat Home assets/font. The two exports have
+the same Metro source-bundle hash; Hermes embeds different temporary compilation
+paths, so the final .hbc files are not byte-identical.
+
+Both actual launch commands above started and returned Android development bundles
+containing shared Chat Home and the unverified-credentials notice, with
+no hardcoded sample greeting. Verification servers were stopped afterward.
+Optional historical source audits now exempt the specifically approved LoginScreen.tsx
+changes, which have dedicated behavior checks. Other comparisons
+remain active; cached snapshot bytes were not rewritten.
+
+Repeat: `node scripts/check-chat-home-preview.cjs`,
+`node scripts/check-connected-ui-demo.cjs`, the existing other checker commands,
+and their --export checks against dist/login-chat-production-on / -off.
+
+
+## GA-22 Chat Home landing preview - October 28, 2026
+
+Standalone implementation of Figma frame 77:4 only. This is the greeting/suggestions
+landing screen, not an active conversation. Login and all existing screens and
+connected registration/NIC recovery behavior are unchanged.
+
+Launch from app/mobile in Windows PowerShell:
+
+```powershell
+npm.cmd run preview:chat-home:dev
+# Optional available port:
+npm.cmd run preview:chat-home:dev -- --port 8096
+```
+
+The launcher sets EXPO_PUBLIC_CHAT_HOME_PREVIEW=1 only in its child environment,
+disables the four existing standalone flags and connected-demo flag, and writes
+no environment file. App and direct screen entry require __DEV__ and exact flag 1.
+Existing standalone previews and the connected UI demo retain priority if flags
+are manually combined. Chat Home is not reachable from Login. The screen, original
+avatar/icons and Fraunces font are excluded from production even with flags set.
+
+Visible notice: "Development preview · Sample content. Authentication and AI are
+disconnected; actions are unavailable." Rathishan is a fixed sample name.
+Local draft typing works; nothing is sent, stored, authenticated or generated.
+Menu, notifications, all three suggestions, attachment, microphone, Send, and all
+four bottom tabs are accessibly disabled and have no press handlers. Home remains
+visually selected. There is no visible Exit preview button. Android Back dismisses
+the keyboard first; the next Back clears the draft and returns to Welcome.
+Unmount also clears the native input. No backend, AI API, microphone or file picker
+is called; no session, token, draft persistence, dependency or EAS configuration.
+
+The header, notice, greeting, suggestions, composer and bottom navigation share
+one naturally overflowing ScrollView. Flex growth centers the landing content and
+places composer/navigation at the bottom when content fits. Short windows and
+large text can scroll the whole content, keeping input/actions reachable without
+clipping text. Dedicated safe-area padding owns each edge once, with a separate
+inner measured viewport for keyboard overlap. Resized keyboards add zero extra
+overlap; overlay keyboards add only the measured covered area and conditionally
+scroll the focused composer. No automatic keyboard inset compensation is layered
+on top. All controls have at least 48dp targets; navigation labels are 12px instead
+of Figma's 9px. Text scaling/wrapping remains enabled. Wide content is bounded at
+480dp. The original avatar crop and explicit image dimensions are documented in
+[asset provenance](assets/figma/chat-home/README.md); assets and font are local.
+
+Files: ChatHomePreviewScreen.tsx; guarded entry in App.tsx; one package.json launch
+script; scripts/preview-chat-home.cjs, check-chat-home-preview.cjs and
+rasterize-chat-home-icons.ps1; assets/figma/chat-home and this documentation.
+AGENTS.md's local-only context now names GA-22 and retains every safeguard; its
+existing .git/info/exclude entry remains, and the file is not tracked.
+
+Validation performed:
+
+```powershell
+npm.cmd run typecheck
+npm.cmd run check:expo
+node scripts/check-chat-home-preview.cjs
+# Existing seven scripts/check-*.cjs suites also pass.
+# After generating the Android export with every preview/demo flag set to 1:
+node scripts/check-chat-home-preview.cjs --export dist/chat-home-production
+# Existing five export-aware checkers also inspect that same fresh output.
+```
+
+TypeScript, Expo dependency compatibility, the new checker and all seven existing
+regression suites passed. Production Android/Hermes export and all six exclusion
+checkers passed with all flags enabled. New checks cover eight mode/flag cases,
+standalone/connected-demo precedence, local draft typing, keyboard-first Back,
+exit/unmount cleanup, repeated Back, loading/error exits, twelve disabled controls,
+asset hashes/geometry and launcher arguments/environment isolation. Synthetic
+layout/keyboard checks cover 320x568, 360x640, 360x800, 412x915, 600x960 and the
+400x772 reference at font scales 1, 2 and 3.
+
+The actual launch command was run on port 8096. Metro reported running and its
+Android development bundle returned successfully with ChatHomePreviewScreen,
+Fraunces_700Bold and the disconnected notice present. That verification server
+was stopped afterward. Existing dependencies were checked, not installed.
+
+Optional `node scripts/check-chat-home-preview.cjs --visual` generates local HTML
+approximations from the actual component tree under .cache/chat-home-review.
+Browser renders inspected at 400x772, 320x568, 600x960 and enlarged text verify
+original asset placement/crop, readable wrapping and accessible overflow direction.
+These renders translate mocked React Native primitives to HTML: they are not native
+Android screenshots or evidence of TalkBack/IME correctness. Physical-device and
+emulator testing were not performed. Remaining checks: Expo Go on a physical Android
+phone, TalkBack labels/disabled states, font metrics, safe areas, native image crop,
+keyboard resize/overlay, Back/focus behavior, scroll reachability and reference
+comparison at default/enlarged text. No APK was installed.
+
+
 ## Connected development-only UI demo - October 27, 2026
 
 From app/mobile in Windows PowerShell, launch the connected flow with:

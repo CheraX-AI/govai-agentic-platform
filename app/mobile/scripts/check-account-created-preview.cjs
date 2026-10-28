@@ -15,6 +15,7 @@ const flat = style => Object.assign({},...[style].flat(Infinity).filter(Boolean)
 function nodes(tree,type){if(!tree||typeof tree!=='object')return[];return[tree,...[tree.props?.children].flat(Infinity).flatMap(n=>nodes(n))].filter(n=>!type||n.type===type);}
 function runtime(){let index=0,writes=0;const slots=[],pending=[],cleanups=[];return{
  react:{useState(initial){const i=index++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],v=>{const n=typeof v==='function'?v(slots[i]):v;if(!Object.is(n,slots[i])){slots[i]=n;writes++;}}];},
+ useRef(initial){const i=index++;return slots[i]??(slots[i]={current:initial});},
  useEffect(fn,deps){const i=index++,old=slots[i];if(!old||deps.some((v,j)=>v!==old[j])){slots[i]=deps;pending.push(()=>{cleanups[i]?.();cleanups[i]=fn();});}}},
  render(fn){index=0;const tree=fn();pending.splice(0).forEach(f=>f());return tree;},unmount(){cleanups.forEach(f=>f?.());},get writes(){return writes;},
 };}

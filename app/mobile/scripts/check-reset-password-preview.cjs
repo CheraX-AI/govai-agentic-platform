@@ -134,10 +134,11 @@ if (process.argv.includes('--export')) {
   }
   console.log('PASS production artifact inspection:', exportRoot);
 }
+// Approved Login changes are behavior-tested separately.
 // Optional task-time snapshot; normal checks must also work on a fresh checkout.
 if (fs.existsSync(path.join(root, '.cache/reset-preview-before.json'))) {
   const baseline = JSON.parse(read('.cache/reset-preview-before.json'));
-  for (const [file, hash] of Object.entries(baseline)) if (!['App.tsx','package.json'].includes(file)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex'), hash, 'existing source preserved: ' + file);
+  for (const [file, hash] of Object.entries(baseline)) if (!['App.tsx','package.json','LoginScreen.tsx'].includes(file)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex'), hash, 'existing source preserved: ' + file);
   console.log('PASS optional local historical source audit: reset-preview-before.json');
 } else {
   console.log('INFO optional local historical audit unavailable: reset-preview-before.json is absent. Required behavior and requested export checks still run.');

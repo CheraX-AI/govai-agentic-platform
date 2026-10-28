@@ -91,9 +91,10 @@ if(process.argv.includes('--export')) {
   console.log('PASS production module/copy/shield exclusion:',dir);
 }
 const snapshot=path.join(root,'.cache/password-updated-before.json');
+// Approved Login changes are behavior-tested separately.
 // Optional task-time audit evidence, not a required test fixture.
 if(fs.existsSync(snapshot)) {
-  for(const [f,h]of Object.entries(JSON.parse(fs.readFileSync(snapshot,'utf8'))))if(!['App.tsx','package.json'].includes(f))assert.equal(hash(f),h,'existing source unchanged: '+f);
+  for(const [f,h]of Object.entries(JSON.parse(fs.readFileSync(snapshot,'utf8'))))if(!['App.tsx','package.json','LoginScreen.tsx'].includes(f))assert.equal(hash(f),h,'existing source unchanged: '+f);
   console.log('PASS optional local historical source audit: password-updated-before.json');
 } else {
   console.log('INFO optional local historical audit unavailable: password-updated-before.json is absent. Required behavior and requested export checks still run.');
