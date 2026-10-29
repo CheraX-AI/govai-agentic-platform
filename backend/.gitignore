@@ -6,3 +6,20 @@ bin/
 *.test
 coverage.out
 *.log
+# Local authentication test state and generated reports (never source/tests/docs)
+/services/auth-service/.local/
+/services/auth-service/.cache/
+/services/auth-service/test-artifacts/
+/services/auth-service/permissionlab-state/
+govai-ga48-*/
+
+# Local TLS material and private keys
+/dev/keycloak/certs/
+/dev/keycloak/tls/
+*.key
+*.p12
+*.pfx
+
+# Generated Go coverage/profiling output
+coverage-*.out
+*.prof

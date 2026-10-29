@@ -1,7 +1,75 @@
 # Go/Gin foundation
 
-This service currently provides health checks only. Authentication, Keycloak,
-RabbitMQ, PostgreSQL and AI chat are not implemented.
+The opt-in [combined integration test](docs/GA-48-combined-integration.md) now
+connects registration orchestration to the real group-aware Keycloak adapter in a
+fresh HTTPS environment. It uses explicitly synthetic test-only stores; it does
+not prove database durability, distributed concurrency or restart recovery.
+
+The registration Admin adapter now requires a
+[server-configured group path](docs/GA-48-group-adapter-config.md), using the exact
+group-path array proven by the isolated Keycloak 26.8.1 tests. Missing/invalid
+configuration fails before network access. No runtime loading or route is wired;
+accepted group-wide authority and historical FAIL_UNSAFE verdicts remain unchanged.
+
+The isolated [registration orchestration layer](docs/GA-48-registration-orchestration.md)
+now uses injected profile/journal ports and the existing validation/Admin boundary.
+Synthetic tests cover ordered commits, recovery, duplicates, concurrency and
+credential exclusion. No persistence implementation or public route is wired;
+database atomicity and cross-process concurrency remain unproven.
+
+GA-48 prototype update: the user accepted the service account's group-wide
+administrative authority. The [isolated registration lifecycle report](docs/GA-48-registration-lifecycle.md)
+records password-policy, duplicate, verification-link and TLS results. Historical
+permission-isolation FAIL_UNSAFE tests remain intact; no public route is enabled.
+Persistence/profile ownership guarantees and real client integration remain pending.
+
+The HTTP service currently provides health checks only. A separate read-only
+OIDC discovery/JWKS connectivity checker exists; it does not authenticate users.
+Go registration/login APIs, JWT authorization, RabbitMQ, PostgreSQL and AI chat
+are not implemented. Keycloak-hosted registration/login configuration and
+user-confirmed GA-48 manual results are recorded in the
+[Keycloak development guide](../../dev/keycloak/README.md#ga-48-keycloak-hosted-registration-and-login).
+Those results do not establish independent server-side validation tests or real
+web/mobile integration. The service currently does not accept passwords.
+
+GA-48 now selects custom registration through Go and the Keycloak Admin API,
+and password login through Go to Keycloak's token endpoint (Direct Grant/ROPC).
+This approved prototype decision conflicts with RFC 9700; it is not PKCE and HTTPS
+does not remove its limitations. Both network legs require validated HTTPS outside
+explicitly isolated local synthetic tests. No endpoints or settings are enabled.
+Web BFF and mobile bearer-token custody are separate proposals; refresh/logout
+remain deferred. See the
+[draft registration plan and API contract](docs/GA-48-registration-plan.md) for
+ownership, validation, partial-failure recovery, open decisions and implementation
+steps. Strict request parsing and field validation (Unicode names, NICs,
+international phones, new-account emails and unchanged transient passwords), plus
+atomic number-reservation contracts, have synthetic tests. Uniqueness is per normalized NIC number, not per person; NIC data
+is self-declared and unverified. No trusted old/new mapping is required. No
+registration endpoint or real persistence adapter is implemented; database-backed
+uniqueness remains pending and real registration must not use volatile storage. In that design Go handles the
+password transiently; Keycloak alone stores, hashes and verifies it.
+
+The isolated [registration Admin API adapter](docs/GA-48-admin-adapter.md) now
+supports disabled-user creation, operation-marker reconciliation, owned reads,
+owned enabling and verification-email requests. It injects administrative config
+and a verified-TLS HTTP client, caches service-account tokens in memory and returns
+safe typed errors. It is not wired to the application or environment. Synthetic
+tests do not establish live Keycloak permissions, policy or SMTP behavior.
+
+The opt-in [GA-48 permission experiment](docs/GA-48-permission-experiment.md)
+has now run against a separate Keycloak 26.8.1 instance. Both creation-capable
+permission models allowed unrelated/admin account mutation; the owned-user scope
+blocked creation. Public registration remains blocked on a narrower design.
+The documented command creates only isolated test resources and never runs as part
+of the normal API or unit test suite. Those baseline checks did not test SMTP or
+the full lifecycle.
+
+The [group-scoped follow-up](docs/GA-48-group-permission-experiment.md) demonstrates
+creation/read/reconciliation/enable and delivery into a separate synthetic Mailpit
+inbox with query-users plus three scopes on a fixed registration group. It still
+permits changing other registration operations' users and passwords within that
+group. This is group administration, not operation ownership; the release gate
+remains unsatisfied. Verification completion and full lifecycle remain pending.
 
 ## Files and their purpose
 

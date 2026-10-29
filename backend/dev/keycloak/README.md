@@ -1,5 +1,15 @@
 # Current local Keycloak development environment
 
+Planning update, 2026-10-29: team/mentor approved custom registration through the
+Go Admin API adapter and password login through Go to Keycloak's token endpoint.
+Direct Grant/ROPC conflicts with RFC 9700 and is not PKCE. See the
+[current architecture/API plan](../../services/auth-service/docs/GA-48-registration-plan.md)
+for limitations, separate credentials, validated HTTPS on both legs, custody
+proposals and release gates. This guide's hosted/PKCE instructions and results
+describe the existing historical setup, not permission to enable Direct Grants.
+The HTTP setup below is for explicitly isolated local synthetic tests only;
+never submit real credentials. No runtime settings changed in this planning step.
+
 This environment uses synthetic test identities only. Keycloak runs at
 http://localhost:8180; the realm identifier is **GovAI**, case-sensitive. The Admin
 Console is http://localhost:8180/admin/ and the built-in account console is
@@ -14,8 +24,9 @@ http://localhost:8180/realms/GovAI/account/ . Do not substitute lowercase `govai
 | Published Keycloak port | 127.0.0.1:8180 -> container 8080 |
 | Persistence | Named volume govai-keycloak-dev_keycloak_dev_data at /opt/keycloak/data |
 | Realm | GovAI |
-| Citizen authorization role | Realm role citizen; manually assigned to test users |
-| Automatic default citizen role | Not configured |
+| Citizen authorization role | Realm role citizen |
+| Automatic default citizen role | citizen included in default realm roles; operator-confirmed |
+| User registration | Enabled; operator-confirmed |
 | Minimum password length | 8; replaces the previous value of 15 |
 | Access token lifespan | 5 minutes |
 | SSO session idle / maximum | 30 minutes / 10 hours |
@@ -97,8 +108,9 @@ Keycloak; if it does not, investigate before testing mail delivery.
 Open the Admin Console and select GovAI. Reuse the existing realm and users;
 do not recreate or overwrite them. Verify the table above under Realm settings
 (Login, Email, Tokens and Sessions), Authentication password policies, and each
-test user's Role mapping. Assign the citizen realm role manually as needed;
-never assign administrative roles. Do not mark email verified manually to bypass
+test user's Role mapping. New registrations inherit citizen automatically, as
+confirmed by the operator; verify inheritance without manually granting the role.
+Never assign administrative roles. Do not mark email verified manually to bypass
 the verification flow. SSL/STARTTLS/authentication being disabled applies only
 to this local Mailpit setup, not deployed email services.
 
@@ -130,7 +142,8 @@ the Go service's environment file.
 ## Synthetic-user login and email verification
 
 1. Use existing synthetic test users, or create a separate synthetic user with a
-   unique local test password satisfying current policy. Assign citizen manually.
+   unique local test password satisfying current policy. For a new registration,
+   verify automatic citizen inheritance without manually assigning it.
    Do not add real email addresses, NICs, addresses or other personal information.
 2. In a private browser window, open the GovAI account console. Sign in using
    the synthetic account. An unverified user must encounter email verification.
@@ -148,6 +161,65 @@ access grants to obtain tokens for a test. This uses Keycloak's built-in account
 client; application/test-client coverage remains future work. Invalid/expired
 verification links still need separate tests. Password boundary results are
 recorded below.
+
+## GA-48: Keycloak-hosted registration and login
+
+Historical hosted-flow evidence: GA-48 now selects custom registration through
+React/mobile -> Go/Gin -> Keycloak Admin API, with planned password login through
+Go to the token endpoint under the exception documented above.
+See the [draft implementation plan and API contract](../../services/auth-service/docs/GA-48-registration-plan.md).
+The selected path is not implemented; the results below do not test it.
+
+The operator confirmed the following local configuration and manual results on
+2026-10-27. These are user-reported browser checks, not independently rerun tests
+or proof of server-side validation when UI checks are bypassed.
+
+| Configuration or manual check | User-confirmed result |
+| --- | --- |
+| User registration | Enabled |
+| Verify email | Enabled |
+| Default realm roles | Include citizen |
+| Hosted registration | Completed through email verification followed by password setup |
+| New user's role mapping | Inherited citizen automatically |
+| Fresh login | Succeeded |
+| Wrong password | Rejected |
+| Duplicate username | Rejected |
+| Duplicate email | Rejected |
+| Invalid email | Rejected in registration UI |
+| Missing username | Rejected in registration UI |
+
+Keycloak owns the hosted registration/login screens, credentials and identity
+sessions. Go has no registration or login API and does not receive or verify
+passwords. The observed verification-before-password sequence is recorded as
+tested; the exact authentication-flow bindings and execution settings have not
+been independently inspected or exported. Do not infer them from these results.
+No runtime configuration was changed during this documentation update.
+
+### Earlier hosted-flow follow-up checklist
+
+The custom-registration plan linked above supersedes the earlier architecture
+proposal. This checklist preserves outstanding evidence gaps from hosted tests.
+
+- Confirm and document the agreed minimal required registration fields and exact
+  hosted-flow bindings/settings so the observed sequence can be reproduced safely.
+  Duplicate username/email rejection is observed; account-enumeration behavior,
+  normalization and concurrent duplicate handling have not been independently tested.
+- Record independent server-side validation tests, including bypassing browser
+  validation for invalid email and missing username. UI rejection alone does not
+  establish those results. Test invalid/expired verification links separately.
+- Configure and verify intended web/mobile public clients, exact callback/origin
+  allowlists, Authorization Code with PKCE S256, disabled direct-access/implicit
+  grants and the intended Go API audience. Actual client settings remain unverified.
+- Publish the client integration contract and coordinate tests with the real web
+  and mobile clients. Hosted local checks do not establish either integration.
+- Add repeatable isolated Keycloak lifecycle smoke tests with prerequisites and
+  redacted evidence; existing Go tests cover foundation/connectivity only.
+
+JWT middleware, refresh/logout, PostgreSQL and protected chat remain separate
+work; none is implemented or verified by this GA-48 documentation update. A Go
+registration endpoint and password-login endpoint are now proposed in the plan;
+neither exists. Existing hosted-login results do not verify password login via Go.
+GA-48 is not marked complete by these manual results.
 
 ## Persistence, logs, shutdown and resume
 
@@ -212,8 +284,8 @@ Remaining work:
 
 - Configure application/test clients, separate web/mobile public clients, exact
   callbacks, PKCE S256 and intended Go API audience. No client secrets in public clients.
-- Configure automatic default citizen assignment deliberately; manual assignment
-  is the current behavior.
+- Verify default citizen assignment in repeatable lifecycle tests; automatic
+  inheritance is now operator-confirmed as recorded under GA-48.
 - Test intended-client token issuance, audience, expiry, refresh rotation/rejection
   and OIDC logout/session termination. Do not promise immediate invalidation of
   signed access tokens validated offline.
