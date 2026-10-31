@@ -71,7 +71,9 @@ Login's Direct Grant conflict with RFC 9700 remains documented in the architectu
 plan. HTTPS does not remove that protocol limitation. The registration permission
 experiments do not resolve it.
 
-JWT/RBAC middleware and protected chat belong to subtask 3. Refresh/logout and
+JWT/RBAC middleware and protected chat belong to subtask 3; the reusable middleware
+and guarded placeholder now have [separate implementation/evidence](authorization.md).
+The actual AI/RAG functionality remains unimplemented. Refresh/logout and
 session lifecycle belong to subtask 4. Password recovery/theme work stays deferred.
 
 ## Git hygiene

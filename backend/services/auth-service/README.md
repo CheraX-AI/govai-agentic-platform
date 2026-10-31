@@ -1,5 +1,10 @@
 # Go/Gin foundation
 
+[JWT/RBAC authorization](docs/authorization.md) now uses the reusable
+[shared Go module](../../pkg/authn/README.md) for protected `/api/v1/me` and a
+guarded `/api/v1/ai/chat` placeholder. Chat returns 501 after successful
+authorization; Python/RAG integration is still pending.
+
 The [mobile/Postman login API](docs/GA-48-login.md) now composes a separate
 non-admin Keycloak client, strict access-token validation and owned PostgreSQL
 profile checks. It returns only an access token; browser sessions and refresh/logout

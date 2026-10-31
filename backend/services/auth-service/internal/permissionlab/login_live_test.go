@@ -43,14 +43,14 @@ func TestLoginLive(t *testing.T) {
 		t.Fatal("LOGIN_LIVE FAIL_OR_BLOCKED")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(logs.Bytes()))
-	count := 0
+	counts := map[string]int{}
 	for {
 		var entry map[string]any
 		e := decoder.Decode(&entry)
 		if e == io.EOF {
 			break
 		}
-		if e != nil || entry["msg"] != "http request" || entry["route"] != "/api/v1/auth/login" || len(entry) != 8 {
+		if e != nil || entry["msg"] != "http request" || len(entry) != 8 {
 			t.Fatal("LOGIN_LOGS FAIL")
 		}
 		for k := range entry {
@@ -60,9 +60,10 @@ func TestLoginLive(t *testing.T) {
 				t.Fatal("LOGIN_LOG_SCHEMA FAIL")
 			}
 		}
-		count++
+		route, _ := entry["route"].(string)
+		counts[route]++
 	}
-	if count != 6 {
+	if len(counts) != 3 || counts["/api/v1/auth/login"] != 6 || counts["/api/v1/me"] != 4 || counts["/api/v1/ai/chat"] != 2 {
 		t.Fatal("LOGIN_LOG_COUNT FAIL")
 	}
 	fmt.Println("LOGIN_SAFE_LOGS PASS")
@@ -103,10 +104,15 @@ func (l *lab) loginScenario(ctx context.Context, caFile string) error {
 		return errSafe
 	}
 	defer closeLogin()
+	protected, closeAuthorization, e := application.Authorization(config.Authorization{Enabled: true, Issuer: issuer, Audience: "govai-api", Clients: []string{"lab-login-mobile"}, CAFile: caFile}, d.store)
+	if e != nil {
+		return errSafe
+	}
+	defer closeAuthorization()
 	previous := gin.Mode()
 	gin.SetMode(gin.ReleaseMode)
 	defer gin.SetMode(previous)
-	server := httptest.NewTLSServer(handler.NewRouterWithAuth(nil, h))
+	server := httptest.NewTLSServer(handler.NewRouterWithProtected(nil, h, protected))
 	defer server.Close()
 	httpClient := server.Client()
 	httpClient.Timeout = 10 * time.Second
@@ -166,6 +172,53 @@ func (l *lab) loginScenario(ctx context.Context, caFile string) error {
 		return errSafe
 	}
 	l.lifeCheck("LOGIN_UPSTREAM_REFRESH_ID_SUPPRESSED", rawStatus == 200 && len(envelope["refresh_token"]) == 0 && len(envelope["id_token"]) == 0)
+	protectedRequest := func(method, path, token string) (int, []byte) {
+		req, e := http.NewRequestWithContext(ctx, method, server.URL+path, nil)
+		if e != nil {
+			panic(errSafe)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		r, e := httpClient.Do(req)
+		if e != nil {
+			panic(errSafe)
+		}
+		defer r.Body.Close()
+		b, e := io.ReadAll(io.LimitReader(r.Body, 16385))
+		if e != nil || len(b) > 16384 || r.Header.Get("Cache-Control") != "no-store" {
+			panic(errSafe)
+		}
+		return r.StatusCode, b
+	}
+	meStatus, meBody := protectedRequest("GET", "/api/v1/me", result.Access)
+	var me struct {
+		Subject  string `json:"subject"`
+		Verified bool   `json:"email_verified"`
+	}
+	_ = json.Unmarshal(meBody, &me)
+	l.lifeCheck("AUTH_VALID_TOKEN_OWN_PROFILE", meStatus == 200 && me.Subject == op.Subject && me.Verified)
+	noToken, _ := protectedRequest("GET", "/api/v1/me", "")
+	badToken, _ := protectedRequest("GET", "/api/v1/me", "invalid-token")
+	l.lifeCheck("AUTH_MISSING_INVALID_401", noToken == 401 && badToken == 401)
+	chatMissing, _ := protectedRequest("POST", "/api/v1/ai/chat", "")
+	chatValid, chatBody := protectedRequest("POST", "/api/v1/ai/chat", result.Access)
+	l.lifeCheck("AUTH_CHAT_GUARDED_PLACEHOLDER", chatMissing == 401 && chatValid == 501 && strings.Contains(string(chatBody), "chat_not_implemented"))
+	// Remove/restore only the disposable test user's default role membership to
+	// obtain a real signed non-citizen token. No existing GovAI role/user changes.
+	realmConfig := decode[object](l.must(ctx, "GET", p, nil, 200))
+	defaultRole := realmConfig["defaultRole"].(map[string]any)
+	l.must(ctx, "DELETE", p+"/users/"+op.Subject+"/role-mappings/realm", []object{defaultRole}, 204)
+	roleStatus, roleBody, e := l.request(ctx, "", "POST", "/realms/"+l.realm+"/protocol/openid-connect/token", url.Values{"grant_type": {"password"}, "client_id": {"lab-login-mobile"}, "client_secret": {secret}, "username": {email}, "password": {password}, "scope": {"email"}})
+	var noRole struct {
+		Access string `json:"access_token"`
+	}
+	if e != nil || json.Unmarshal(roleBody, &noRole) != nil || roleStatus != 200 {
+		return errSafe
+	}
+	forbidden, _ := protectedRequest("GET", "/api/v1/me", noRole.Access)
+	l.lifeCheck("AUTH_SIGNED_WRONG_ROLE_403", forbidden == 403)
+	l.must(ctx, "POST", p+"/users/"+op.Subject+"/role-mappings/realm", []object{defaultRole}, 204)
 	l.must(ctx, "PUT", p+"/users/"+op.Subject, object{"requiredActions": []string{"UPDATE_PASSWORD"}}, 204)
 	actions, actionsBody := requestLogin(email, password)
 	l.lifeCheck("LOGIN_PENDING_ACTIONS_DENIED", actions == 401 && bytes.Equal(actionsBody, unverifiedBody))

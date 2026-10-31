@@ -4,6 +4,9 @@ Express has been retired. The Go/Gin foundation lives in services/auth-service.
 See [the service guide](services/auth-service/README.md) for setup and tests.
 Other service directories remain placeholders.
 
+Reusable JWT/Gin authorization is in [pkg/authn](pkg/authn/README.md). Run its tests
+separately from the auth-service module; the service uses a local module replace.
+
 Authentication PostgreSQL setup: [local database guide](dev/auth-postgres/README.md).
 It uses an isolated database, encrypted profiles, versioned migrations and a
 restricted runtime user. [Design and verification](services/auth-service/docs/GA-48-postgresql.md).

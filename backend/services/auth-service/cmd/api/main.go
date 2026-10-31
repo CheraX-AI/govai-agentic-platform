@@ -27,6 +27,9 @@ func main() {
 }
 
 func run() error {
+	if err := config.LoadLocalEnv(".env.authorization"); err != nil {
+		return err
+	}
 	if err := config.LoadLocalEnv(".env.login"); err != nil {
 		return err
 	}
@@ -58,7 +61,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	tlsEnabled := regCfg.Enabled || loginCfg.Enabled
+	authorizationCfg, err := config.LoadAuthorization()
+	if err != nil {
+		return err
+	}
+	tlsEnabled := regCfg.Enabled || loginCfg.Enabled || authorizationCfg.Enabled
 	var apiTLS *tls.Config
 	if tlsEnabled {
 		cert, err := tls.LoadX509KeyPair(os.Getenv("API_TLS_CERT_FILE"), os.Getenv("API_TLS_KEY_FILE"))
@@ -104,7 +111,17 @@ func run() error {
 		defer closeLogin()
 		slog.Info("mobile login route enabled with HTTPS")
 	}
-	router := handler.NewRouterWithAuth(registrationHandler, loginHandler, cfg.CORSOrigins...)
+	var protected *handler.Protected
+	if authorizationCfg.Enabled {
+		var closeAuthorization func()
+		protected, closeAuthorization, err = application.Authorization(authorizationCfg, store)
+		if err != nil {
+			return err
+		}
+		defer closeAuthorization()
+		slog.Info("JWT authorization routes enabled with HTTPS")
+	}
+	router := handler.NewRouterWithProtected(registrationHandler, loginHandler, protected, cfg.CORSOrigins...)
 	if pool != nil {
 		router.GET("/api/ready", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")

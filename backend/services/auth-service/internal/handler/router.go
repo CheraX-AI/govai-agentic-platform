@@ -34,10 +34,18 @@ func NewRouterWithAuth(registration *RegistrationHandler, login *LoginHandler, o
 }
 
 func authRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler) *gin.Engine {
+	return configuredRouter(logger, origins, h, login, nil)
+}
+
+func NewRouterWithProtected(registration *RegistrationHandler, login *LoginHandler, protected *Protected, origins ...string) *gin.Engine {
+	return configuredRouter(slog.Default(), origins, registration, login, protected)
+}
+
+func configuredRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler, protected *Protected) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(func(c *gin.Context) {
-		if login != nil && c.Request.URL.Path == "/api/v1/auth/login" {
+		if (login != nil && c.Request.URL.Path == "/api/v1/auth/login") || (protected != nil && (c.Request.URL.Path == "/api/v1/me" || c.Request.URL.Path == "/api/v1/ai/chat")) {
 			c.Header("Cache-Control", "no-store")
 			c.Header("Pragma", "no-cache")
 		}
@@ -90,7 +98,8 @@ func authRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, l
 			method := c.GetHeader("Access-Control-Request-Method")
 			allowedMethod := "GET"
 			registrationPath := h != nil && c.Request.URL.Path == "/api/v1/registrations"
-			if registrationPath {
+			chatPath := protected != nil && c.Request.URL.Path == "/api/v1/ai/chat"
+			if registrationPath || chatPath {
 				allowedMethod = "POST"
 			}
 			if method != allowedMethod {
@@ -127,6 +136,9 @@ func authRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, l
 	health := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
 	router.GET("/health", health)
 	router.GET("/api/health", health)
+	if protected != nil {
+		protected.attach(router)
+	}
 	if login != nil {
 		router.POST("/api/v1/auth/login", login.Handle)
 	}
