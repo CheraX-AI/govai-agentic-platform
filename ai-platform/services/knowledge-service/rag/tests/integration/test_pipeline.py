@@ -5,8 +5,10 @@ import json
 
 from pypdf import PdfWriter
 
+from app.embeddings import load_embeddings
 from app.processing.pdf_extractor import DocumentSource, DocumentType
 from app.processing.pipeline import process_document, process_documents
+from tests.helpers import TOO_LONG_TEXT, make_embedder, make_invalid_key_embedder
 
 
 SERVICE_SOURCE = DocumentSource(
@@ -219,3 +221,104 @@ def test_batch_continues_after_failed_documents(tmp_path):
         "notes.pdf": "InvalidPDFError",
         "locked.pdf": "EncryptedPDFError",
     }
+
+
+# Embedding (real NVIDIA API, settings from rag/.env)
+
+def test_pipeline_embeds_every_chunk(tmp_path):
+
+    # Process a PDF and embed its chunks with NVIDIA
+    pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES, PAGE_TWO_LINES])
+
+    result = process_document(
+        pdf_path,
+        SERVICE_SOURCE,
+        tmp_path / "output",
+        chunk_size=300,
+        chunk_overlap=50,
+        embedder=make_embedder(batch_size=3),
+    )
+
+    assert result.embedded_chunk_count == result.chunk_count
+    assert result.failed_chunk_ids == []
+    assert result.embeddings_path == tmp_path / "output" / "embeddings" / f"{result.document_id}.embeddings.json"
+
+    # Each embedding matches a saved chunk and keeps its metadata
+    chunks = read_json(result.chunks_path)
+    embeddings = load_embeddings(result.embeddings_path)
+
+    assert [record.chunk_id for record in embeddings.records] == [chunk["chunk_id"] for chunk in chunks]
+    for record, chunk in zip(embeddings.records, chunks):
+        assert record.text == chunk["text"]
+        assert record.metadata == chunk["metadata"]
+        assert len(record.embedding) == embeddings.dimension
+
+
+def test_pipeline_without_embedder_writes_no_embeddings(tmp_path):
+
+    # Embedding is optional; extraction and chunking work on their own
+    pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES])
+
+    result = process_document(pdf_path, SERVICE_SOURCE, tmp_path / "output")
+
+    assert result.chunks_path is not None
+    assert result.embeddings_path is None
+    assert not (tmp_path / "output" / "embeddings").exists()
+
+
+def test_scanned_pdf_is_not_sent_for_embedding(tmp_path):
+
+    # A PDF without text has no chunks; with a key NVIDIA rejects, any call would fail
+    pdf_path = write_blank_pdf(tmp_path / "scanned.pdf")
+
+    report = process_documents(
+        [(pdf_path, DEPARTMENT_SOURCE)],
+        tmp_path / "output",
+        embedder=make_invalid_key_embedder(),
+    )
+
+    assert report.failed == []
+    assert report.processed[0].embeddings_path is None
+
+
+def test_rejected_chunks_are_reported_per_document(tmp_path):
+
+    # One page longer than NVIDIA accepts, kept as a single chunk
+    pdf_path = write_text_pdf(tmp_path / "long_guide.pdf", [[TOO_LONG_TEXT]])
+
+    report = process_documents(
+        [(pdf_path, SERVICE_SOURCE)],
+        tmp_path / "output",
+        chunk_size=100_000,
+        chunk_overlap=0,
+        embedder=make_embedder(),
+    )
+
+    # The PDF is still processed and chunked; only its embeddings are missing
+    document = report.processed[0]
+
+    assert report.failed == []
+    assert document.chunks_path.exists()
+    assert document.chunk_count == 1
+    assert len(document.failed_chunk_ids) == 1
+    assert report.failed_chunk_count == 1
+
+
+def test_rejected_key_stops_embedding_but_keeps_chunking(tmp_path):
+
+    # NVIDIA rejects the key on the first PDF
+    first_pdf = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES])
+    second_pdf = write_text_pdf(tmp_path / "tin_faq.pdf", [PAGE_TWO_LINES])
+
+    report = process_documents(
+        [(first_pdf, SERVICE_SOURCE), (second_pdf, SERVICE_SOURCE)],
+        tmp_path / "output",
+        embedder=make_invalid_key_embedder(),
+    )
+
+    # The second PDF is chunked without being sent to NVIDIA
+    assert report.embedding_stopped is True
+    assert [failure.error_type for failure in report.failed] == ["EmbeddingAuthError"]
+    assert [document.source_file for document in report.processed] == ["tin_faq.pdf"]
+    assert report.processed[0].chunks_path.exists()
+    assert report.processed[0].embeddings_path is None
