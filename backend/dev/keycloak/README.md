@@ -1,3 +1,7 @@
+# Current local database: PostgreSQL
+
+The approved H2-to-PostgreSQL transition completed on 2026-10-31. Follow [current startup and migration evidence](../keycloak-postgres/README.md) and [HTTPS setup](HTTPS-SETUP.md). Historical H2 commands below are not the current startup procedure. Do not start H2 and PostgreSQL as competing identity stores.
+
 # Current local Keycloak development environment
 
 Current HTTPS setup: follow the [HTTPS startup and trust guide](HTTPS-SETUP.md).

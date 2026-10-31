@@ -1,0 +1,29 @@
+# Reviewed local transition only: do not apply before offline export/import.
+# Use with compose.yaml + compose.https.yaml and both private environment files.
+services:
+  keycloak:
+    command:
+      - start-dev
+      - --db=postgres
+      - --http-enabled=false
+      - --features=admin-fine-grained-authz:v2
+      - --https-certificate-file=/local-tls/keycloak-cert.pem
+      - --https-certificate-key-file=/local-tls/keycloak-key.pem
+    environment:
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/govai_keycloak
+      KC_DB_SCHEMA: keycloak
+      KC_DB_USERNAME: govai_keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Run ../keycloak-postgres/setup.ps1 first}
+    volumes:
+      - keycloak_pg_runtime_data:/opt/keycloak/data
+    networks:
+      - default
+      - keycloak_private
+networks:
+  default: {}
+  keycloak_private:
+    external: true
+    name: govai-keycloak-dbnet
+
+volumes:
+  keycloak_pg_runtime_data:

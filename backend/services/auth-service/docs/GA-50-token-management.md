@@ -527,7 +527,7 @@ See [local Postman verification](GA-50-local-postman.md) for the next manual ste
 ## Latest manual verification checkpoint
 
 The local native and browser-cookie Postman flows were completed by the user and
-confirmed by agent-owned request metadata. See [GA-50 status](GA-50-status.md) for
+confirmed by agent-owned request metadata. See [verification and remaining work](../README.md#verification-and-remaining-work) for
 observed status codes, safe queue counts and remaining real-client scope. This
 latest checkpoint supersedes earlier statements that local Postman evidence was
 pending. No passwords, access/refresh/session/CSRF values were collected.

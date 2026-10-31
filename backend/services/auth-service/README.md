@@ -1,119 +1,80 @@
-# Go/Gin foundation
+# GovAI Go/Gin authentication backend
 
-[JWT/RBAC authorization](docs/authorization.md) now uses the reusable
-[shared Go module](../../pkg/authn/README.md) for protected `/api/v1/me` and a
-guarded `/api/v1/ai/chat` placeholder. Chat returns 501 after successful
-authorization; Python/RAG integration is still pending.
+## Current implementation
 
-The [mobile/Postman login API](docs/GA-48-login.md) now composes a separate
-non-admin Keycloak client, strict access-token validation and owned PostgreSQL
-profile checks. Its default response remains access-only. [GA-50 token/session
-management](docs/GA-50-token-management.md) adds opt-in native refresh/revocation,
-encrypted browser cookie sessions, durable revocation recovery and explicit
-maintenance commands. These additions are tested in disposable environments;
-the approved local refresh/web setup is now enabled. Follow the
-[local Postman guide](docs/GA-50-local-postman.md). Local manual verification now
-passes; [GA-50 status](docs/GA-50-status.md) records the evidence and remaining
-actual client integration/review work. Private settings stay outside Git.
+The local HTTPS service provides registration, mobile/Postman login, JWT/RBAC,
+refresh/revocation and encrypted browser sessions. Features require explicit
+configuration and remain disabled by default. Keycloak owns passwords and identity;
+Go owns application profiles and session custody in a separate PostgreSQL database.
 
-[Registration runtime wiring](docs/GA-48-registration-runtime.md) is now opt-in:
-`cmd/api` composes the real dependencies and exposes the JSON POST route only
-with complete database/client settings and direct API/Keycloak HTTPS. It remains
-disabled by default. The workstation now has an explicitly enabled local HTTPS
-setup; follow [HTTPS startup and trust instructions](../../dev/keycloak/HTTPS-SETUP.md).
+- [Registration API/runtime](docs/GA-48-registration-runtime.md),
+  [HTTP contract](docs/GA-48-registration-http.md),
+  [administrative adapter](docs/GA-48-admin-adapter.md), and
+  [orchestration/persistence contract](docs/GA-48-registration-orchestration.md).
+- [Application PostgreSQL](docs/GA-48-postgresql.md) and
+  [combined database/Keycloak tests](docs/GA-48-postgresql-keycloak-integration.md).
+- [Mobile/Postman login](docs/GA-48-login.md),
+  [JWT/RBAC](docs/authorization.md), and [shared middleware](../../pkg/authn/README.md).
+- [Refresh, browser sessions and logout](docs/GA-50-token-management.md),
+  [Postman instructions](docs/GA-50-local-postman.md), and
+  [rollout configuration](docs/GA-50-local-rollout-review.md).
+- [HTTPS startup](../../dev/keycloak/HTTPS-SETUP.md),
+  [application database setup](../../dev/auth-postgres/README.md), and
+  [Keycloak PostgreSQL startup/rollback](../../dev/keycloak-postgres/README.md).
 
-The [real PostgreSQL + Keycloak integration test](docs/GA-48-postgresql-keycloak-integration.md)
-now passes with the real HTTP handler, registration orchestration, encrypted SQL
-stores, HTTPS Keycloak and Mailpit. It verifies duplicate handling and durable
-pool/service-reopen recovery. Its TLS HTTP listener is private to the test;
-`cmd/api` registration/login are disabled by default and explicitly configured in
-the local HTTPS environment.
+## Verification and remaining work
 
-Current database update: [PostgreSQL implementation](docs/GA-48-postgresql.md)
-adds encrypted profile/journal adapters, atomic NIC uniqueness, migrations and
-optional server database readiness. Follow the [local setup guide](../../dev/auth-postgres/README.md).
-The earlier component reports below describe their original evidence; real
-PostgreSQL tests and opt-in runtime registration/login now supplement them.
+As of 2026-10-31, backend unit/vet/race checks and isolated PostgreSQL/Keycloak/TLS
+integration tests passed. Registration coverage includes duplicates, atomic NIC
+claims, profile failures, reconciliation, SMTP uncertainty and pool/service reopen.
+Token/session coverage includes rotation/reuse, expiry, client isolation, encrypted
+custody, concurrent claims, CSRF, local logout and durable revocation recovery.
+These do not establish every process-kill or uncertain-commit recovery scenario.
 
-## Earlier component checkpoints (historical)
+User-confirmed local Postman results, also observed in request status metadata:
+login/refresh 200, revoke 204, revoked refresh 401; web login/session/CSRF 200,
+web refresh/logout 204 and session after logout 401. Schema readiness passed;
+the observed recovery queue had no pending/running/attention jobs. These are
+historical verification results, not a claim that services are always running.
+After the Keycloak PostgreSQL cutover, the user additionally confirmed existing
+account login returned 200 with an access token.
 
-The descriptions below retain their original checkpoint context, including
-statements that a component was not yet wired. Current behavior is described in
-the runtime/login guides above; those later implementations supersede that status.
+Remaining work:
 
-The opt-in [combined integration test](docs/GA-48-combined-integration.md) now
-connects registration orchestration to the real group-aware Keycloak adapter in a
-fresh HTTPS environment. It uses explicitly synthetic test-only stores; it does
-not prove database durability, distributed concurrency or restart recovery.
+- Review/merge and actual React/mobile registration, login, protected access,
+  refresh and logout integration. Postman does not prove browser SameSite/CORS
+  enforcement or mobile secure storage. Current web test origin is
+  `https://localhost:5001`; deployed origins must be agreed with teammates.
+- Real AI/RAG integration: protected `/api/v1/ai/chat` currently returns 501.
+  Bearer `/me` and chat are not a complete cookie-authenticated web gateway.
+- Operational reconciliation, broader crash/unknown-commit tests, deployment TLS,
+  secret/key rotation, backups and distributed abuse controls. Rate limits remain
+  process-local; maintenance commands have no scheduler/alert delivery configured.
+- Password recovery/theme work remains deferred.
 
-The registration Admin adapter now requires a
-[server-configured group path](docs/GA-48-group-adapter-config.md), using the exact
-group-path array proven by the isolated Keycloak 26.8.1 tests. Missing/invalid
-configuration fails before network access. No runtime loading or route is wired;
-accepted group-wide authority and historical FAIL_UNSAFE verdicts remain unchanged.
+## Accepted prototype limitations
 
-The isolated [registration orchestration layer](docs/GA-48-registration-orchestration.md)
-now uses injected profile/journal ports and the existing validation/Admin boundary.
-Synthetic tests cover ordered commits, recovery, duplicates, concurrency and
-credential exclusion. PostgreSQL adapters now implement these ports; no public
-registration route is wired. See the database report for real test coverage and limits.
+Custom form login uses HTTPS Go-to-Keycloak Direct Grant, with the RFC 9700
+conflict documented in the [architecture/API plan](docs/GA-48-registration-plan.md).
+HTTPS does not eliminate that protocol limitation. NICs are self-declared;
+uniqueness is per normalized number, not proof of a unique or verified citizen.
 
-GA-48 prototype update: the user accepted the service account's group-wide
-administrative authority. The [isolated registration lifecycle report](docs/GA-48-registration-lifecycle.md)
-records password-policy, duplicate, verification-link and TLS results. Historical
-permission-isolation FAIL_UNSAFE tests remain intact; no public route is enabled.
-Persistence/profile ownership guarantees and real client integration remain pending.
+The registration service account can manage other users within its registration
+group, including credentials. This is accepted trusted administrative authority
+for the prototype, not operation-level isolation. The original
+[permission experiment](docs/GA-48-permission-experiment.md) and
+[group experiment](docs/GA-48-group-permission-experiment.md) preserve the
+FAIL_UNSAFE evidence for the stricter isolation requirement. Lifecycle and combined
+harness documents retain reproduction instructions and their original test limits.
 
-The HTTP service provides liveness and optional database readiness checks. A separate read-only
-OIDC discovery/JWKS connectivity checker exists; it does not authenticate users.
-Public Go registration/login APIs, JWT authorization, RabbitMQ and AI chat
-are not enabled. Optional PostgreSQL connectivity and readiness are implemented.
-Keycloak-hosted registration/login configuration and
-user-confirmed GA-48 manual results are recorded in the
-[Keycloak development guide](../../dev/keycloak/README.md#ga-48-keycloak-hosted-registration-and-login).
-Those results do not establish independent server-side validation tests or real
-web/mobile integration. The service currently does not accept passwords.
+Logout ends local browser custody and attempts client refresh-token revocation;
+it does not promise global SSO/device logout or immediate invalidation of offline
+JWTs. Unknown refresh outcomes may leave a provider credential until expiry.
+No complete production-security or full-story completion claim is made.
 
-GA-48 now selects custom registration through Go and the Keycloak Admin API,
-and password login through Go to Keycloak's token endpoint (Direct Grant/ROPC).
-This approved prototype decision conflicts with RFC 9700; it is not PKCE and HTTPS
-does not remove its limitations. Both network legs require validated HTTPS outside
-explicitly isolated local synthetic tests. No endpoints or settings are enabled.
-Web BFF and mobile bearer-token custody are separate proposals; refresh/logout
-remain deferred. See the
-[draft registration plan and API contract](docs/GA-48-registration-plan.md) for
-ownership, validation, partial-failure recovery, open decisions and implementation
-steps. Strict request parsing and field validation (Unicode names, NICs,
-international phones, new-account emails and unchanged transient passwords), plus
-atomic number-reservation contracts, have synthetic tests. Uniqueness is per normalized NIC number, not per person; NIC data
-is self-declared and unverified. No trusted old/new mapping is required. No
-registration endpoint is enabled. Real PostgreSQL persistence adapters and
-database-backed uniqueness now exist; combined live Keycloak/database registration
-integration remains pending. In that design Go handles the
-password transiently; Keycloak alone stores, hashes and verifies it.
-
-The isolated [registration Admin API adapter](docs/GA-48-admin-adapter.md) now
-supports disabled-user creation, operation-marker reconciliation, owned reads,
-owned enabling and verification-email requests. It injects administrative config
-and a verified-TLS HTTP client, caches service-account tokens in memory and returns
-safe typed errors. It is not wired to the application or environment. Synthetic
-tests do not establish live Keycloak permissions, policy or SMTP behavior.
-
-The opt-in [GA-48 permission experiment](docs/GA-48-permission-experiment.md)
-has now run against a separate Keycloak 26.8.1 instance. Both creation-capable
-permission models allowed unrelated/admin account mutation; the owned-user scope
-blocked creation. Public registration remains blocked on a narrower design.
-The documented command creates only isolated test resources and never runs as part
-of the normal API or unit test suite. Those baseline checks did not test SMTP or
-the full lifecycle.
-
-The [group-scoped follow-up](docs/GA-48-group-permission-experiment.md) demonstrates
-creation/read/reconciliation/enable and delivery into a separate synthetic Mailpit
-inbox with query-users plus three scopes on a fixed registration group. It still
-permits changing other registration operations' users and passwords within that
-group. This is group administration, not operation ownership; the release gate
-remains unsatisfied. Verification completion and full lifecycle remain pending.
-
+Commit source, tests, contracts, module checksums and reproducible setup files.
+Keep real environment files, tokens, private keys, exports, dumps, logs and local
+state outside Git. Frontend/mobile/Python/RAG files belong to their teammates.
 ## Files and their purpose
 
 | File | What and why |
@@ -136,7 +97,7 @@ unused service/repository layers.
 
 Install Go 1.26 or newer from [official downloads](https://go.dev/dl/).
 Reopen the terminal after installation and check `go version`.
-Node/npm, Docker, and a database are not needed for this service.
+Health-only mode needs Go. Enabled authentication also requires the configured PostgreSQL and Keycloak services.
 
 From the repository root:
 

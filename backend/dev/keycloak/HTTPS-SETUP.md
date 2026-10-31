@@ -1,3 +1,4 @@
+<!-- PostgreSQL cutover completed 2026-10-31. Start the dedicated keycloak-postgres project first; see ../keycloak-postgres/README.md. H2-only startup is rollback-only. -->
 # Local GovAI HTTPS and registration
 
 Later login update: the [mobile/Postman login API](../../services/auth-service/docs/GA-48-login.md)
@@ -35,7 +36,7 @@ cd C:\Users\LENOVO\Desktop\govai-agentic-platform\backend\dev\auth-postgres
 docker compose --env-file .env up -d --wait
 
 cd ..\keycloak
-docker compose --env-file .env -f compose.yaml -f compose.https.yaml up -d
+docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml up -d
 docker start govai-mailpit
 
 cd ..\..\services\auth-service
