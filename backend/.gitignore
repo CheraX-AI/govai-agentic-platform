@@ -23,3 +23,5 @@ govai-ga48-*/
 # Generated Go coverage/profiling output
 coverage-*.out
 *.prof
+*.dump
+/dev/auth-postgres/*.backup

@@ -1,5 +1,23 @@
 # Go/Gin foundation
 
+[Registration runtime wiring](docs/GA-48-registration-runtime.md) is now opt-in:
+`cmd/api` composes the real dependencies and exposes the JSON POST route only
+with complete database/client settings and direct API/Keycloak HTTPS. It remains
+disabled by default. The workstation now has an explicitly enabled local HTTPS
+setup; follow [HTTPS startup and trust instructions](../../dev/keycloak/HTTPS-SETUP.md).
+
+The [real PostgreSQL + Keycloak integration test](docs/GA-48-postgresql-keycloak-integration.md)
+now passes with the real HTTP handler, registration orchestration, encrypted SQL
+stores, HTTPS Keycloak and Mailpit. It verifies duplicate handling and durable
+pool/service-reopen recovery. Its TLS HTTP listener is private to the test;
+`cmd/api` registration is disabled by default; login remains unimplemented.
+
+Current database update: [PostgreSQL implementation](docs/GA-48-postgresql.md)
+adds encrypted profile/journal adapters, atomic NIC uniqueness, migrations and
+optional server database readiness. Follow the [local setup guide](../../dev/auth-postgres/README.md).
+The earlier component reports below describe their original evidence; real
+PostgreSQL tests now supplement them. Public registration/login remains unwired.
+
 The opt-in [combined integration test](docs/GA-48-combined-integration.md) now
 connects registration orchestration to the real group-aware Keycloak adapter in a
 fresh HTTPS environment. It uses explicitly synthetic test-only stores; it does
@@ -14,8 +32,8 @@ accepted group-wide authority and historical FAIL_UNSAFE verdicts remain unchang
 The isolated [registration orchestration layer](docs/GA-48-registration-orchestration.md)
 now uses injected profile/journal ports and the existing validation/Admin boundary.
 Synthetic tests cover ordered commits, recovery, duplicates, concurrency and
-credential exclusion. No persistence implementation or public route is wired;
-database atomicity and cross-process concurrency remain unproven.
+credential exclusion. PostgreSQL adapters now implement these ports; no public
+registration route is wired. See the database report for real test coverage and limits.
 
 GA-48 prototype update: the user accepted the service account's group-wide
 administrative authority. The [isolated registration lifecycle report](docs/GA-48-registration-lifecycle.md)
@@ -23,10 +41,11 @@ records password-policy, duplicate, verification-link and TLS results. Historica
 permission-isolation FAIL_UNSAFE tests remain intact; no public route is enabled.
 Persistence/profile ownership guarantees and real client integration remain pending.
 
-The HTTP service currently provides health checks only. A separate read-only
+The HTTP service provides liveness and optional database readiness checks. A separate read-only
 OIDC discovery/JWKS connectivity checker exists; it does not authenticate users.
-Go registration/login APIs, JWT authorization, RabbitMQ, PostgreSQL and AI chat
-are not implemented. Keycloak-hosted registration/login configuration and
+Public Go registration/login APIs, JWT authorization, RabbitMQ and AI chat
+are not enabled. Optional PostgreSQL connectivity and readiness are implemented.
+Keycloak-hosted registration/login configuration and
 user-confirmed GA-48 manual results are recorded in the
 [Keycloak development guide](../../dev/keycloak/README.md#ga-48-keycloak-hosted-registration-and-login).
 Those results do not establish independent server-side validation tests or real
@@ -45,8 +64,9 @@ steps. Strict request parsing and field validation (Unicode names, NICs,
 international phones, new-account emails and unchanged transient passwords), plus
 atomic number-reservation contracts, have synthetic tests. Uniqueness is per normalized NIC number, not per person; NIC data
 is self-declared and unverified. No trusted old/new mapping is required. No
-registration endpoint or real persistence adapter is implemented; database-backed
-uniqueness remains pending and real registration must not use volatile storage. In that design Go handles the
+registration endpoint is enabled. Real PostgreSQL persistence adapters and
+database-backed uniqueness now exist; combined live Keycloak/database registration
+integration remains pending. In that design Go handles the
 password transiently; Keycloak alone stores, hashes and verifies it.
 
 The isolated [registration Admin API adapter](docs/GA-48-admin-adapter.md) now

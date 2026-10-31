@@ -52,8 +52,8 @@ type registrationErrorBody struct {
 	Fields map[string]string `json:"fields,omitempty"`
 }
 
-// Handle is intentionally NOT registered by NewRouter/cmd/api. Tests attach it
-// to a private Gin engine. Request bytes/passwords remain transient, never logs.
+// Handle is attached only by explicit registration runtime composition or tests.
+// Request bytes/passwords remain transient, never logs.
 func (h *RegistrationHandler) Handle(c *gin.Context) {
 	started := time.Now()
 	c.Header("Cache-Control", "no-store")

@@ -17,6 +17,15 @@ func NewRouter(origins ...string) *gin.Engine {
 }
 
 func newRouter(logger *slog.Logger, origins []string) *gin.Engine {
+	return registrationRouter(logger, origins, nil)
+}
+
+// NewRouterWithRegistration enables only the explicitly composed HTTPS handler.
+func NewRouterWithRegistration(h *RegistrationHandler, origins ...string) *gin.Engine {
+	return registrationRouter(slog.Default(), origins, h)
+}
+
+func registrationRouter(logger *slog.Logger, origins []string, h *RegistrationHandler) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(func(c *gin.Context) {
@@ -67,20 +76,34 @@ func newRouter(logger *slog.Logger, origins []string) *gin.Engine {
 			c.Writer.Header().Add("Vary", "Access-Control-Request-Method")
 			c.Writer.Header().Add("Vary", "Access-Control-Request-Headers")
 			method := c.GetHeader("Access-Control-Request-Method")
-			if method != "GET" {
+			allowedMethod := "GET"
+			registrationPath := h != nil && c.Request.URL.Path == "/api/v1/registrations"
+			if registrationPath {
+				allowedMethod = "POST"
+			}
+			if method != allowedMethod {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CORS method not allowed"})
 				return
 			}
 			for _, header := range strings.Split(c.GetHeader("Access-Control-Request-Headers"), ",") {
 				switch strings.ToLower(strings.TrimSpace(header)) {
 				case "", "authorization", "content-type":
+				case "idempotency-key":
+					if !registrationPath {
+						c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
+						return
+					}
 				default:
 					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
 					return
 				}
 			}
-			c.Header("Access-Control-Allow-Methods", "GET")
-			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			c.Header("Access-Control-Allow-Methods", allowedMethod)
+			allowedHeaders := "Authorization, Content-Type"
+			if registrationPath {
+				allowedHeaders += ", Idempotency-Key"
+			}
+			c.Header("Access-Control-Allow-Headers", allowedHeaders)
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
@@ -92,6 +115,18 @@ func newRouter(logger *slog.Logger, origins []string) *gin.Engine {
 	health := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
 	router.GET("/health", health)
 	router.GET("/api/health", health)
+	if h != nil {
+		router.POST("/api/v1/registrations", func(c *gin.Context) {
+			c.Header("Cache-Control", "no-store")
+			// Ignore Forwarded/X-Forwarded-Proto. Credentials require direct TLS;
+			// proxy termination requires a separate reviewed deployment design.
+			if c.Request.TLS == nil {
+				c.AbortWithStatusJSON(http.StatusUpgradeRequired, gin.H{"error": "HTTPS required"})
+				return
+			}
+			h.Handle(c)
+		})
+	}
 	router.NoRoute(func(c *gin.Context) { c.JSON(http.StatusNotFound, gin.H{"error": "route not found"}) })
 	router.NoMethod(func(c *gin.Context) { c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method not allowed"}) })
 	return router

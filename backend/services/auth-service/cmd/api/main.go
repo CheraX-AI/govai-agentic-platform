@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,9 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/handler"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -23,6 +27,12 @@ func main() {
 }
 
 func run() error {
+	if err := config.LoadLocalEnv(".env.registration"); err != nil {
+		return err
+	}
+	if err := config.LoadLocalEnv(".env.database"); err != nil {
+		return err
+	}
 	if err := config.LoadLocalEnv(".env"); err != nil {
 		return err
 	}
@@ -33,19 +43,81 @@ func run() error {
 	gin.SetMode(gin.ReleaseMode)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	dbCfg, err := config.LoadDatabase()
+	if err != nil {
+		return err
+	}
+	regCfg, err := config.LoadRegistration()
+	if err != nil {
+		return err
+	}
+	var apiTLS *tls.Config
+	if regCfg.Enabled {
+		cert, err := tls.LoadX509KeyPair(regCfg.TLSCertFile, regCfg.TLSKeyFile)
+		if err != nil {
+			return config.ErrRegistrationConfig
+		}
+		apiTLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
+	}
+	var pool *pgxpool.Pool
+	var store *postgres.Store
+	if dbCfg.URL != "" {
+		pool, err = postgres.Open(ctx, dbCfg.URL)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		if err := postgres.Ready(ctx, pool); err != nil {
+			return err
+		}
+		store, err = postgres.NewStore(pool, dbCfg.DataKey, dbCfg.NICKey)
+		if err != nil {
+			return err
+		}
+		slog.Info("authentication database connected")
+	}
+	var registrationHandler *handler.RegistrationHandler
+	if regCfg.Enabled {
+		var closeRegistration func()
+		registrationHandler, closeRegistration, err = application.Registration(regCfg, store)
+		if err != nil {
+			return err
+		}
+		defer closeRegistration()
+		slog.Info("registration route enabled with HTTPS")
+	}
+	router := handler.NewRouterWithRegistration(registrationHandler, cfg.CORSOrigins...)
+	if pool != nil {
+		router.GET("/api/ready", func(c *gin.Context) {
+			c.Header("Cache-Control", "no-store")
+			if postgres.Ready(c.Request.Context(), pool) != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ready"})
+		})
+	}
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           handler.NewRouter(cfg.CORSOrigins...),
+		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
+		TLSConfig:         apiTLS,
+	}
+	if regCfg.Enabled {
+		server.WriteTimeout = 45 * time.Second
 	}
 	serverErrors := make(chan error, 1)
 	go func() {
-		slog.Info("starting HTTP server", "port", cfg.Port)
-		serverErrors <- server.ListenAndServe()
+		slog.Info("starting HTTP server", "port", cfg.Port, "tls", regCfg.Enabled)
+		if regCfg.Enabled {
+			serverErrors <- server.ListenAndServeTLS("", "")
+		} else {
+			serverErrors <- server.ListenAndServe()
+		}
 	}()
 
 	select {
@@ -59,7 +131,11 @@ func run() error {
 	}
 
 	slog.Info("shutting down HTTP server")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownTimeout := 5 * time.Second
+	if regCfg.Enabled {
+		shutdownTimeout = 30 * time.Second
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		_ = server.Close()

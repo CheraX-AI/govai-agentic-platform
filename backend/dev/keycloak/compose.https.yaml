@@ -1,0 +1,16 @@
+# Use together with compose.yaml; the existing named data volume is retained.
+services:
+  keycloak:
+    command:
+      - start-dev
+      - --db=dev-file
+      - --http-enabled=false
+      - --features=admin-fine-grained-authz:v2
+      - --https-certificate-file=/local-tls/keycloak-cert.pem
+      - --https-certificate-key-file=/local-tls/keycloak-key.pem
+    environment:
+      KC_HOSTNAME: https://localhost:8443
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ./tls:/local-tls:ro

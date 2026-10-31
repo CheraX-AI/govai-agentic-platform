@@ -1,7 +1,9 @@
 # GA-48 registration and login - implementation status
 
 Status: IN PROGRESS. This checkpoint contains registration components and tests;
-it does not complete citizen registration/login or enable a public API.
+it does not complete the full citizen registration/login story or real clients.
+The local HTTPS registration API is explicitly enabled and smoke-tested; login
+remains unimplemented and deployment remains pending.
 
 ## Implemented in this checkpoint
 
@@ -13,10 +15,22 @@ it does not complete citizen registration/login or enable a public API.
   synthetic failure/retry tests and an unwired registration HTTP handler.
 - Bounded process-local IP/email/concurrency admission controls.
 - Opt-in permission/lifecycle/combined test harnesses and reproduction notes.
+- Authentication PostgreSQL schema/migration, restricted runtime role, encrypted
+  ProfileStore/RegistrationJournal adapters, database checks and server readiness.
+  See [database report](GA-48-postgresql.md) for current evidence and limitations.
+- [Real PostgreSQL + HTTPS Keycloak/SMTP integration](GA-48-postgresql-keycloak-integration.md)
+  with the HTTP handler on a private test listener: success, duplicates, profile
+  failure recovery, lost-create-result reconciliation and SMTP uncertainty pass.
+- Opt-in runtime composition and HTTPS-only registration route, configuration
+  validation, stable-key generator, direct TLS checks and registration-specific
+  CORS. [Local HTTPS/client setup](../../../dev/keycloak/HTTPS-SETUP.md) now preserves
+  existing users and passes actual API/profile/citizen/Mailpit smoke checks.
 
 Historical live evidence is recorded in the linked experiment/lifecycle documents.
-This commit preparation reran offline tests, vet and race checks only; no live
-Keycloak or PostgreSQL tests were performed during commit preparation.
+The previous commit preparation reran offline tests, vet and race checks only.
+The subsequent 2026-10-31 database implementation ran real PostgreSQL tests and
+server outage/readiness checks; see the database report. A subsequent explicit
+combined live run also verified real PostgreSQL with HTTPS Keycloak/SMTP.
 
 ## Accepted prototype limitation
 
@@ -28,18 +42,21 @@ it is not a public citizen permission or a production-security certification.
 
 ## Remaining GA-48 work
 
-1. Review the database teammate's schema/migrations against the profile/journal
-   contract and agree ownership of Go PostgreSQL adapters.
-2. Implement real profile/journal stores with transactions, atomic normalized-NIC
-   uniqueness, ownership binding, locking/idempotency and durable recovery.
-3. Verify real database concurrency, rollback, process-restart recovery and
-   operational reconciliation; synthetic stores do not prove these guarantees.
-4. Integrate the handler, orchestration, real stores and group-aware adapter;
-   verify failures end to end before wiring the registration route.
+1. Review the implemented authentication schema and adapters with the team.
+2. Extend the passing real PostgreSQL + Keycloak/SMTP integration with independent
+   process kills at every checkpoint and uncertain commits, then implement
+   operational reconciliation. Current tests cover independent pools, atomic NIC
+   claims, pool/service reopen and backend connection termination, not all crash modes.
+3. Test deployment TLS, secret backups/restoration and planned key rotation before
+   using real citizen data. Local synthetic database evidence is not a deployment audit.
+4. Review the enabled local HTTPS prototype, configure intended deployment and
+   actual web/mobile verification destinations, and complete real client tests.
+   The development callback currently returns to Keycloak's account console.
 5. Review server timeout budget, POST/idempotency-header CORS, trusted proxies,
    deployed TLS and distributed rate limiting/abuse behavior.
-6. Configure actual scoped registration credentials outside Git and address
-   hosted-registration bypass of required application profiles.
+6. Preserve/secure the configured local scoped credentials and review deployed
+   provisioning. Hosted registration is now off in the local GovAI realm, avoiding
+   required-profile bypass. Accepted group-wide authority remains documented.
 7. Implement password-login API/client configuration under the approved design,
    verified-email/required-action handling and safe error/rate-limit behavior.
 8. Agree web/mobile token custody and delivery contracts; verify actual clients

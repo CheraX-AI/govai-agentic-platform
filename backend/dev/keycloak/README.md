@@ -1,5 +1,10 @@
 # Current local Keycloak development environment
 
+Current HTTPS setup: follow the [HTTPS startup and trust guide](HTTPS-SETUP.md).
+The existing volume/users are preserved. Keycloak is now https://localhost:8443
+and Go is https://localhost:5001. Earlier HTTP-only instructions below are
+historical; use the HTTPS Compose overlay for the configured environment.
+
 Planning update, 2026-10-29: team/mentor approved custom registration through the
 Go Admin API adapter and password login through Go to Keycloak's token endpoint.
 Direct Grant/ROPC conflicts with RFC 9700 and is not PKCE. See the

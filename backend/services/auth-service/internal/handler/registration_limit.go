@@ -44,7 +44,7 @@ type limitBucket struct {
 
 // LocalRegistrationLimiter stores ONLY bounded expiring abuse counters, never
 // registration/profile/journal data. It supplies no distributed enforcement and
-// is not created by NewRouter or the running API.
+// is created only by explicit registration runtime composition or tests.
 type LocalRegistrationLimiter struct {
 	mu          sync.Mutex
 	cfg         RegistrationLimitConfig

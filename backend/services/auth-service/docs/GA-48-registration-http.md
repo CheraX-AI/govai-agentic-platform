@@ -1,5 +1,9 @@
 # GA-48 isolated registration HTTP adapter
 
+Subsequent update: [runtime wiring](GA-48-registration-runtime.md) now optionally
+composes this handler with real PostgreSQL and Keycloak. The original isolated
+slice/evidence below is historical; default registration remains disabled.
+
 `handler.RegistrationHandler` accepts an injected service and limiter. It is **not
 registered** by `NewRouter` or `cmd/api`; health endpoints remain unchanged. Tests
 attach it to a private Gin engine with synthetic service functions. No runtime
