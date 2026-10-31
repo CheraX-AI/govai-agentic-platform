@@ -69,6 +69,10 @@ func TestLoginLive(t *testing.T) {
 	fmt.Println("LOGIN_SAFE_LOGS PASS")
 }
 func (l *lab) loginScenario(ctx context.Context, caFile string) error {
+	return l.loginScenarioWithSessions(ctx, caFile, false)
+}
+
+func (l *lab) loginScenarioWithSessions(ctx context.Context, caFile string, sessions bool, web ...bool) error {
 	d, e := newDurableLab(ctx)
 	if e != nil {
 		return errSafe
@@ -219,6 +223,16 @@ func (l *lab) loginScenario(ctx context.Context, caFile string) error {
 	forbidden, _ := protectedRequest("GET", "/api/v1/me", noRole.Access)
 	l.lifeCheck("AUTH_SIGNED_WRONG_ROLE_403", forbidden == 403)
 	l.must(ctx, "POST", p+"/users/"+op.Subject+"/role-mappings/realm", []object{defaultRole}, 204)
+	if sessions {
+		if e := l.refreshScenario(ctx, caFile, d.store, issuer, clientID, secret, email, password); e != nil {
+			return e
+		}
+	}
+	if len(web) > 0 && web[0] {
+		if e := l.webScenario(ctx, caFile, d, issuer, clientID, email, password); e != nil {
+			return e
+		}
+	}
 	l.must(ctx, "PUT", p+"/users/"+op.Subject, object{"requiredActions": []string{"UPDATE_PASSWORD"}}, 204)
 	actions, actionsBody := requestLogin(email, password)
 	l.lifeCheck("LOGIN_PENDING_ACTIONS_DENIED", actions == 401 && bytes.Equal(actionsBody, unverifiedBody))

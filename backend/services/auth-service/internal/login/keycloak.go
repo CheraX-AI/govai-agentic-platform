@@ -14,6 +14,7 @@ import (
 type KeycloakConfig struct {
 	privateValue
 	Issuer, ClientID, ClientSecret, Audience string
+	EnableRefresh                            bool
 }
 type Keycloak struct {
 	privateValue
@@ -96,15 +97,22 @@ func (k *Keycloak) Password(ctx context.Context, r Request) (Issued, error) {
 		return Issued{}, ErrUnavailable
 	}
 	var result struct {
-		Token   string `json:"access_token"`
-		Type    string `json:"token_type"`
-		Expires int64  `json:"expires_in"`
+		Token          string `json:"access_token"`
+		Type           string `json:"token_type"`
+		Expires        int64  `json:"expires_in"`
+		Refresh        string `json:"refresh_token"`
+		RefreshExpires int64  `json:"refresh_expires_in"`
 	}
 	if json.Unmarshal(body, &result) != nil || result.Token == "" || len(result.Token) > 16<<10 || strings.ContainsAny(result.Token, " \t\r\n") || !strings.EqualFold(result.Type, "Bearer") || result.Expires <= 0 || result.Expires > 3600 {
 		return Issued{}, ErrUnavailable
 	}
-	// refresh_token/id_token and other fields are intentionally neither retained
-	// in the result nor returned. No credential POST is automatically retried.
+	if k.cfg.EnableRefresh {
+		if !validRefresh(result.Refresh) || result.RefreshExpires <= 0 {
+			return Issued{}, ErrUnavailable
+		}
+		return Issued{Token: result.Token, ExpiresIn: result.Expires, RefreshToken: result.Refresh, RefreshExpiresIn: result.RefreshExpires}, nil
+	}
+	// Access-only mode discards refresh/ID tokens. No POST is retried.
 	return Issued{Token: result.Token, ExpiresIn: result.Expires}, nil
 }
 func (k *Keycloak) Verify(ctx context.Context, raw string) (Claims, error) {

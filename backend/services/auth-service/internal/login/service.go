@@ -7,13 +7,17 @@ import (
 
 type Access struct {
 	privateValue
-	Token     string
-	ExpiresIn int64
+	Token            string
+	ExpiresIn        int64
+	RefreshToken     string
+	RefreshExpiresIn int64
 }
 type Issued struct {
 	privateValue
-	Token     string
-	ExpiresIn int64
+	Token            string
+	ExpiresIn        int64
+	RefreshToken     string
+	RefreshExpiresIn int64
 }
 type Claims struct {
 	privateValue
@@ -72,5 +76,5 @@ func (s *Service) Login(ctx context.Context, r Request) (Access, error) {
 	if remaining <= 0 || ctx.Err() != nil {
 		return Access{}, ErrUnavailable
 	}
-	return Access{Token: issued.Token, ExpiresIn: remaining}, nil
+	return Access{Token: issued.Token, ExpiresIn: remaining, RefreshToken: issued.RefreshToken, RefreshExpiresIn: issued.RefreshExpiresIn}, nil
 }

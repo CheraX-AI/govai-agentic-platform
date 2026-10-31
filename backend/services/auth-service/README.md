@@ -7,8 +7,14 @@ authorization; Python/RAG integration is still pending.
 
 The [mobile/Postman login API](docs/GA-48-login.md) now composes a separate
 non-admin Keycloak client, strict access-token validation and owned PostgreSQL
-profile checks. It returns only an access token; browser sessions and refresh/logout
-remain deferred. Login is opt-in, with local settings kept outside Git.
+profile checks. Its default response remains access-only. [GA-50 token/session
+management](docs/GA-50-token-management.md) adds opt-in native refresh/revocation,
+encrypted browser cookie sessions, durable revocation recovery and explicit
+maintenance commands. These additions are tested in disposable environments;
+the approved local refresh/web setup is now enabled. Follow the
+[local Postman guide](docs/GA-50-local-postman.md). Local manual verification now
+passes; [GA-50 status](docs/GA-50-status.md) records the evidence and remaining
+actual client integration/review work. Private settings stay outside Git.
 
 [Registration runtime wiring](docs/GA-48-registration-runtime.md) is now opt-in:
 `cmd/api` composes the real dependencies and exposes the JSON POST route only

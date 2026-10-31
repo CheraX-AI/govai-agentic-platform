@@ -3,7 +3,9 @@
 Status: IN PROGRESS. This checkpoint contains registration components and tests;
 it does not complete the full citizen registration/login story or real clients.
 The local HTTPS registration API is explicitly enabled and smoke-tested; login
-now has a mobile/Postman access-token API; web sessions and deployment remain pending.
+now has a mobile/Postman API. Subsequent [GA-50 work](GA-50-status.md) adds
+locally enabled refresh/revocation and browser sessions with verified Postman
+flows; actual web/mobile application integration remains pending.
 
 ## Implemented in this checkpoint
 

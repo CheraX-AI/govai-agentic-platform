@@ -45,6 +45,10 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		fail(403, "browser_login_disabled", "Browser login is not enabled on this endpoint.")
 		return
 	}
+	if len(c.Request.Header.Values("Cookie")) != 0 {
+		fail(403, "browser_login_disabled", "Browser login is not enabled on this endpoint.")
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	c.Request = c.Request.WithContext(ctx)
@@ -135,5 +139,14 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		return
 	}
 	// This is the ONLY deliberate serialization of the sensitive Access value.
-	c.JSON(http.StatusOK, gin.H{"access_token": access.Token, "token_type": "Bearer", "expires_in": access.ExpiresIn})
+	response := gin.H{"access_token": access.Token, "token_type": "Bearer", "expires_in": access.ExpiresIn}
+	if access.RefreshToken != "" {
+		if access.RefreshExpiresIn <= 0 {
+			unavailable()
+			return
+		}
+		response["refresh_token"] = access.RefreshToken
+		response["refresh_expires_in"] = access.RefreshExpiresIn
+	}
+	c.JSON(http.StatusOK, response)
 }

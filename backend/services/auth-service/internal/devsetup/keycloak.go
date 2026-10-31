@@ -136,7 +136,7 @@ func connect(ctx context.Context, root string, out io.Writer) *localAdmin {
 
 // Run never targets a supplied remote URL or realm and never emits credentials.
 func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
-	if mode != "inspect" && mode != "configure" && mode != "check" && mode != "smoke" && mode != "configure-login" && mode != "login-check" && mode != "configure-authorization" && mode != "authorization-check" {
+	if mode != "inspect" && mode != "configure" && mode != "check" && mode != "smoke" && mode != "configure-login" && mode != "login-check" && mode != "configure-authorization" && mode != "authorization-check" && mode != "configure-sessions" && mode != "sessions-check" {
 		return ErrSetup
 	}
 	defer func() {
@@ -156,6 +156,17 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	smtp, _ := realm["smtpServer"].(map[string]any)
 	fmt.Fprintf(out, "DEV_AUTH_INSPECT users=%d verify_email=%t hosted_signup=%t smtp_configured=%t\n", len(users), realm["verifyEmail"] == true, realm["registrationAllowed"] == true, smtp["host"] != nil)
 	if mode == "inspect" {
+		reuse, _ := realm["refreshTokenMaxReuse"].(float64)
+		fmt.Fprintf(out, "DEV_AUTH_REFRESH_POLICY rotation=%t max_reuse=%.0f\n", realm["revokeRefreshToken"] == true, reuse)
+		for _, name := range []string{mobileLoginClient, "govai-login-web-dev"} {
+			clients := a.list(ctx, realmPath+"/clients?clientId="+url.QueryEscape(name))
+			if len(clients) != 1 {
+				fmt.Fprintf(out, "DEV_AUTH_CLIENT name=%s configured=false\n", name)
+				continue
+			}
+			attrs, _ := clients[0]["attributes"].(map[string]any)
+			fmt.Fprintf(out, "DEV_AUTH_CLIENT name=%s configured=true refresh_enabled=%t service_account=%t owned=%t\n", name, attrs["use.refresh.tokens"] == "true", clients[0]["serviceAccountsEnabled"] == true, clients[0]["description"] == ownerTag)
+		}
 		return nil
 	}
 	if mode == "check" {
@@ -166,6 +177,12 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	}
 	if mode == "smoke" {
 		return a.smoke(ctx, root)
+	}
+	if mode == "configure-sessions" {
+		return a.configureSessions(ctx, root)
+	}
+	if mode == "sessions-check" {
+		return a.sessionsCheck(ctx)
 	}
 	if mode == "configure-login" {
 		return a.configureLogin(ctx, root)

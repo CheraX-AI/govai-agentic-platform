@@ -6,6 +6,7 @@ import (
 )
 
 func TestLoginConfiguration(t *testing.T) {
+	t.Setenv("LOGIN_REFRESH_ENABLED", "")
 	t.Setenv("LOGIN_ENABLED", "")
 	if c, e := LoadLogin(); e != nil || c.Enabled {
 		t.Fatal("default enabled")
@@ -19,5 +20,15 @@ func TestLoginConfiguration(t *testing.T) {
 	t.Setenv("LOGIN_CLIENT_ID", "registration")
 	if _, e := LoadLogin(); e == nil {
 		t.Fatal("administrative client reused")
+	}
+}
+
+func TestRefreshRequiresLogin(t *testing.T) {
+	t.Setenv("LOGIN_ENABLED", "false")
+	for _, value := range []string{"true", "yes", "1"} {
+		t.Setenv("LOGIN_REFRESH_ENABLED", value)
+		if _, err := LoadLogin(); err == nil {
+			t.Fatal("invalid refresh configuration accepted")
+		}
 	}
 }

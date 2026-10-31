@@ -27,6 +27,9 @@ func main() {
 }
 
 func run() error {
+	if err := config.LoadLocalEnv(".env.web"); err != nil {
+		return err
+	}
 	if err := config.LoadLocalEnv(".env.authorization"); err != nil {
 		return err
 	}
@@ -65,7 +68,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	tlsEnabled := regCfg.Enabled || loginCfg.Enabled || authorizationCfg.Enabled
+	webCfg, err := config.LoadWeb()
+	if err != nil {
+		return err
+	}
+	tlsEnabled := regCfg.Enabled || loginCfg.Enabled || authorizationCfg.Enabled || webCfg.Enabled
 	var apiTLS *tls.Config
 	if tlsEnabled {
 		cert, err := tls.LoadX509KeyPair(os.Getenv("API_TLS_CERT_FILE"), os.Getenv("API_TLS_KEY_FILE"))
@@ -102,9 +109,10 @@ func run() error {
 		slog.Info("registration route enabled with HTTPS")
 	}
 	var loginHandler *handler.LoginHandler
+	var sessionHandler *handler.NativeSessionHandler
 	if loginCfg.Enabled {
 		var closeLogin func()
-		loginHandler, closeLogin, err = application.Login(loginCfg, store)
+		loginHandler, sessionHandler, closeLogin, err = application.LoginWithSessions(loginCfg, store)
 		if err != nil {
 			return err
 		}
@@ -121,11 +129,21 @@ func run() error {
 		defer closeAuthorization()
 		slog.Info("JWT authorization routes enabled with HTTPS")
 	}
-	router := handler.NewRouterWithProtected(registrationHandler, loginHandler, protected, cfg.CORSOrigins...)
+	var webHandler *handler.WebSessionHandler
+	if webCfg.Enabled {
+		var closeWeb func()
+		webHandler, closeWeb, err = application.Web(ctx, webCfg, pool, store)
+		if err != nil {
+			return err
+		}
+		defer closeWeb()
+		slog.Info("web session routes enabled with HTTPS")
+	}
+	router := handler.NewRouterWithWeb(registrationHandler, loginHandler, protected, sessionHandler, webHandler, cfg.CORSOrigins...)
 	if pool != nil {
 		router.GET("/api/ready", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")
-			if postgres.Ready(c.Request.Context(), pool) != nil {
+			if postgres.Ready(c.Request.Context(), pool) != nil || (webCfg.Enabled && postgres.WebSessionsReady(c.Request.Context(), pool) != nil) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
 				return
 			}

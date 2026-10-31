@@ -17,17 +17,19 @@ func main() {
 	}
 }
 func run() error {
-	if len(os.Args) != 2 || (os.Args[1] != "migrate" && os.Args[1] != "check") {
-		return fmt.Errorf("usage: go run ./cmd/db migrate|check")
+	if len(os.Args) != 2 || (os.Args[1] != "migrate" && os.Args[1] != "check" && os.Args[1] != "migrate-web" && os.Args[1] != "check-web" && os.Args[1] != "prune-web" && os.Args[1] != "prune-web-jobs") {
+		return fmt.Errorf("usage: go run ./cmd/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs")
 	}
-	if os.Args[1] == "migrate" && config.LoadLocalEnv(".env.database-admin") != nil {
+	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web"
+	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"
+	if isPrivileged && config.LoadLocalEnv(".env.database-admin") != nil {
 		return postgres.ErrStore
 	}
 	if config.LoadLocalEnv(".env.database") != nil || config.LoadLocalEnv(".env") != nil {
 		return postgres.ErrStore
 	}
 	dsn := os.Getenv("DATABASE_URL")
-	if os.Args[1] == "migrate" {
+	if isPrivileged {
 		dsn = os.Getenv("MIGRATION_DATABASE_URL")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -39,6 +41,22 @@ func run() error {
 	defer p.Close()
 	if os.Args[1] == "migrate" {
 		err = postgres.Migrate(ctx, p)
+	} else if os.Args[1] == "migrate-web" {
+		err = postgres.MigrateWebSessions(ctx, p)
+	} else if os.Args[1] == "check-web" {
+		err = postgres.WebSessionsReady(ctx, p)
+	} else if os.Args[1] == "prune-web" {
+		var count int64
+		count, err = postgres.PruneWebSessions(ctx, p, 24*time.Hour, 500)
+		if err == nil {
+			fmt.Printf("expired web session records removed: %d\n", count)
+		}
+	} else if os.Args[1] == "prune-web-jobs" {
+		var count int64
+		count, err = postgres.PruneCompletedWebRevocations(ctx, p, 24*time.Hour, 500)
+		if err == nil {
+			fmt.Printf("completed web revocation records removed: %d\n", count)
+		}
 	} else {
 		err = postgres.Ready(ctx, p)
 	}

@@ -22,8 +22,18 @@ func (Login) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil 
 func (Login) LogValue() slog.Value         { return slog.StringValue("[REDACTED]") }
 func LoadLogin() (Login, error) {
 	var c Login
+	switch os.Getenv("LOGIN_REFRESH_ENABLED") {
+	case "", "false":
+	case "true":
+		c.Provider.EnableRefresh = true
+	default:
+		return c, login.ErrUnavailable
+	}
 	switch os.Getenv("LOGIN_ENABLED") {
 	case "", "false":
+		if c.Provider.EnableRefresh {
+			return Login{}, login.ErrUnavailable
+		}
 		return c, nil
 	case "true":
 		c.Enabled = true
@@ -33,7 +43,7 @@ func LoadLogin() (Login, error) {
 	if os.Getenv("DATABASE_URL") == "" || os.Getenv("API_TLS_CERT_FILE") == "" || os.Getenv("API_TLS_KEY_FILE") == "" {
 		return Login{}, login.ErrUnavailable
 	}
-	c.Provider = login.KeycloakConfig{Issuer: os.Getenv("LOGIN_ISSUER_URL"), ClientID: os.Getenv("LOGIN_CLIENT_ID"), ClientSecret: os.Getenv("LOGIN_CLIENT_SECRET"), Audience: os.Getenv("LOGIN_AUDIENCE")}
+	c.Provider = login.KeycloakConfig{Issuer: os.Getenv("LOGIN_ISSUER_URL"), ClientID: os.Getenv("LOGIN_CLIENT_ID"), ClientSecret: os.Getenv("LOGIN_CLIENT_SECRET"), Audience: os.Getenv("LOGIN_AUDIENCE"), EnableRefresh: c.Provider.EnableRefresh}
 	if c.Provider.ClientID == "" || c.Provider.ClientID == os.Getenv("REGISTRATION_CLIENT_ID") || c.Provider.ClientSecret == "" || c.Provider.Audience == "" {
 		return Login{}, login.ErrUnavailable
 	}

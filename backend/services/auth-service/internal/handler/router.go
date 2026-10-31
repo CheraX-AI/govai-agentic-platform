@@ -41,10 +41,34 @@ func NewRouterWithProtected(registration *RegistrationHandler, login *LoginHandl
 	return configuredRouter(slog.Default(), origins, registration, login, protected)
 }
 
-func configuredRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler, protected *Protected) *gin.Engine {
+func NewRouterWithSessions(registration *RegistrationHandler, login *LoginHandler, protected *Protected, sessions *NativeSessionHandler, origins ...string) *gin.Engine {
+	return configuredRouter(slog.Default(), origins, registration, login, protected, sessions)
+}
+
+func configuredRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler, protected *Protected, sessionHandlers ...*NativeSessionHandler) *gin.Engine {
+	return configuredWebRouter(logger, origins, h, login, protected, nil, sessionHandlers...)
+}
+
+func NewRouterWithWeb(registration *RegistrationHandler, login *LoginHandler, protected *Protected, sessions *NativeSessionHandler, web *WebSessionHandler, origins ...string) *gin.Engine {
+	return configuredWebRouter(slog.Default(), origins, registration, login, protected, web, sessions)
+}
+
+func configuredWebRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler, protected *Protected, web *WebSessionHandler, sessionHandlers ...*NativeSessionHandler) *gin.Engine {
+	var sessions *NativeSessionHandler
+	if len(sessionHandlers) > 0 {
+		sessions = sessionHandlers[0]
+	}
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(func(c *gin.Context) {
+		if web != nil && web.isPath(c.Request.URL.Path) {
+			c.Header("Cache-Control", "no-store")
+			c.Header("Pragma", "no-cache")
+		}
+		if sessions != nil && (c.Request.URL.Path == "/api/v1/auth/refresh" || c.Request.URL.Path == "/api/v1/auth/revoke") {
+			c.Header("Cache-Control", "no-store")
+			c.Header("Pragma", "no-cache")
+		}
 		if (login != nil && c.Request.URL.Path == "/api/v1/auth/login") || (protected != nil && (c.Request.URL.Path == "/api/v1/me" || c.Request.URL.Path == "/api/v1/ai/chat")) {
 			c.Header("Cache-Control", "no-store")
 			c.Header("Pragma", "no-cache")
@@ -73,6 +97,10 @@ func configuredRouter(logger *slog.Logger, origins []string, h *RegistrationHand
 		c.Next()
 	})
 	router.Use(func(c *gin.Context) {
+		if web != nil && web.isPath(c.Request.URL.Path) {
+			web.cors(c)
+			return
+		}
 		c.Header("Vary", "Origin")
 		origin := c.GetHeader("Origin")
 		if origin == "" {
@@ -134,6 +162,13 @@ func configuredRouter(logger *slog.Logger, origins []string, h *RegistrationHand
 		panic(err)
 	}
 	health := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
+	if web != nil {
+		router.POST("/api/v1/web/login", web.Login)
+		router.GET("/api/v1/web/session", web.Check)
+		router.GET("/api/v1/web/csrf", web.CSRF)
+		router.POST("/api/v1/web/refresh", web.Refresh)
+		router.POST("/api/v1/web/logout", web.Logout)
+	}
 	router.GET("/health", health)
 	router.GET("/api/health", health)
 	if protected != nil {
@@ -141,6 +176,10 @@ func configuredRouter(logger *slog.Logger, origins []string, h *RegistrationHand
 	}
 	if login != nil {
 		router.POST("/api/v1/auth/login", login.Handle)
+	}
+	if sessions != nil {
+		router.POST("/api/v1/auth/refresh", sessions.Refresh)
+		router.POST("/api/v1/auth/revoke", sessions.Revoke)
 	}
 	if h != nil {
 		router.POST("/api/v1/registrations", func(c *gin.Context) {
