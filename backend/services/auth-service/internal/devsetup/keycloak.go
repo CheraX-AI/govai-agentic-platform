@@ -136,7 +136,7 @@ func connect(ctx context.Context, root string, out io.Writer) *localAdmin {
 
 // Run never targets a supplied remote URL or realm and never emits credentials.
 func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
-	if mode != "inspect" && mode != "configure" && mode != "check" && mode != "smoke" {
+	if mode != "inspect" && mode != "configure" && mode != "check" && mode != "smoke" && mode != "configure-login" && mode != "login-check" {
 		return ErrSetup
 	}
 	defer func() {
@@ -166,6 +166,12 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	}
 	if mode == "smoke" {
 		return a.smoke(ctx, root)
+	}
+	if mode == "configure-login" {
+		return a.configureLogin(ctx, root)
+	}
+	if mode == "login-check" {
+		return a.loginCheck(ctx)
 	}
 	// Snapshot only changed settings/attribute definitions, never realm secrets or
 	// user representations. Files are private and outside tracked source.

@@ -1,5 +1,10 @@
 # Go/Gin foundation
 
+The [mobile/Postman login API](docs/GA-48-login.md) now composes a separate
+non-admin Keycloak client, strict access-token validation and owned PostgreSQL
+profile checks. It returns only an access token; browser sessions and refresh/logout
+remain deferred. Login is opt-in, with local settings kept outside Git.
+
 [Registration runtime wiring](docs/GA-48-registration-runtime.md) is now opt-in:
 `cmd/api` composes the real dependencies and exposes the JSON POST route only
 with complete database/client settings and direct API/Keycloak HTTPS. It remains
@@ -10,13 +15,20 @@ The [real PostgreSQL + Keycloak integration test](docs/GA-48-postgresql-keycloak
 now passes with the real HTTP handler, registration orchestration, encrypted SQL
 stores, HTTPS Keycloak and Mailpit. It verifies duplicate handling and durable
 pool/service-reopen recovery. Its TLS HTTP listener is private to the test;
-`cmd/api` registration is disabled by default; login remains unimplemented.
+`cmd/api` registration/login are disabled by default and explicitly configured in
+the local HTTPS environment.
 
 Current database update: [PostgreSQL implementation](docs/GA-48-postgresql.md)
 adds encrypted profile/journal adapters, atomic NIC uniqueness, migrations and
 optional server database readiness. Follow the [local setup guide](../../dev/auth-postgres/README.md).
 The earlier component reports below describe their original evidence; real
-PostgreSQL tests now supplement them. Public registration/login remains unwired.
+PostgreSQL tests and opt-in runtime registration/login now supplement them.
+
+## Earlier component checkpoints (historical)
+
+The descriptions below retain their original checkpoint context, including
+statements that a component was not yet wired. Current behavior is described in
+the runtime/login guides above; those later implementations supersede that status.
 
 The opt-in [combined integration test](docs/GA-48-combined-integration.md) now
 connects registration orchestration to the real group-aware Keycloak adapter in a

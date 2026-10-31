@@ -27,6 +27,9 @@ func main() {
 }
 
 func run() error {
+	if err := config.LoadLocalEnv(".env.login"); err != nil {
+		return err
+	}
 	if err := config.LoadLocalEnv(".env.registration"); err != nil {
 		return err
 	}
@@ -51,9 +54,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	loginCfg, err := config.LoadLogin()
+	if err != nil {
+		return err
+	}
+	tlsEnabled := regCfg.Enabled || loginCfg.Enabled
 	var apiTLS *tls.Config
-	if regCfg.Enabled {
-		cert, err := tls.LoadX509KeyPair(regCfg.TLSCertFile, regCfg.TLSKeyFile)
+	if tlsEnabled {
+		cert, err := tls.LoadX509KeyPair(os.Getenv("API_TLS_CERT_FILE"), os.Getenv("API_TLS_KEY_FILE"))
 		if err != nil {
 			return config.ErrRegistrationConfig
 		}
@@ -86,7 +94,17 @@ func run() error {
 		defer closeRegistration()
 		slog.Info("registration route enabled with HTTPS")
 	}
-	router := handler.NewRouterWithRegistration(registrationHandler, cfg.CORSOrigins...)
+	var loginHandler *handler.LoginHandler
+	if loginCfg.Enabled {
+		var closeLogin func()
+		loginHandler, closeLogin, err = application.Login(loginCfg, store)
+		if err != nil {
+			return err
+		}
+		defer closeLogin()
+		slog.Info("mobile login route enabled with HTTPS")
+	}
+	router := handler.NewRouterWithAuth(registrationHandler, loginHandler, cfg.CORSOrigins...)
 	if pool != nil {
 		router.GET("/api/ready", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")
@@ -107,13 +125,13 @@ func run() error {
 		IdleTimeout:       60 * time.Second,
 		TLSConfig:         apiTLS,
 	}
-	if regCfg.Enabled {
+	if tlsEnabled {
 		server.WriteTimeout = 45 * time.Second
 	}
 	serverErrors := make(chan error, 1)
 	go func() {
-		slog.Info("starting HTTP server", "port", cfg.Port, "tls", regCfg.Enabled)
-		if regCfg.Enabled {
+		slog.Info("starting HTTP server", "port", cfg.Port, "tls", tlsEnabled)
+		if tlsEnabled {
 			serverErrors <- server.ListenAndServeTLS("", "")
 		} else {
 			serverErrors <- server.ListenAndServe()
@@ -132,7 +150,7 @@ func run() error {
 
 	slog.Info("shutting down HTTP server")
 	shutdownTimeout := 5 * time.Second
-	if regCfg.Enabled {
+	if tlsEnabled {
 		shutdownTimeout = 30 * time.Second
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)

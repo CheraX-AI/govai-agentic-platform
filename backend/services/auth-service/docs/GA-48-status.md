@@ -3,7 +3,7 @@
 Status: IN PROGRESS. This checkpoint contains registration components and tests;
 it does not complete the full citizen registration/login story or real clients.
 The local HTTPS registration API is explicitly enabled and smoke-tested; login
-remains unimplemented and deployment remains pending.
+now has a mobile/Postman access-token API; web sessions and deployment remain pending.
 
 ## Implemented in this checkpoint
 
@@ -14,6 +14,9 @@ remains unimplemented and deployment remains pending.
 - ProfileStore and RegistrationJournal interfaces, registration orchestration,
   synthetic failure/retry tests and an unwired registration HTTP handler.
 - Bounded process-local IP/email/concurrency admission controls.
+- [Mobile/Postman login](GA-48-login.md) with separate non-admin client, access-token
+  signature/issuer/audience/expiry and citizen/verified-email checks, owned profile
+  lookup, generic errors, no-store responses and separate bounded admission.
 - Opt-in permission/lifecycle/combined test harnesses and reproduction notes.
 - Authentication PostgreSQL schema/migration, restricted runtime role, encrypted
   ProfileStore/RegistrationJournal adapters, database checks and server readiness.
@@ -57,8 +60,9 @@ it is not a public citizen permission or a production-security certification.
 6. Preserve/secure the configured local scoped credentials and review deployed
    provisioning. Hosted registration is now off in the local GovAI realm, avoiding
    required-profile bypass. Accepted group-wide authority remains documented.
-7. Implement password-login API/client configuration under the approved design,
-   verified-email/required-action handling and safe error/rate-limit behavior.
+7. Complete actual native-mobile integration and deployment
+   review. The new access-token login API and isolated real provider/database test
+   cover verified email, pending actions, generic failures and safe token validation.
 8. Agree web/mobile token custody and delivery contracts; verify actual clients
    with their owners without editing protected teammate files.
 9. Complete end-to-end registration/login evidence, documentation and PR review.

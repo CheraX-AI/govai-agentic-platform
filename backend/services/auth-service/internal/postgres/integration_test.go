@@ -280,8 +280,17 @@ func TestPostgresContracts(t *testing.T) {
 			t.Fatal("idempotent profile commit failed")
 		}
 		advance(t, s, registration.ProfileReady, "")
+		if ready, e := b.HasReadyProfile(ctx, r.Issuer, "subject-test"); e != nil || ready {
+			t.Fatal("profile not yet enabled accepted for login")
+		}
 		advance(t, s, registration.Enabling, "")
 		advance(t, s, registration.Enabled, "")
+		if ready, e := b.HasReadyProfile(ctx, r.Issuer, "subject-test"); e != nil || !ready {
+			t.Fatal("enabled profile missing for login")
+		}
+		if ready, e := b.HasReadyProfile(ctx, "https://other.example.test/realms/test", "subject-test"); e != nil || ready {
+			t.Fatal("profile issuer ownership bypassed")
+		}
 		if b.Persist(ctx, p) != nil {
 			t.Fatal("later exact profile replay failed")
 		}

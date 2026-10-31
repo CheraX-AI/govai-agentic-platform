@@ -1,5 +1,11 @@
 # Local GovAI HTTPS and registration
 
+Later login update: the [mobile/Postman login API](../../services/auth-service/docs/GA-48-login.md)
+now has a separate non-admin client and private `.env.login`. Provision it with
+`go run ./cmd/dev-auth configure-login` from the auth-service directory, then
+restart the API. Registration manual evidence below predates this login slice;
+real web/mobile integration and browser sessions remain pending.
+
 Configured and checked locally on 2026-10-31. Existing GovAI users and Keycloak's
 named volume were preserved. PostgreSQL remains the separate application database;
 Keycloak itself still uses its development dev-file store.

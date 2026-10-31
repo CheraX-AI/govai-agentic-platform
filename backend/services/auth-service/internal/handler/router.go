@@ -26,9 +26,21 @@ func NewRouterWithRegistration(h *RegistrationHandler, origins ...string) *gin.E
 }
 
 func registrationRouter(logger *slog.Logger, origins []string, h *RegistrationHandler) *gin.Engine {
+	return authRouter(logger, origins, h, nil)
+}
+
+func NewRouterWithAuth(registration *RegistrationHandler, login *LoginHandler, origins ...string) *gin.Engine {
+	return authRouter(slog.Default(), origins, registration, login)
+}
+
+func authRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler) *gin.Engine {
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	router.Use(func(c *gin.Context) {
+		if login != nil && c.Request.URL.Path == "/api/v1/auth/login" {
+			c.Header("Cache-Control", "no-store")
+			c.Header("Pragma", "no-cache")
+		}
 		var id [16]byte
 		if _, err := rand.Read(id[:]); err != nil {
 			panic("request ID generation failed")
@@ -115,6 +127,9 @@ func registrationRouter(logger *slog.Logger, origins []string, h *RegistrationHa
 	health := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
 	router.GET("/health", health)
 	router.GET("/api/health", health)
+	if login != nil {
+		router.POST("/api/v1/auth/login", login.Handle)
+	}
 	if h != nil {
 		router.POST("/api/v1/registrations", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")
