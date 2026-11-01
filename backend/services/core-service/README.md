@@ -125,3 +125,20 @@ JWT policy; no immediate bearer-revocation guarantee is added by this API.
 Restarting after Ctrl+C is safe. No migrations or external identity changes occur
 at startup. Run module tests from this directory; this is independent of the auth
 service module and local dependencies use the existing pkg/authn replace directive.
+## GA-67 response and error verification
+
+The authenticated router and real HTTP adapter are tested together against a
+synthetic TLS agent. This verifies source preservation, absent sources as `[]`,
+empty/malformed/duplicate-field/unsafe-source rejection (502), upstream 429/503
+mapping (503), and request timeout mapping (504). Invalid messages (400) and
+missing tokens (401) produce no upstream call. Error responses contain only
+`error` and `code`; request IDs remain in headers. Responses are not cached.
+Tests also check that citizen tokens, service credentials, upstream addresses,
+questions, answers and upstream error bodies do not appear in logs or error bodies.
+Existing tests cover panic recovery, role/email denial and admission limits.
+
+Validation: formatting, `go test -race ./...` and `go vet ./...` passed locally.
+These checks use synthetic fixtures; actual Knowledge Agent compatibility,
+real generated answers/citations, and teammate web/mobile integration remain
+pending. The adapter remains disabled in the local configuration. Clients must
+render agent text safely; this backend does not turn AI output into trusted HTML.
