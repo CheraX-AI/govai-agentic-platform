@@ -6,17 +6,27 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var ErrConfig = errors.New("invalid core chat server configuration")
 
 type Config struct {
+	RequestTimeout                                   time.Duration
 	Port, Certificate, Key, Issuer, Audience, CAFile string
 	Clients, Origins                                 []string
 }
 
 func Load() (Config, error) {
 	c := Config{Port: os.Getenv("CORE_PORT"), Certificate: os.Getenv("CORE_TLS_CERT_FILE"), Key: os.Getenv("CORE_TLS_KEY_FILE"), Issuer: os.Getenv("CHAT_ISSUER_URL"), Audience: os.Getenv("CHAT_AUDIENCE"), CAFile: os.Getenv("CHAT_CA_FILE")}
+	c.RequestTimeout = 30 * time.Second
+	if value := os.Getenv("CHAT_REQUEST_TIMEOUT"); value != "" {
+		var err error
+		c.RequestTimeout, err = time.ParseDuration(value)
+		if err != nil || c.RequestTimeout < time.Second || c.RequestTimeout > time.Minute {
+			return Config{}, ErrConfig
+		}
+	}
 	if c.Port == "" {
 		c.Port = "5002"
 	}

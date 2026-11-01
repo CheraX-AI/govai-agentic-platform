@@ -39,13 +39,46 @@ on validated JWT citizen/email claims and performs no profile/database lookup.
 
 ## Current GA-65 limits
 
-No Python adapter or real generated answer exists yet. Runtime uses
-`chat.Unavailable`, so a valid authenticated question returns **503 chat_unavailable**.
-A successful 200 response is proven only with an injected synthetic test agent.
-Never return a hard-coded government answer as fallback. GA-66 must confirm the
-FastAPI endpoint, payload, response/citation fields and service-authentication
-contract before wiring a configured HTTP adapter. GA-67 extends response/error
-processing and actual failure evidence. Do not mark GA-23 fully integrated/Done.
+An opt-in HTTP adapter is implemented and tested against synthetic HTTP/TLS agents.
+The real Python agent is not ready and its contract is not confirmed. By default
+`KNOWLEDGE_AGENT_ENABLED=false`, so valid authenticated questions still return
+**503 chat_unavailable**. No government answer or citation is fabricated.
+GA-66 live integration and GA-23 completion remain pending.
+
+## GA-66 provisional transport configuration
+
+The proposed upstream POST payload is exactly `{"message":"..."}` and the response
+is `{"answer":"...","sources":[{"title":"...","url":"https://..."}]}`.
+Missing/null sources normalize to `[]`. Confirm these fields and the exact endpoint
+with the Python owner before enabling; no Python files were changed.
+
+- `CHAT_REQUEST_TIMEOUT`: total handler budget, default 30s (1s to 1m).
+- `KNOWLEDGE_AGENT_ENABLED`: false by default; true enables the adapter.
+- `KNOWLEDGE_AGENT_URL`: exact server-configured POST endpoint, including path.
+  No query, fragment, user information, redirects or caller-selected destinations.
+- `KNOWLEDGE_AGENT_TIMEOUT`: default 20s; at least 1s and less than the handler budget.
+- `KNOWLEDGE_AGENT_AUTH_MODE`: explicit `bearer` for remote HTTPS services;
+  `KNOWLEDGE_AGENT_BEARER_TOKEN` is a separate service credential, never a citizen
+  access/refresh token. This mechanism must be agreed with the Python owner.
+- `KNOWLEDGE_AGENT_CA_FILE`: optional PEM trust roots for the agent's certificate;
+  certificate and hostname verification remain enabled.
+- `none` authentication is restricted to literal loopback IPs. Plain HTTP additionally
+  requires `KNOWLEDGE_AGENT_ALLOW_LOOPBACK_HTTP=true`, only for isolated local tests.
+  Never send service credentials over HTTP.
+
+The adapter forwards only the validated question. Cookies and citizen identity
+headers are not forwarded. It disables redirects, compression and proxy inheritance,
+uses bounded responses and connections, and performs no application retries.
+Upstream 429/5xx or connection failures return safe 503 errors; malformed/unexpected
+responses return 502; deadlines return 504. Logs exclude question/answer content
+and credentials. Source URL checks do not prove source authenticity.
+
+Synthetic tests cover multilingual payloads, service authentication, exact routing,
+redirect rejection, cancellation, timeouts, untrusted TLS, response bounds,
+malformed/duplicate fields, and source preservation. These are mock transport tests,
+not evidence of successful real-agent or web/mobile integration. Keep the adapter
+disabled until the contract, endpoint, TLS and service authentication are confirmed.
+GA-67 response/error acceptance and actual running-agent checks remain separate.
 
 The endpoint accepts bearer access tokens. Existing web HttpOnly cookie sessions
 are owned by auth-service; they intentionally do not authenticate at this separate

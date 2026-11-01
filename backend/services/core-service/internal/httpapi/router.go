@@ -19,12 +19,22 @@ import (
 func fail(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": message, "code": code})
 }
-func NewRouter(verifier *authn.Verifier, agent chat.Agent, origins []string, logger *slog.Logger) (*gin.Engine, error) {
+func NewRouter(verifier *authn.Verifier, agent chat.Agent, origins []string, logger *slog.Logger, budgets ...time.Duration) (*gin.Engine, error) {
 	if verifier == nil || agent == nil {
 		return nil, errors.New("invalid chat router dependencies")
 	}
 	if logger == nil {
 		logger = slog.Default()
+	}
+	budget := 30 * time.Second
+	if len(budgets) > 1 {
+		return nil, errors.New("invalid chat timeout")
+	}
+	if len(budgets) == 1 {
+		budget = budgets[0]
+	}
+	if budget < time.Second || budget > time.Minute {
+		return nil, errors.New("invalid chat timeout")
 	}
 	origins = append([]string(nil), origins...)
 	router := gin.New()
@@ -56,7 +66,7 @@ func NewRouter(verifier *authn.Verifier, agent chat.Agent, origins []string, log
 		}
 		requestID = hex.EncodeToString(id[:])
 		c.Header("X-Request-ID", requestID)
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), budget)
 		defer cancel()
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
@@ -131,7 +141,10 @@ func NewRouter(verifier *authn.Verifier, agent chat.Agent, origins []string, log
 			}
 		}
 		controller := http.NewResponseController(c.Writer)
-		deadline, _ := c.Request.Context().Deadline()
+		deadline := time.Now().Add(10 * time.Second)
+		if parent, ok := c.Request.Context().Deadline(); ok && parent.Before(deadline) {
+			deadline = parent
+		}
 		if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			fail(c, 503, "chat_unavailable", "Chat temporarily unavailable.")
 			return
@@ -155,6 +168,8 @@ func NewRouter(verifier *authn.Verifier, agent chat.Agent, origins []string, log
 		if err != nil || ctx.Err() != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				fail(c, 504, "chat_timeout", "Chat request timed out.")
+			} else if errors.Is(err, chat.ErrResponse) {
+				fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")
 			} else {
 				fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
 			}
