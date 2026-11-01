@@ -47,6 +47,14 @@ type Store interface {
 	FinishRefresh(context.Context, string, postgres.WebSnapshot, postgres.WebCredentials) error
 	Terminate(context.Context, string) error
 }
+
+// FencedStore is required when account-wide password recovery is enabled.
+// The marker must be captured before any provider password-login call.
+type FencedStore interface {
+	AuthenticationMark(context.Context) (int64, error)
+	CreateFenced(context.Context, postgres.WebCredentials, time.Time, int64) (string, error)
+}
+
 type RevocationStore interface {
 	TerminateQueued(context.Context, string) (string, error)
 	CompleteRevocation(context.Context, string) error
@@ -73,6 +81,15 @@ func New(l Login, r Rotation, v login.AccessVerifier, p login.ProfileLookup, sto
 func (s *Service) Start(ctx context.Context, request login.Request) (Started, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	var marker int64
+	fenced, guarded := s.store.(FencedStore)
+	if guarded {
+		var err error
+		marker, err = fenced.AuthenticationMark(ctx)
+		if err != nil || marker <= 0 {
+			return Started{}, ErrUnavailable
+		}
+	}
 	issued, err := s.login.Login(ctx, request)
 	if err != nil {
 		if errors.Is(err, login.ErrFailed) {
@@ -106,7 +123,12 @@ func (s *Service) Start(ctx context.Context, request login.Request) (Started, er
 		accessExpiry = claims.Expires
 	}
 	c := postgres.WebCredentials{Issuer: claims.Issuer, Subject: claims.Subject, AccessToken: issued.Token, RefreshToken: issued.RefreshToken, CSRF: csrf, AccessUntil: accessExpiry.Unix(), RefreshUntil: refreshExpiry.Unix()}
-	raw, err := s.store.Create(ctx, c, expires)
+	var raw string
+	if guarded {
+		raw, err = fenced.CreateFenced(ctx, c, expires, marker)
+	} else {
+		raw, err = s.store.Create(ctx, c, expires)
+	}
 	if err != nil || ctx.Err() != nil {
 		return Started{}, ErrUnavailable
 	}

@@ -54,6 +54,14 @@ func NewRouterWithWeb(registration *RegistrationHandler, login *LoginHandler, pr
 }
 
 func configuredWebRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler, protected *Protected, web *WebSessionHandler, sessionHandlers ...*NativeSessionHandler) *gin.Engine {
+	return configuredRecoveryRouter(logger, origins, h, login, protected, web, nil, sessionHandlers...)
+}
+
+func NewRouterWithRecovery(registration *RegistrationHandler, login *LoginHandler, protected *Protected, sessions *NativeSessionHandler, web *WebSessionHandler, recovery *RecoveryHandler, origins ...string) *gin.Engine {
+	return configuredRecoveryRouter(slog.Default(), origins, registration, login, protected, web, recovery, sessions)
+}
+
+func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *RegistrationHandler, login *LoginHandler, protected *Protected, web *WebSessionHandler, recovery *RecoveryHandler, sessionHandlers ...*NativeSessionHandler) *gin.Engine {
 	var sessions *NativeSessionHandler
 	if len(sessionHandlers) > 0 {
 		sessions = sessionHandlers[0]
@@ -97,6 +105,10 @@ func configuredWebRouter(logger *slog.Logger, origins []string, h *RegistrationH
 		c.Next()
 	})
 	router.Use(func(c *gin.Context) {
+		if recovery != nil && recovery.isPath(c.Request.URL.Path) {
+			recovery.cors(c)
+			return
+		}
 		if web != nil && web.isPath(c.Request.URL.Path) {
 			web.cors(c)
 			return
@@ -168,6 +180,10 @@ func configuredWebRouter(logger *slog.Logger, origins []string, h *RegistrationH
 		router.GET("/api/v1/web/csrf", web.CSRF)
 		router.POST("/api/v1/web/refresh", web.Refresh)
 		router.POST("/api/v1/web/logout", web.Logout)
+	}
+	if recovery != nil {
+		router.POST("/api/v1/auth/forgot-password", recovery.Request)
+		router.POST("/api/v1/auth/reset-password", recovery.Reset)
 	}
 	router.GET("/health", health)
 	router.GET("/api/health", health)

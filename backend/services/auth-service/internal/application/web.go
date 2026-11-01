@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func Web(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgres.Store) (*handler.WebSessionHandler, func(), error) {
+func Web(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgres.Store, fenceKeys ...[]byte) (*handler.WebSessionHandler, func(), error) {
 	if !c.Enabled || profiles == nil || !c.Provider.EnableRefresh || postgres.WebSessionsReady(ctx, pool) != nil {
 		return nil, nil, websession.ErrUnavailable
 	}
@@ -39,7 +39,27 @@ func Web(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgr
 	if err != nil {
 		return fail()
 	}
-	service, err := websession.New(l, rotation, provider, profiles, bound, c.Lifetime)
+	var sessionStore websession.Store = bound
+	if len(fenceKeys) == 0 {
+		var installed bool
+		if pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.govai_auth_migrations WHERE version=6)").Scan(&installed) != nil || installed {
+			return fail()
+		}
+	}
+	if len(fenceKeys) > 1 {
+		return fail()
+	}
+	if len(fenceKeys) == 1 {
+		if postgres.RecoveryReady(ctx, pool) != nil {
+			return fail()
+		}
+		guarded, err := postgres.NewRecoveryWebStore(bound, fenceKeys[0])
+		if err != nil {
+			return fail()
+		}
+		sessionStore = guarded
+	}
+	service, err := websession.New(l, rotation, provider, profiles, sessionStore, c.Lifetime)
 	if err != nil {
 		return fail()
 	}

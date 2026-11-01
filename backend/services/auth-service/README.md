@@ -75,6 +75,246 @@ No complete production-security or full-story completion claim is made.
 Commit source, tests, contracts, module checksums and reproducible setup files.
 Keep real environment files, tokens, private keys, exports, dumps, logs and local
 state outside Git. Frontend/mobile/Python/RAG files belong to their teammates.
+## GA-91 password recovery — in progress
+
+Agreed UI: enter old/new NIC, receive a reset link at the registered verified
+email, display a masked email, and submit the new password in the custom app.
+Masked email intentionally reveals account existence/domain and up to two local
+characters; short local parts are entirely masked. NIC is self-declared, never
+proof authorizing password changes. Email-access-loss recovery stays deferred.
+
+Implemented components:
+
+- `internal/recovery`: redacted 256-bit tokens, canonical parsing, hash-only storage
+  boundary, transient password wrapper, masked-email helper and injected service.
+- `internal/postgres`: optional migrations 004/005/006, immutable email/operation binding and one-way atomic token claims with
+  database expiry; HMAC NIC lookup joins saved issuer/subject/operation ownership.
+- `internal/keycloak/recovery.go`: saved-operation ownership and enabled/verified
+  checks before recipient lookup, password update and separate session logout.
+
+Service request order: lookup -> verified recipient -> challenge issue -> mail.
+The configured HTTPS link carries the token in its fragment. Frontend must read
+and remove the fragment, then submit the token in an HTTPS body; this backend does
+not yet provide that page. Challenge metadata uses a dedicated HMAC key to bind
+email and saved identity/operation. Reset claims first, rechecks the email binding,
+revokes local sessions, resets the password, logs out provider sessions, fences local sessions again and records
+completion. Unknown results stay spent/attention and must not retry the mutation.
+SMTP failure attempts to invalidate the token; storage failure can prevent cleanup.
+
+Verification: offline tests/vet and focused race checks passed. Real disposable
+PostgreSQL tests passed expiry, migration replay, one winner across twenty claims,
+replay rejection, permissions, old/new NIC and issuer/profile isolation. Synthetic
+HTTPS/service tests passed ownership/account-state checks, payload/redaction,
+callback restrictions, changed-email rejection, ordering and dependency failures.
+
+Remaining before local activation: backup and review the local rollout; ensure all web instances use the guard. Operational storage/provider-outage reconciliation and deployed shared rate enforcement remain limitations. Offline JWTs may still
+last until expiry. Migrations 004/005/006 are now applied to the local application database after explicit approval; recovery endpoints are enabled over HTTPS. No existing user password was changed during rollout.
+API reference: https://www.keycloak.org/docs-api/26.8.1/rest-api/index.html
+Recovery adapter evidence: a hash row and immutable operation/email-tag row commit
+in one transaction. The service challenge adapter requires metadata on claim;
+legacy hash-only rows cannot authorize service resets. Real PostgreSQL race tests
+passed binding round-trip, concurrent claim/replay and denied runtime metadata
+updates/deletes. The Keycloak provider wrapper fixes issuer to its configured realm.
+
+`recovery.SMTPMailer` submits text emails without logging/persisting bearer links.
+Remote servers require verified TLS 1.2+ STARTTLS; explicit plaintext development
+mode accepts literal loopback addresses only and prohibits authentication. Synthetic
+SMTP tests passed plaintext-loopback/trusted-TLS delivery, certificate rejection,
+STARTTLS downgrade rejection, cancellation and header-input checks. These are not
+yet live Mailpit or combined recovery lifecycle evidence. A post-DATA QUIT failure
+does not retry an already accepted message. SMTP outcome ambiguity still requires
+the pending durable recovery policy before enabling the route.
+Recovery-aware web sessions: optional migration 006 stores HMAC identity cutoffs
+and immutable cookie/login-order bindings. `RecoveryWebStore` rejects legacy
+unbound cookies and direct unfenced creation. `websession.Start` detects this
+store and captures a database sequence mark before calling provider login.
+Identity-scoped transaction locks serialize reset cutoffs with cookie binding
+and refresh completion. Load/CSRF/refresh check the cutoff; physical ciphertext
+cleanup is separate. A second cutoff after provider reset/logout rejects logins
+that started during the reset window. New logins after the final cutoff work.
+
+All instances must use the same dedicated stable fence key and guarded store before
+recovery routes are enabled. Mixed old/new instances can bypass revocation; enabling
+the guard requires re-login for existing cookies. This is implemented but not wired
+into local application composition/configuration. It does not invalidate offline
+bearer JWTs or replace Keycloak logout. Isolated PostgreSQL race tests passed
+cross-pool cutoff persistence, pending-login rejection, refresh/reset races,
+identity isolation and legacy-cookie rejection. Web service tests confirm the
+marker precedes password login and marker failure prevents the provider call.
+### Recovery HTTP contract (opt-in runtime implemented; approved local setup enabled)
+
+Paths registered only when recovery is explicitly enabled:
+
+| Method/path | JSON body | Success |
+|---|---|---|
+| POST `/api/v1/auth/forgot-password` | `nic` | 202: `status: received`; matching accounts additionally return `masked_email` |
+| POST `/api/v1/auth/reset-password` | `token`, `new_password`, `confirm_password` | 204 with no body |
+
+Direct HTTPS and application/json are required. Unknown/duplicate/missing/wrong-type
+fields, trailing JSON, invalid Unicode and oversized bodies are rejected. The
+4096-byte request cap preserves bounded password/token input. Password confirmation
+and local minimum bounds run before the token can be claimed; Keycloak enforces
+its actual password policy. Recovery handlers return no cookies or raw credentials,
+set no-store/no-cache/no-referrer and return only fixed error codes.
+
+`NewLocalRecoveryHandler` configures 5/IP/15m plus one attempt/NIC/minute for request
+and resend, and 10/IP/15m plus three attempts/token/15m for reset. Unknown accounts
+also consume NIC cooldown. Counters are HMAC keyed, bounded to 4096 entries and
+four concurrent requests per limiter. Only the direct socket source is trusted;
+forwarded headers do not bypass limits. A limited request returns 429 and
+`Retry-After` in seconds. These limits are process-local and reset on restart.
+Browser Origins must match the configured web origin. Recovery CORS permits only
+POST and Content-Type, exposes Retry-After/X-Request-ID and does not grant credentialed CORS. Postman requests may omit Origin.
+
+Handler race tests passed HTTPS/origin/media boundaries, parsing, confirmation,
+Unicode preservation, safe errors/panic handling, NIC normalization/cooldown and
+IP/token limits. A 400 `invalid_or_expired_reset` is used for rejected challenges;
+503 `recovery_unavailable` does not prove that no provider mutation occurred.
+Unknown outcomes must not trigger automatic credential replay. Local Postman status evidence is now confirmed below; isolated combined evidence remains recorded separately.
+### Isolated combined recovery evidence — 2026-11-01
+
+`TestRecoveryLive` uses a fresh labelled Keycloak 26.8.1/Mailpit pair, private CA,
+loopback-only HTTP/SMTP ports and a newly created PostgreSQL test database. Its
+setup/observer is separate from the scoped registration/recovery actor; no broad
+manage-users role is granted to that actor. Existing GovAI users/settings and the
+existing application database are never targeted. The new SQL database is removed
+on completion; test containers stop and their volumes/TLS state remain private.
+Historical FAIL_UNSAFE group-authority verdicts are unchanged.
+
+Final live run passed: actual registration and email verification, HTTP forgot
+request/masked response, real Go SMTP/Mailpit reset-link delivery, persisted bound
+token, HTTP reset 204, old password rejection/new password login, rejected old
+provider refresh and guarded web cookie, confirmation/reuse/expiry rejection,
+changed-email rejection without password mutation, real Keycloak password-policy
+rejection, resend cooldown, unknown NIC response, and SMTP failure with spent
+challenge. Structured logs contained no captured messages. The first run used an
+incorrect expected HTTP status for the upstream token endpoint; correcting that
+assertion to OAuth invalid_grant/400 was necessary, not a password implementation
+change. The final expanded run also included SMTP failure and live resend cases.
+
+Reproduce from the auth-service directory (Docker and private development SQL
+settings required; creates isolated resources):
+
+```powershell
+$env:GA91_RECOVERY_LIVE = '1'
+$env:GA91_RECOVERY_STATE_DIR = Join-Path $env:TEMP ('govai-ga91-recovery-' + [guid]::NewGuid().ToString('N'))
+try {
+    go test ./internal/permissionlab -run '^TestRecoveryLive$' -count=1 -v
+} finally {
+    Remove-Item Env:\GA91_RECOVERY_LIVE,Env:\GA91_RECOVERY_STATE_DIR -ErrorAction SilentlyContinue
+}
+```
+
+The state directory must be new and outside Git; it contains private TLS material.
+The recovery harness alone publishes its Mailpit SMTP port to literal loopback;
+other harness modes keep their previous port configuration. Ordinary tests skip
+this live test. A dummy HTTPS reset-page URL is inspected, never opened; real
+frontend/deep-link navigation remains pending. The test exercises real guarded SQL
+session storage, not a complete browser application or mobile UI. Offline access
+JWT lifetime and accepted group-wide administrative authority remain limitations.
+Unknown provider results and database outages still require operational recovery;
+SMTP failure here is a closed local port, not every possible delivery ambiguity.
+Runtime composition/configuration and route wiring are implemented and tested;
+the approved local rollout below applied the optional migrations and enabled the routes.
+### Runtime rollout (approved and applied locally on 2026-11-01)
+
+`cmd/api` loads ignored `.env.recovery` before other local files. Defaults keep
+recovery disabled. Enabling it requires registration/admin and web configuration,
+the same issuer, API TLS, independent 32-byte base64 binding/fence/rate keys, an
+HTTPS reset-page URL and approved web origin, and SMTP settings. See placeholders
+in `.env.example`. Secrets are never supplied by public requests or printed.
+Missing checksummed migrations or unsafe configuration prevent startup.
+
+Before a separately approved rollout, stop the API, take a private SQL backup and
+preserve existing environment keys. Explicit commands (from this service directory):
+
+```powershell
+go run ./cmd/db migrate-recovery
+go run ./cmd/db check-recovery
+```
+
+Migrate-recovery adds optional migrations 004/005/006, preserving existing users,
+profiles and passwords. Migration 006 **revokes existing active/refreshing browser
+cookies once**. Enabling the guard rejects unbound cookies; users must log in again.
+It uses the same stable fence key on every instance. `RECOVERY_ENABLED=false`
+disables only reset routes while a configured fence key keeps the guard active.
+Once migration 006 exists, web startup without that key fails closed. Do not remove
+or regenerate the key or deploy a mixture of guarded and old instances as rollback.
+To stop offering recovery, disable the routes and preserve guarded session handling.
+Recovery-aware metadata cascades when an owner-authorized web-session cleanup
+removes an expired parent; normal application roles cannot delete these rows.
+
+The existing Mailpit container has only its inbox port published. A separate,
+pinned, persistent reset-email sink is prepared so existing messages/container and
+Keycloak verification SMTP settings stay untouched. From the repository root:
+
+```powershell
+docker compose -f backend/dev/keycloak/compose.recovery-mail.yaml up -d
+```
+
+It uses the built-in bridge (no new default address-pool allocation), SMTP on
+127.0.0.1:1026 and reset inbox http://localhost:8026. Set recovery SMTP host to
+127.0.0.1, port 1026, from noreply@govai.test, explicit dev plaintext true, no auth.
+The original Keycloak verification inbox remains on 8025. Do not confuse the two.
+The frontend reset page is not implemented here: local Postman tests can extract
+the fragment token from the emailed link without pretending a working UI exists.
+
+Latest checks: runtime config/redaction, disabled-route guard retention, route/CORS,
+SQL readiness, full offline tests/vet and focused race suites passed. The updated
+live harness also passed application recovery/guarded-web composition and all
+previous lifecycle assertions. Repeated retained test bridges exhausted Docker's
+default allocation pool; recovery-mode tests now use a fresh explicit /28 bridge,
+with loopback-only published ports, preserving old resources. One intermediate
+internal-network attempt did not expose the host test ports; the final bridge
+configuration passed. Other historical harness modes retain their previous setup.
+The user explicitly approved local activation after the preparation checks. A private
+custom-format SQL backup restored into a separate isolated verification database;
+profile and registration-journal fingerprints matched both backup and current data.
+The verification database was removed afterward. Migrations 004/005/006 applied;
+private recovery settings and key backup remain ignored. Existing users/passwords
+were preserved; legacy browser sessions were revoked as documented. No commit/push occurred.
+### Current local verification and next manual test
+
+API runs on https://localhost:5001 with recovery and guarded browser sessions.
+`go run ./cmd/dev-auth recovery-check` checks fixed loopback readiness, invalid
+recovery bodies and local-origin CORS using the trusted CA; it never sends a real
+NIC/password/token or reads email contents. That check, login/session boundary
+checks, SQL recovery readiness and the reset inbox API passed after rollout.
+Existing GovAI inspection still reported five users. Full password-reset behavior is exercised by the isolated live harness. The user also completed local Postman reset/login/reuse checks below.
+
+Send POST https://localhost:5001/api/v1/auth/forgot-password with application/json
+and `nic` set to a registered, email-verified test account's NIC. A matching ready
+profile returns 202 with masked_email; unknown accounts return received without a
+mask. Check reset inbox http://localhost:8026. Its link currently points to the
+configured local `/reset-password` URL; there is no frontend reset page here yet.
+For Postman, copy the fragment token into the reset JSON body's token field and
+submit new_password plus confirm_password to the reset endpoint. Never share the
+link/token or add credentials to tracked Postman examples. Existing Keycloak
+verification emails continue using the separate inbox on 8025. Real frontend/mobile
+link navigation and deployed abuse controls remain pending.
+### Local Postman results — 2026-11-01
+
+The saved synthetic sample initially had an unverified email, so recovery returned
+503 under the current fail-closed eligibility policy. `dev-auth recovery-sample-check`
+reads only metadata for that exact generated test account. The explicit
+`dev-auth recovery-sample-verification` action sent a fresh verification message
+through Keycloak to its local inbox; it did not mark email verified or change a
+password. The user completed verification before retrying.
+
+Afterward, the user reported and agent-owned API request metadata confirmed:
+
+| Request | Status |
+|---|---|
+| POST /api/v1/auth/forgot-password | 202 |
+| POST /api/v1/auth/reset-password | 204 |
+| POST /api/v1/auth/login with the new password | 200 |
+| POST /api/v1/auth/reset-password using the same token again | 400 |
+
+The exact 400 response-body code was not independently collected from the manual
+request; deterministic and isolated live tests separately verify replay rejection.
+No real user's password, raw reset token, link or credential payload was collected.
+This manual test does not establish real web/mobile UI or deep-link integration,
+distributed rate enforcement or production disaster-recovery readiness.
 ## Files and their purpose
 
 | File | What and why |

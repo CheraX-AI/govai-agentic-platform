@@ -136,7 +136,7 @@ func connect(ctx context.Context, root string, out io.Writer) *localAdmin {
 
 // Run never targets a supplied remote URL or realm and never emits credentials.
 func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
-	if mode != "inspect" && mode != "configure" && mode != "check" && mode != "smoke" && mode != "configure-login" && mode != "login-check" && mode != "configure-authorization" && mode != "authorization-check" && mode != "configure-sessions" && mode != "sessions-check" {
+	if mode != "inspect" && mode != "configure" && mode != "check" && mode != "smoke" && mode != "configure-login" && mode != "login-check" && mode != "configure-authorization" && mode != "authorization-check" && mode != "configure-sessions" && mode != "sessions-check" && mode != "recovery-check" && mode != "recovery-sample-check" && mode != "recovery-sample-verification" {
 		return ErrSetup
 	}
 	defer func() {
@@ -180,6 +180,15 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	}
 	if mode == "configure-sessions" {
 		return a.configureSessions(ctx, root)
+	}
+	if mode == "recovery-sample-verification" {
+		return a.recoverySampleCheck(ctx, root, true)
+	}
+	if mode == "recovery-sample-check" {
+		return a.recoverySampleCheck(ctx, root)
+	}
+	if mode == "recovery-check" {
+		return a.recoveryCheck(ctx)
 	}
 	if mode == "sessions-check" {
 		return a.sessionsCheck(ctx)

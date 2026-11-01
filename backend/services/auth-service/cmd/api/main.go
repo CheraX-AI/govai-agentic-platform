@@ -27,6 +27,9 @@ func main() {
 }
 
 func run() error {
+	if err := config.LoadLocalEnv(".env.recovery"); err != nil {
+		return err
+	}
 	if err := config.LoadLocalEnv(".env.web"); err != nil {
 		return err
 	}
@@ -72,7 +75,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	tlsEnabled := regCfg.Enabled || loginCfg.Enabled || authorizationCfg.Enabled || webCfg.Enabled
+	recoveryCfg, err := config.LoadRecovery(regCfg, webCfg)
+	if err != nil {
+		return err
+	}
+	tlsEnabled := regCfg.Enabled || loginCfg.Enabled || authorizationCfg.Enabled || webCfg.Enabled || recoveryCfg.Enabled
 	var apiTLS *tls.Config
 	if tlsEnabled {
 		cert, err := tls.LoadX509KeyPair(os.Getenv("API_TLS_CERT_FILE"), os.Getenv("API_TLS_KEY_FILE"))
@@ -132,18 +139,32 @@ func run() error {
 	var webHandler *handler.WebSessionHandler
 	if webCfg.Enabled {
 		var closeWeb func()
-		webHandler, closeWeb, err = application.Web(ctx, webCfg, pool, store)
+		var fenceKeys [][]byte
+		if len(recoveryCfg.FenceKey) > 0 {
+			fenceKeys = append(fenceKeys, recoveryCfg.FenceKey)
+		}
+		webHandler, closeWeb, err = application.Web(ctx, webCfg, pool, store, fenceKeys...)
 		if err != nil {
 			return err
 		}
 		defer closeWeb()
 		slog.Info("web session routes enabled with HTTPS")
 	}
-	router := handler.NewRouterWithWeb(registrationHandler, loginHandler, protected, sessionHandler, webHandler, cfg.CORSOrigins...)
+	var recoveryHandler *handler.RecoveryHandler
+	if recoveryCfg.Enabled {
+		var closeRecovery func()
+		recoveryHandler, closeRecovery, err = application.Recovery(ctx, recoveryCfg, regCfg, webCfg, pool, store)
+		if err != nil {
+			return err
+		}
+		defer closeRecovery()
+		slog.Info("password recovery routes enabled with HTTPS and guarded web sessions")
+	}
+	router := handler.NewRouterWithRecovery(registrationHandler, loginHandler, protected, sessionHandler, webHandler, recoveryHandler, cfg.CORSOrigins...)
 	if pool != nil {
 		router.GET("/api/ready", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")
-			if postgres.Ready(c.Request.Context(), pool) != nil || (webCfg.Enabled && postgres.WebSessionsReady(c.Request.Context(), pool) != nil) {
+			if postgres.Ready(c.Request.Context(), pool) != nil || (webCfg.Enabled && postgres.WebSessionsReady(c.Request.Context(), pool) != nil) || (len(recoveryCfg.FenceKey) > 0 && postgres.RecoveryReady(c.Request.Context(), pool) != nil) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
 				return
 			}

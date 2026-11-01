@@ -17,10 +17,10 @@ func main() {
 	}
 }
 func run() error {
-	if len(os.Args) != 2 || (os.Args[1] != "migrate" && os.Args[1] != "check" && os.Args[1] != "migrate-web" && os.Args[1] != "check-web" && os.Args[1] != "prune-web" && os.Args[1] != "prune-web-jobs") {
-		return fmt.Errorf("usage: go run ./cmd/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs")
+	if len(os.Args) != 2 || (os.Args[1] != "migrate" && os.Args[1] != "check" && os.Args[1] != "migrate-web" && os.Args[1] != "check-web" && os.Args[1] != "prune-web" && os.Args[1] != "prune-web-jobs" && os.Args[1] != "migrate-recovery" && os.Args[1] != "check-recovery") {
+		return fmt.Errorf("usage: go run ./cmd/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|migrate-recovery|check-recovery")
 	}
-	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web"
+	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
 	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"
 	if isPrivileged && config.LoadLocalEnv(".env.database-admin") != nil {
 		return postgres.ErrStore
@@ -43,6 +43,10 @@ func run() error {
 		err = postgres.Migrate(ctx, p)
 	} else if os.Args[1] == "migrate-web" {
 		err = postgres.MigrateWebSessions(ctx, p)
+	} else if os.Args[1] == "migrate-recovery" {
+		err = postgres.MigrateRecoverySessions(ctx, p)
+	} else if os.Args[1] == "check-recovery" {
+		err = postgres.RecoveryReady(ctx, p)
 	} else if os.Args[1] == "check-web" {
 		err = postgres.WebSessionsReady(ctx, p)
 	} else if os.Args[1] == "prune-web" {

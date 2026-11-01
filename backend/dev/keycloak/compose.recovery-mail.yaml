@@ -1,0 +1,17 @@
+# Standalone, optional GA-91 reset-mail sink; existing Keycloak Mailpit is untouched.
+name: govai-recovery-mail
+services:
+  mailpit:
+    network_mode: bridge
+    image: axllent/mailpit@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_QUIET: "true"
+    ports:
+      - "127.0.0.1:1026:1025"
+      - "127.0.0.1:8026:8025"
+    volumes:
+      - recovery_mail_data:/data
+    restart: unless-stopped
+volumes:
+  recovery_mail_data:

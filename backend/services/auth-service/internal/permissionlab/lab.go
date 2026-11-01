@@ -48,6 +48,7 @@ type lab struct {
 	out                          io.Writer
 	unsafe                       bool
 	mailBase                     string
+	mailSMTPPort                 int
 }
 
 func randomID() string {
@@ -130,16 +131,34 @@ func runWithScenario(ctx context.Context, stateDir string, out io.Writer, mode s
 		fmt.Fprintln(out, "LAB_DOCKER BLOCKED")
 		return err
 	}
-	if _, err = docker(ctx, nil, "network", "create", "--label", label+"="+id, network); err != nil {
+	networkArgs := []string{"network", "create", "--label", label + "=" + id}
+	if mode == "recovery" {
+		// Retained historical /16 test networks can exhaust Docker's default
+		// pool. A small explicit bridge subnet avoids deleting old resources.
+		octets, err := hex.DecodeString(id[:4])
+		if err != nil {
+			return errSafe
+		}
+		networkArgs = append(networkArgs, "--subnet", fmt.Sprintf("10.252.%d.%d/28", octets[0], octets[1]&240))
+	}
+	networkArgs = append(networkArgs, network)
+	if _, err = docker(ctx, nil, networkArgs...); err != nil {
+		fmt.Fprintln(out, "LAB_NETWORK BLOCKED")
 		return err
 	}
 	mailName, mailVolume, mailBase := "", "", ""
+	mailSMTPPort := 0
 	if mode != "baseline" {
 		mailName, mailVolume = "ga48-permission-mail-"+id, "ga48-permission-mail-data-"+id
 		if _, err = docker(ctx, nil, "volume", "create", "--label", label+"="+id, mailVolume); err != nil {
 			return err
 		}
-		if _, err = docker(ctx, nil, "run", "-d", "--name", mailName, "--label", label+"="+id, "--network", network, "--network-alias", "lab-mail", "--publish", "127.0.0.1::8025", "--mount", "type=volume,source="+mailVolume+",target=/data", "--env", "MP_DATABASE=/data/mailpit.db", "--env", "MP_QUIET=true", mailImage); err != nil {
+		mailArgs := []string{"run", "-d", "--name", mailName, "--label", label + "=" + id, "--network", network, "--network-alias", "lab-mail", "--publish", "127.0.0.1::8025", "--mount", "type=volume,source=" + mailVolume + ",target=/data", "--env", "MP_DATABASE=/data/mailpit.db", "--env", "MP_QUIET=true"}
+		if mode == "recovery" {
+			mailArgs = append(mailArgs, "--publish", "127.0.0.1::1025")
+		}
+		mailArgs = append(mailArgs, mailImage)
+		if _, err = docker(ctx, nil, mailArgs...); err != nil {
 			return err
 		}
 		defer stopContainer(out, mailName)
@@ -152,6 +171,16 @@ func runWithScenario(ctx context.Context, stateDir string, out io.Writer, mode s
 			return errSafe
 		}
 		mailBase = fmt.Sprintf("http://127.0.0.1:%d", port)
+		if mode == "recovery" {
+			sp, err := docker(ctx, nil, "inspect", "--format", `{{(index (index .NetworkSettings.Ports "1025/tcp") 0).HostPort}}`, mailName)
+			if err != nil {
+				return errSafe
+			}
+			mailSMTPPort, err = strconv.Atoi(strings.TrimSpace(string(sp)))
+			if err != nil || mailSMTPPort < 1 || mailSMTPPort > 65535 {
+				return errSafe
+			}
+		}
 	}
 	// Separate bridge network/storage; Mailpit exists only for opted-in modes.
 	args := []string{"run", "-d", "--name", name, "--label", label + "=" + id, "--network", network, "--publish", "127.0.0.1::8443", "--mount", "type=volume,source=" + volume + ",target=/opt/keycloak/data", "--mount", "type=bind,source=" + stateDir + ",target=/lab,readonly", "--env", "KC_BOOTSTRAP_ADMIN_CLIENT_ID=lab-observer", "--env", "KC_BOOTSTRAP_ADMIN_CLIENT_SECRET", image, "start-dev", "--http-enabled=false", "--hostname-strict=false", "--https-certificate-file=/lab/server.pem", "--https-certificate-key-file=/lab/server-key.pem", "--features=admin-fine-grained-authz:v2", "--log-level=OFF", "--http-access-log-enabled=false"}
@@ -180,6 +209,7 @@ func runWithScenario(ctx context.Context, stateDir string, out io.Writer, mode s
 	defer transport.CloseIdleConnections()
 	l := &lab{base: fmt.Sprintf("https://localhost:%d", port), realm: "ga48-permission-" + id, other: "ga48-other-" + id, out: out, client: &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	l.mailBase = mailBase
+	l.mailSMTPPort = mailSMTPPort
 	ready := false
 	for i := 0; i < 120; i++ {
 		token, e := l.token(ctx, "master", "lab-observer", secret)
@@ -211,7 +241,7 @@ func runWithScenario(ctx context.Context, stateDir string, out io.Writer, mode s
 	if err != nil {
 		return err
 	}
-	if mode == "combined" {
+	if mode == "combined" || mode == "recovery" {
 		if l.unsafe {
 			fmt.Fprintln(out, "LAB_COMBINED FAIL")
 			return isolationFailure{}
