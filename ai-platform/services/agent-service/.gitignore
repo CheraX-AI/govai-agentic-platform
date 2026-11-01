@@ -1,0 +1,18 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Test and tool cache
+.pytest_cache/
+
+# LangGraph local server data
+.langgraph_api/
+
+# Environment variables and secrets (keep examples)
+.env
+.env.*
+!.env.example
