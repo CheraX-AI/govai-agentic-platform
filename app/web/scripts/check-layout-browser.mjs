@@ -76,7 +76,7 @@ try {
   const seenAssets = new Set()
 
   const base = 'http://127.0.0.1:5173';
-  await send('Page.navigate', {url: base + '/#/home'});
+  await send('Page.navigate', {url: base + '/#/preview/home'});
   await delay(1000);
   const measurements = [];
   for (const page of ['home', 'recent']) {
@@ -112,22 +112,22 @@ try {
   }
   assert.deepEqual([...seenAssets].sort(), Object.keys(assetSizes).sort(), 'every downloaded shell asset rendered and verified');
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:820,deviceScaleFactor:1,mobile:false});
-  await evaluate('location.hash = "#/home"'); await delay(100);
+  await evaluate('location.hash = "#/preview/home"'); await delay(100);
   const documentNode = (await send('DOM.getDocument')).root.nodeId;
   for (const [selector, expected] of [['.home-hero h1','Inter'],['.header-brand .wordmark','Montserrat'],['.synthetic-user strong','Inter']]) {
     const {nodeId} = await send('DOM.querySelector',{nodeId:documentNode,selector});
     const {fonts} = await send('CSS.getPlatformFontsForNode',{nodeId});
     assert.ok(fonts.some(f=>f.isCustomFont&&f.familyName.includes(expected)&&f.glyphCount>0), `${expected} actually renders ${selector}`);
   }
-  await send('Page.navigate', {url: base + '/#/home'}); await delay(300);
+  await send('Page.navigate', {url: base + '/#/preview/home'}); await delay(300);
   await key('Tab');
   assert.equal(await evaluate('document.activeElement.className'),'skip-link','first keyboard stop is skip link');
   assert.ok(await evaluate('getComputedStyle(document.activeElement).outlineStyle !== "none"'), 'visible keyboard focus');
   await key('Enter');
   assert.equal(await evaluate('document.activeElement.id'),'application-content','skip link focuses content without changing route');
-  await evaluate(`[...document.querySelectorAll('.desktop-sidebar a')].find(a=>a.hash==='#/recent').focus()`);
+  await evaluate(`[...document.querySelectorAll('.desktop-sidebar a')].find(a=>a.hash==='#/preview/recent').focus()`);
   await key('Enter'); await delay(100);
-  assert.equal(await evaluate('location.hash'),'#/recent','desktop keyboard navigation');
+  assert.equal(await evaluate('location.hash'),'#/preview/recent','desktop keyboard navigation');
   await send('Emulation.setDeviceMetricsOverride',{width:375,height:667,deviceScaleFactor:1,mobile:false});
   await delay(100);
   await evaluate('document.querySelector(".menu-toggle").focus()');
@@ -152,10 +152,10 @@ try {
   assert.equal(await evaluate('document.activeElement.className'),'menu-toggle');
   await key(' ');
   assert.ok(await evaluate('document.querySelector("dialog").open'),'Space opens menu');
-  await evaluate(`[...document.querySelectorAll('dialog a')].find(a=>a.hash==='#/home').focus()`);
+  await evaluate(`[...document.querySelectorAll('dialog a')].find(a=>a.hash==='#/preview/home').focus()`);
   await key('Enter');
   await delay(150);
-  assert.equal(await evaluate('location.hash'),'#/home');
+  assert.equal(await evaluate('location.hash'),'#/preview/home');
   assert.equal(await evaluate('document.querySelector("dialog").open'),false);
   assert.equal(await evaluate('document.activeElement.className'),'menu-toggle','focus returns after menu selection');
   await evaluate('document.querySelector(".menu-toggle").click()');
@@ -179,13 +179,13 @@ try {
   await delay(100);
   assert.equal(await evaluate('document.querySelector("dialog").open'),false,'resize closes modal');
   assert.equal(await evaluate('document.activeElement.id'),'application-content','resize focuses visible content');
-  await evaluate(`[...document.querySelectorAll('.desktop-sidebar a')].find(a=>a.hash==='#/recent').click()`);
+  await evaluate(`[...document.querySelectorAll('.desktop-sidebar a')].find(a=>a.hash==='#/preview/recent').click()`);
   await delay(100);
-  assert.equal(await evaluate('location.hash'),'#/recent');
+  assert.equal(await evaluate('location.hash'),'#/preview/recent');
   await evaluate('history.back()');await delay(200);
-  assert.equal(await evaluate('location.hash'),'#/home');
+  assert.equal(await evaluate('location.hash'),'#/preview/home');
   await evaluate('history.forward()');await delay(200);
-  assert.equal(await evaluate('location.hash'),'#/recent');
+  assert.equal(await evaluate('location.hash'),'#/preview/recent');
   await evaluate('location.hash = "#/missing"');await delay(100);
   assert.equal(await evaluate('document.querySelector("h1").textContent'),'Preview unavailable');
   assert.equal(await evaluate('document.title'),'GovAI | Preview unavailable');

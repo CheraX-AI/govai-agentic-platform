@@ -1,5 +1,50 @@
 # GovAI website authentication previews
 
+## GA-53 shared authentication and routing - 1 November 2026
+
+Current routing/session behaviour below supersedes earlier GA-52 checkpoint descriptions of the single demo boolean. All authentication is still explicitly simulated; no backend/Keycloak connection or real authorization exists.
+
+| Route | Behaviour |
+| --- | --- |
+| Empty root, #/login, #/register, #/forgot-password, #/check-email | Public authentication interfaces; preserved mock form behaviour |
+| #/verify-code, #/reset-password | Public recovery UI with its own temporary progression guards; never creates a session |
+| #/app/home, #/app/recent | Protected mock application demonstrations; static GA-51 content reused, no chat functionality |
+| #/preview/home, #/preview/recent | Development-only static previews; no session required, no active-session display or logout control |
+| #/home, #/recent | Development aliases replaced with the corresponding explicit preview URL |
+
+Public forms remain accessible during session checking/errors. Successful DEV mock login starts a synthetic session then uses a strictly allowlisted internal return destination(default protected Home). Anonymous protected requests replace history with Login and an encoded allowed return route. Successful login and logout also use replacement. Checking and error states never mount protected page content. Errors stay distinct from a confirmed anonymous result and offer keyboard-accessible retry/Login navigation. Page titles distinguish protected mock applications from static previews.
+
+One AuthProvider owns checking/authenticated/unauthenticated/error. The development adapter stores only version/kind, fixed synthetic userId and createdAt/expiresAt in sessionStorage key govai.dev.mock-session.v1. Lifetime is15minutes. No passwords, codes, tokens, real personal data, recovery progression or form inputs are persisted. Exact keys/types, identity, bounded timestamps and expiry are validated; malformed/expired records are removed. Valid records restore on refresh in the same tab. Logout clears the marker and shared state. Expiry is checked every250ms and independently on focus, pageshow, visibilitychange and hash navigation, so background/resume and Back cannot retain expired protected content. Asynchronous restoration/results are invalidated when superseded/unmounted.
+
+Production uses a disabled mock adapter: it neither creates nor restores synthetic sessions, reads no mock storage, and never grants protected access. Static preview routes are unavailable. Public forms continue to be truthful mock UI. Real authentication/session contracts and backend-enforced authorization remain GA-54.
+
+Recovery state remains local to routing and independent of AuthProvider/sessionStorage: Email->confirmation; Phone->code->reset, never Home or a session. Leaving or refreshing clears recovery progression, even while a separate valid mock session exists.
+
+### Where future changes belong
+
+| Responsibility | Files |
+| --- | --- |
+| Composition only | src/App.tsx wraps AuthProvider and AppRouter; main.tsx retains the original React mount |
+| Shared auth state and lifecycle | src/auth/AuthProvider.tsx; AuthContext.ts exposes useAuth; types.ts owns the state/adapter contract |
+| Service/storage boundary | src/services/mockAuthAdapter.ts; replace/integrate the adapter under GA-54, with real-session types/contracts agreed then |
+| Route parsing, allowlist, titles, navigation | src/routing/routes.ts |
+| Page selection, login/logout actions and independent recovery progression | src/routing/AppRouter.tsx |
+| Protected boundary | src/auth/ProtectedRoute.tsx withholds content; no production security claim |
+| Standalone screens | src/pages/HomePage.tsx, RecentPage.tsx, AuthStatusPage.tsx, UnavailablePage.tsx; existing auth/recovery pages retain their own files |
+| Shared shell/focus/session notice | src/components/layout/ApplicationPageLayout.tsx and existing ApplicationLayout/Header/Sidebar/ContentContainer; preview/protected links get their own route prefix |
+| Form validation and mock operations | Existing validation/ and services/ modules; no routing/state logic copied into validators or password services |
+
+Home and Recent body content were extracted unchanged from LayoutPreviewPage.tsx. The shared application shell stays mounted while navigating within a route family, preserving menu focus behaviour. No dependencies, fonts or image assets were added.
+
+### Verification
+
+Run npm.cmd run build and npm.cmd run lint on Windows. check-auth-state.mjs tests metadata validation/expiry/removal, storage errors, disabled production adapter and return allowlisting. check-demo-navigation-browser.mjs tests DEV state/routing; add production for built preview on port4173. It covers held startup checking with a DOM no-flash observer, refresh restoration, malformed/expired metadata, checking errors/retry, allowlisted history replacement, mock login/logout/Back, active and independent resume-event expiry, static preview aliases/isolation, keyboard account actions, and production no creation/restoration. Only synthetic sessionStorage is expected; no Fetch/XHR, localStorage, cookies or runtime exceptions.
+
+Affected GA-52 suites cover phone/NIC/email login, registration, Email recovery, code/reset and shared fonts/menu/responsive UI; their session/route expectations were updated rather than retaining assumptions about a memory-only boolean. Existing image framing, recovery expiry/resend and password policy remain unchanged. Browser tests use isolated Edge profiles with extensions/password autofill disabled where required. Screenshots and profiles stay ignored under node_modules/.tmp.
+
+These results verify frontend behaviour using mocks only. Other engines, physical devices, screen-reader output, real restoration/expiry/logout and API errors require further verification under GA-54. GA-19's real-system Definition of Done is not satisfied by these mock tests.
+
+
 React, TypeScript, Vite, and plain CSS. Existing dependencies and Figma assets only.
 
 ## Local preview

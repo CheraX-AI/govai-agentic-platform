@@ -5,7 +5,9 @@ import assert from 'node:assert/strict'
 const delay = (ms) => new Promise(r => setTimeout(r, ms))
 const profile = resolve(`node_modules/.tmp/login-browser-profile-${process.pid}-${Date.now()}`)
 await mkdir(profile, { recursive: true })
-const browser = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', ['--headless=new', '--disable-extensions', '--disable-component-extensions-with-background-pages', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore', windowsHide: true })
+await mkdir(resolve(profile,'Default'),{recursive:true})
+await writeFile(resolve(profile,'Default','Preferences'),JSON.stringify({credentials_enable_service:false,profile:{password_manager_enabled:false},autofill:{profile_enabled:false,credit_card_enabled:false}}))
+const browser = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', ['--headless=new', '--disable-sync', '--disable-features=PasswordGeneration,PasswordManagerOnboarding,PasswordManagerAccountStorage,AutofillServerCommunication', '--disable-extensions', '--disable-component-extensions-with-background-pages', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore', windowsHide: true })
 let launchError
 browser.on('error', error => { launchError = error })
 let socket
@@ -55,8 +57,8 @@ try {
 
 
   const demoSuccessAndLogout = async () => {
-    assert.equal(await evaluate('location.hash'), '#/home')
-    assert.match(await evaluate('document.querySelector(".demo-session-notice").textContent'), /Demo session.*not authenticated/)
+    assert.equal(await evaluate('location.hash'), '#/app/home')
+    assert.match(await evaluate('document.querySelector(".demo-session-notice").textContent'), /Mock session.*no real authentication/)
     assert.equal(await evaluate('document.querySelector("#password")'), null, 'credentials removed on navigation')
     await evaluate('document.querySelector(".demo-session-notice button").click()');await delay(120)
     assert.equal(await evaluate('location.hash'), '#/login')

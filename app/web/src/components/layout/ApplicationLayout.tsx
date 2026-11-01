@@ -6,7 +6,7 @@ import type { LayoutPreview } from './Sidebar'
 import { ContentContainer } from './ContentContainer'
 import '../../styles/application.css'
 
-export function ApplicationLayout({ page, children, onDemoLogout }: { page: LayoutPreview; children: ReactNode; onDemoLogout?: () => void }) {
+export function ApplicationLayout({ page, children, onDemoLogout, protectedDemo = false }: { page: LayoutPreview; children: ReactNode; onDemoLogout?: () => void; protectedDemo?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const opener = useRef<HTMLElement | null>(null)
   function closeMenu() { dialog.current?.close(); opener.current?.focus() }
@@ -32,9 +32,9 @@ export function ApplicationLayout({ page, children, onDemoLogout }: { page: Layo
   return <div className="application-layout">
     <a className="skip-link" href="#application-content" onClick={event => { event.preventDefault(); document.getElementById('application-content')?.focus() }}>Skip to content</a>
     <ApplicationHeader onDemoLogout={onDemoLogout} onOpenMenu={() => { opener.current = document.querySelector<HTMLElement>('.menu-toggle'); dialog.current?.showModal() }} />
-    <div className="application-body"><aside className="desktop-sidebar"><Sidebar page={page} /></aside><ContentContainer page={page}>{children}</ContentContainer></div>
+    <div className="application-body"><aside className="desktop-sidebar"><Sidebar page={page} protectedDemo={protectedDemo} /></aside><ContentContainer page={page} protectedDemo={protectedDemo}>{children}</ContentContainer></div>
     <dialog ref={dialog} id="mobile-navigation" className="navigation-dialog" aria-labelledby="navigation-title" onKeyDown={containMenuFocus} onCancel={event => { event.preventDefault(); closeMenu() }} onClick={event => { if (event.target === event.currentTarget) closeMenu() }}>
-      <div className="navigation-drawer"><div className="drawer-heading"><h2 id="navigation-title">Navigation preview</h2><button type="button" autoFocus onClick={closeMenu}>Close menu</button></div><div onClick={event => { if ((event.target as HTMLElement).closest('a')) closeMenu() }}><Sidebar page={page} /></div></div>
+      <div className="navigation-drawer"><div className="drawer-heading"><h2 id="navigation-title">Navigation preview</h2><button type="button" autoFocus onClick={closeMenu}>Close menu</button></div><div onClick={event => { if ((event.target as HTMLElement).closest('a')) closeMenu() }}><Sidebar page={page} protectedDemo={protectedDemo} /></div></div>
     </dialog>
   </div>
 }

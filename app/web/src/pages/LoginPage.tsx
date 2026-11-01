@@ -10,9 +10,11 @@ import { Checkbox } from '../components/Checkbox'
 import { StatusMessage } from '../components/StatusMessage'
 import { validateLogin, validateNicEmailLogin } from '../validation/loginValidation'
 import { submitMockLogin } from '../services/mockLoginService'
+import { useAuth } from '../auth/AuthContext'
 import type { MockOutcome } from '../services/mockLoginService'
 
-export default function LoginPage({ onDemoSuccess }: { onDemoSuccess?: () => void }) {
+export default function LoginPage({ onDemoSuccess, expired = false }: { onDemoSuccess?: () => Promise<void>; expired?: boolean }) {
+  const auth = useAuth()
   const [method, setMethod] = useState<LoginMethod>('phone')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -22,8 +24,9 @@ export default function LoginPage({ onDemoSuccess }: { onDemoSuccess?: () => voi
   const [status, setStatus] = useState<'idle' | 'pending' | MockOutcome>('idle')
   const submitting = useRef(false)
   const form = useRef<HTMLFormElement>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
   const mounted = useRef(false)
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  useEffect(() => { mounted.current = true; heading.current?.focus(); return () => { mounted.current = false } }, [])
   const phoneErrors = validateLogin(identifier, password, humanCheck)
   const errors = method === 'phone' ? { identifier: phoneErrors.phone, password: phoneErrors.password, humanCheck: phoneErrors.humanCheck }
     : validateNicEmailLogin(identifier, password, humanCheck)
@@ -37,7 +40,7 @@ export default function LoginPage({ onDemoSuccess }: { onDemoSuccess?: () => voi
     setTouched({ identifier: false, password: false, humanCheck: false })
     setStatus('idle')
   }
-  const pending = status === 'pending'
+  const pending = status === 'pending' || auth.state.status === 'checking'
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -57,7 +60,7 @@ export default function LoginPage({ onDemoSuccess }: { onDemoSuccess?: () => voi
       if (mounted.current) {
         setStatus(result)
         if (result === 'success') {
-          if (import.meta.env.DEV) onDemoSuccess?.()
+          if (import.meta.env.DEV) await onDemoSuccess?.()
         }
       }
     } catch {
@@ -73,7 +76,10 @@ export default function LoginPage({ onDemoSuccess }: { onDemoSuccess?: () => voi
 
   return <AuthLayout headingId="login-heading" formProps={{ ref: form, onSubmit: submit, noValidate: true }}
     footerControls={<details className="demo-options"><summary>Demo response controls</summary><label htmlFor="outcome">Simulated result</label><select id="outcome" disabled={pending} value={outcome} onChange={(event) => { setOutcome(event.target.value === 'error' ? 'error' : 'success'); setStatus('idle') }}><option value="success">Success</option><option value="error">Error</option></select></details>}>
-          <div className="heading"><h1 id="login-heading">Welcome back</h1><p>Log in to use government services with GovAI.</p></div>
+          <div className="heading"><h1 id="login-heading" tabIndex={-1} ref={heading}>Welcome back</h1><p>Log in to use government services with GovAI.</p></div>
+          {import.meta.env.DEV && <p className="create-account">Demo login success starts a synthetic mock session in this tab for 15 minutes. No real account is authenticated.</p>}
+          {expired && <StatusMessage kind="error">Mock session expired. Log in to start another demo session.</StatusMessage>}
+          {auth.state.status === 'error' && <div><StatusMessage kind="error">Session check failed. No authentication was confirmed.</StatusMessage><button type="button" onClick={() => void auth.retry()}>Retry session check</button></div>}
           <LoginMethodSwitch method={method} disabled={pending} onChange={changeMethod} />
           <LoginCredentials method={method} identifier={identifier} password={password} pending={pending}
             identifierError={touched.identifier ? errors.identifier : undefined} passwordError={touched.password ? errors.password : undefined}
