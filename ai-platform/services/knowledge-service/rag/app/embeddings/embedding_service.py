@@ -120,7 +120,7 @@ def embed_chunks(chunks, embedder):
         texts = []
         for chunk in batch:
             chunk_ids.append(chunk.chunk_id)
-            texts.append(chunk.text)
+            texts.append(embedding_text(chunk))
 
         try:
             # Send the batch to NVIDIA
@@ -277,8 +277,8 @@ def split_reusable(chunks, existing):
         # Find the earlier embedding of this chunk, if there is one
         record = existing.get(chunk.chunk_id)
 
-        # Same text: keep the vector, refresh the metadata
-        if record is not None and record.text == chunk.text:
+        # Same text and title: keep the vector, refresh the metadata
+        if record is not None and embedding_text(record) == embedding_text(chunk):
             reused.append(
                 EmbeddedChunk(
                     chunk_id=chunk.chunk_id,
@@ -288,11 +288,30 @@ def split_reusable(chunks, existing):
                 )
             )
 
-        # New or changed text: embed it
+        # New or changed text or title: embed it
         else:
             to_embed.append(chunk)
 
     return reused, to_embed
+
+
+def embedding_text(chunk):
+    """The text sent to NVIDIA for a chunk: its document title, then the chunk text.
+
+    A chunk deep in a document often does not repeat what the document is about,
+    e.g. a page listing company forms never says "TIN". The title gives every
+    vector that context. Only the vector uses it; the saved text stays unchanged.
+    """
+
+    # Without a title, the chunk text is embedded as it is
+    title = chunk.metadata.get("document_title")
+    if not title:
+        return chunk.text
+
+    # Put the title on its own line before the chunk text
+    text = f"{title}\n\n{chunk.text}"
+
+    return text
 
 
 def order_records(chunks, records):

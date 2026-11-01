@@ -22,6 +22,10 @@ HORIZONTAL_WHITESPACE = re.compile(r"[ \t\f\v ]+")
 CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 EXCESS_BLANK_LINES = re.compile(r"\n{3,}")
 
+# Bullet glyphs from the Symbol and Wingdings fonts (U+F0B7, U+F0A7). Only these are removed:
+# the rest of the private-use range can hold real text in legacy Sinhala and Tamil fonts.
+PDF_BULLET_GLYPHS = re.compile(r"[]")
+
 
 # Errors
 
@@ -58,6 +62,7 @@ class DocumentSource(BaseModel):
     department_id: str = Field(min_length=1)
     service_id: str | None = Field(default=None, min_length=1)
     document_type: DocumentType
+    title: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def check_service_matches_type(self):
@@ -156,9 +161,11 @@ def to_langchain_documents(document):
         "total_pages": document.total_pages,
     }
 
-    # ChromaDB metadata cannot hold None, so service_id is added only when present
+    # ChromaDB metadata cannot hold None, so optional fields are added only when present
     if document.source.service_id is not None:
         metadata["service_id"] = document.source.service_id
+    if document.source.title is not None:
+        metadata["document_title"] = document.source.title
 
     # Create one LangChain Document per page that has text
     langchain_documents = []
@@ -205,6 +212,9 @@ def normalize_page_text(text):
 
     # Remove invisible control characters
     text = CONTROL_CHARACTERS.sub("", text)
+
+    # Remove PDF bullet glyphs; each list item already starts on its own line
+    text = PDF_BULLET_GLYPHS.sub("", text)
 
     # Trim spaces at the start and end of each line
     lines = [line.strip() for line in text.split("\n")]

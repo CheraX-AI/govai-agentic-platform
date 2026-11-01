@@ -28,6 +28,7 @@ rag/
 ├── tests/
 │   ├── unit/                     # Unit tests (embedding tests call the real NVIDIA API)
 │   ├── integration/              # PDF → chunks → embeddings, and the script
+│   ├── validation/               # GA-73: real documents from data/input, report in data/output/reports
 ├── .env.example                  # Template for .env (all NVIDIA settings, empty key)
 ├── pytest.ini
 └── requirements.txt
@@ -172,6 +173,7 @@ python scripts/process_documents.py --department-id IRD --service-id TIN_REGISTR
 | --- | --- |
 | `--department-id` | Department that owns the documents (required) |
 | `--service-id` | Service the documents belong to (required for `service_guideline`) |
+| `--title` | Document title, e.g. `"Obtaining a Taxpayer Identification Number (TIN)"`. Each chunk is embedded with the title in front, so chunks that never repeat the topic are still found; the saved text is unchanged. |
 | `--document-type` | `service_guideline` or `department_guideline` (required) |
 | `--input-dir`, `--output-dir` | Default `data/input` and `data/output` |
 | `--env-file` | Settings file, default `rag/.env` |
@@ -214,3 +216,32 @@ they are skipped, and pytest shows the reason. The other tests run offline.
 | Embedding unit tests | `pytest tests/unit -k embedding` |
 | One file | `pytest tests/unit/test_embedding_service.py` |
 | Show skipped tests and why | `pytest -rs` |
+
+## Validating documents (GA-73)
+
+`tests/validation/` runs real documents through extraction, chunking, and the real NVIDIA
+API, saves everything to `data/output/`, and writes a report.
+
+1. Copy the PDF into `data/input/`.
+2. Add it to `tests/validation/documents.json` with its source details, title, key phrases
+   (with the page each is on), and a few questions with the page that answers them.
+3. Run:
+
+   ```powershell
+   pytest tests/validation -v
+   ```
+
+4. Read `data/output/reports/validation_report.md`.
+
+| Acceptance criterion | What is checked |
+| --- | --- |
+| Meaningful chunks | Every page has text and is chunked, chunks are 1–1000 characters, no PDF bullet glyphs |
+| Information preserved | No page text is lost between chunks, overlap is at most 200 characters, every key phrase is whole in a chunk from its page |
+| Identifiers and metadata | Chunk IDs are unique and in order; every chunk has its document ID, title, file, department, service, type, and page |
+| Embeddings generated | One embedding per chunk, none failed, saved to `data/output/embeddings/` |
+| Valid vectors | One dimension for all vectors, finite non-zero values, re-embedding gives the same vector (cosine ≥ 0.99), ready for ChromaDB |
+| Errors handled | Blank, empty, non-PDF, and password-protected files; an over-long chunk; a rejected key; a damaged chunk file |
+| Pipeline validated | Each question's closest chunk comes from the page that answers it |
+
+The documents and the report stay in `data/`, which Git ignores. The document text is sent to
+NVIDIA's cloud. A re-run reuses the saved vectors, so the document is sent only once.

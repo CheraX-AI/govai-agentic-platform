@@ -52,6 +52,7 @@ def main(argv=None):
             department_id=args.department_id,
             service_id=args.service_id,
             document_type=args.document_type,
+            title=args.title,
         )
     except ValidationError as error:
         print(f"Invalid document source: {format_validation_error(error)}", file=sys.stderr)
@@ -98,6 +99,7 @@ def parse_arguments(argv):
     parser = argparse.ArgumentParser(description="Extract, chunk, and embed PDF documents.")
     parser.add_argument("--department-id", required=True, help="Department that owns the documents")
     parser.add_argument("--service-id", default=None, help="Service ID, required for service guidelines")
+    parser.add_argument("--title", default=None, help="Document title, added to every chunk's embedding for context")
     parser.add_argument(
         "--document-type",
         required=True,

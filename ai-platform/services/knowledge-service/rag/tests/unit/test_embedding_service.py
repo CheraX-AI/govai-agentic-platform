@@ -11,7 +11,7 @@ from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 
 from app.embeddings import embedding_service
 from app.embeddings.config import load_settings
-from app.embeddings.embedding_service import create_embedder, embed_chunk_file, embed_chunks
+from app.embeddings.embedding_service import create_embedder, embed_chunk_file, embed_chunks, embedding_text
 from app.embeddings.exceptions import EmbeddingAuthError
 from app.embeddings.storage import load_chunks, load_embeddings, save_embeddings
 from tests.helpers import (
@@ -357,3 +357,56 @@ def test_no_file_is_written_when_every_chunk_is_rejected(tmp_path):
     assert result.embeddings_path is None
     assert result.failed_chunk_ids == ["doc001:0", "doc001:1"]
     assert not (output_dir / "doc001.embeddings.json").exists()
+
+
+# Document title context
+
+def test_embedding_text_puts_the_title_first(tmp_path):
+
+    # With a title, NVIDIA receives the title and then the chunk text
+    records = make_chunk_records(1)
+    records[0]["metadata"]["document_title"] = "Obtaining a TIN"
+    chunk = load_test_chunks(tmp_path, records)[0]
+
+    assert embedding_text(chunk) == "Obtaining a TIN\n\nTIN registration step 0 for taxpayers."
+
+
+def test_embedding_text_without_a_title_is_the_chunk_text(tmp_path):
+
+    chunk = load_test_chunks(tmp_path, make_chunk_records(1))[0]
+
+    assert embedding_text(chunk) == "TIN registration step 0 for taxpayers."
+
+
+def test_title_is_used_for_the_vector_but_not_saved_in_the_text(tmp_path):
+
+    # Embed a chunk with a title using the real NVIDIA model
+    records = make_chunk_records(1)
+    records[0]["metadata"]["document_title"] = "Obtaining a TIN"
+    chunks_path = write_chunk_file(tmp_path, records)
+
+    result = embed_chunk_file(chunks_path, make_embedder(), tmp_path / "embeddings")
+
+    # The saved text is the chunk text; the title stays in the metadata
+    record = load_embeddings(result.embeddings_path).records[0]
+    assert record.text == "TIN registration step 0 for taxpayers."
+    assert record.metadata["document_title"] == "Obtaining a TIN"
+
+
+def test_changed_title_is_embedded_again(tmp_path):
+
+    # Embed with one title
+    records = make_chunk_records(2)
+    for record in records:
+        record["metadata"]["document_title"] = "Old title"
+    chunks_path = write_chunk_file(tmp_path, records)
+    output_dir = tmp_path / "embeddings"
+    embed_chunk_file(chunks_path, make_embedder(), output_dir)
+
+    # Change the title: the vectors no longer match, so NVIDIA must be called again
+    for record in records:
+        record["metadata"]["document_title"] = "Obtaining a Taxpayer Identification Number (TIN)"
+    write_chunk_file(tmp_path, records)
+
+    with pytest.raises(EmbeddingAuthError):
+        embed_chunk_file(chunks_path, make_invalid_key_embedder(), output_dir)
