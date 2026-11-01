@@ -61,7 +61,7 @@ class EmbeddingFileResult(BaseModel):
     embeddings_path: Path | None = None
 
     @property
-    def failed_chunk_ids(self) -> list[str]:
+    def failed_chunk_ids(self):
 
         # Collect the chunk IDs of every failed batch
         chunk_ids = []

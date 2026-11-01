@@ -9,7 +9,6 @@ modules are re-exported here, and app.embeddings re-exports this module.
 
 import logging
 import time
-from pathlib import Path
 
 from app.embeddings.config import EmbeddingSettings, load_settings
 from app.embeddings.exceptions import (
@@ -79,12 +78,13 @@ __all__ = [
 
 # Public functions
 
-def create_embedder(settings: EmbeddingSettings) -> Embedder:
+def create_embedder(settings):
     """Create the NVIDIA embedding client from the settings."""
 
     # Imported here so the client library loads only when embeddings are used
     from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 
+    # Build the NVIDIA client; creating it does not call the API
     embedding_model = NVIDIAEmbeddings(
         model=settings.model,
         api_key=settings.api_key.get_secret_value(),
@@ -93,16 +93,19 @@ def create_embedder(settings: EmbeddingSettings) -> Embedder:
         truncate=settings.truncate,
     )
 
-    return Embedder(embedding_model=embedding_model, settings=settings)
+    # Keep the client together with its settings
+    embedder = Embedder(embedding_model=embedding_model, settings=settings)
+
+    return embedder
 
 
-def embed_chunks(chunks: list[Chunk], embedder: Embedder) -> EmbeddingResult:
+def embed_chunks(chunks, embedder):
     """Embed chunks in batches.
 
     A failed batch is recorded and the remaining batches continue, so one bad
     batch never discards the chunks that were embedded successfully. After an
     authentication failure the remaining chunks are marked failed without
-    calling the provider again.
+    calling NVIDIA again.
     """
 
     settings = embedder.settings
@@ -110,24 +113,34 @@ def embed_chunks(chunks: list[Chunk], embedder: Embedder) -> EmbeddingResult:
     expected_dimension = None
 
     for start in range(0, len(chunks), settings.batch_size):
-        batch = chunks[start:start + settings.batch_size]
-        chunk_ids = [chunk.chunk_id for chunk in batch]
 
-        # Embed and check the batch; every vector must have the same dimension
+        # Take the next batch of chunks
+        batch = chunks[start:start + settings.batch_size]
+        chunk_ids = []
+        texts = []
+        for chunk in batch:
+            chunk_ids.append(chunk.chunk_id)
+            texts.append(chunk.text)
+
         try:
-            vectors = embed_with_retry(embedder, [chunk.text for chunk in batch])
+            # Send the batch to NVIDIA
+            vectors = embed_with_retry(embedder, texts)
+
+            # Check the vectors; every batch must have the same dimension
             validate_vectors(vectors, len(batch), expected_dimension)
 
-        # The key is wrong or expired: stop calling the provider
         except EmbeddingAuthError as error:
-            remaining_ids = [chunk.chunk_id for chunk in chunks[start:]]
+            # The key is wrong or expired: mark every remaining chunk failed and stop
+            remaining_ids = []
+            for chunk in chunks[start:]:
+                remaining_ids.append(chunk.chunk_id)
             result.failed.append(failed_batch(remaining_ids, error))
             result.auth_failed = True
             logger.error("embedding stopped: authentication failed", extra={"chunks": len(remaining_ids)})
             break
 
-        # Any other error only fails this batch
         except Exception as error:
+            # Any other error only fails this batch
             result.failed.append(failed_batch(chunk_ids, error))
             logger.warning(
                 "embedding batch failed",
@@ -135,9 +148,10 @@ def embed_chunks(chunks: list[Chunk], embedder: Embedder) -> EmbeddingResult:
             )
             continue
 
+        # The first successful batch sets the dimension for the rest
         expected_dimension = len(vectors[0])
 
-        # Keep each vector with its chunk ID, text and metadata
+        # Keep each vector with its chunk ID, text, and metadata
         for chunk, vector in zip(batch, vectors):
             result.embedded.append(
                 EmbeddedChunk(
@@ -157,11 +171,7 @@ def embed_chunks(chunks: list[Chunk], embedder: Embedder) -> EmbeddingResult:
     return result
 
 
-def embed_chunk_file(
-    chunks_path: str | Path,
-    embedder: Embedder,
-    output_dir: str | Path,
-) -> EmbeddingFileResult:
+def embed_chunk_file(chunks_path, embedder, output_dir):
     """Embed one chunk file and save the successful embeddings.
 
     Chunks already embedded by the same model with the same text are reused,
@@ -176,27 +186,28 @@ def embed_chunk_file(
     document_id = chunks[0].metadata["document_id"]
 
     # Split the chunks into those that can be reused and those to embed
-    existing = load_reusable_embeddings(embeddings_path_for(output_dir, document_id), settings)
+    output_path = embeddings_path_for(output_dir, document_id)
+    existing = load_reusable_embeddings(output_path, settings)
     reused, to_embed = split_reusable(chunks, existing)
 
     # Embed the remaining chunks
     result = embed_chunks(to_embed, embedder)
 
-    # Save reused and new embeddings together, in chunk order
+    # Put reused and new embeddings together, in chunk order
     records = order_records(chunks, reused + result.embedded)
 
+    # Save them; nothing is written when every chunk failed
     embeddings_path = None
     if records:
-        embeddings_path = save_embeddings(
-            EmbeddingFile(
-                document_id=document_id,
-                model=settings.model,
-                dimension=len(records[0].embedding),
-                records=records,
-            ),
-            output_dir,
+        embedding_file = EmbeddingFile(
+            document_id=document_id,
+            model=settings.model,
+            dimension=len(records[0].embedding),
+            records=records,
         )
+        embeddings_path = save_embeddings(embedding_file, output_dir)
 
+    # Report what happened to the file
     file_result = EmbeddingFileResult(
         document_id=document_id,
         embedded_count=len(result.embedded),
@@ -214,43 +225,45 @@ def embed_chunk_file(
 
 # Helper functions
 
-def embed_with_retry(embedder: Embedder, texts: list[str]) -> list[list[float]]:
-    """Call the provider, retrying only errors that a later attempt can fix."""
+def embed_with_retry(embedder, texts):
+    """Call NVIDIA, retrying only errors that a later attempt can fix."""
 
     settings = embedder.settings
 
     for attempt in range(settings.max_retries + 1):
 
-        # The NVIDIA client raises a plain Exception, so every error is classified here
         try:
-            return embedder.embedding_model.embed_documents(texts)
+            # Send the texts to NVIDIA
+            vectors = embedder.embedding_model.embed_documents(texts)
+
         except Exception as error:
+            # The NVIDIA client raises a plain Exception, so the status is read from its message
             status_code = get_status_code(error)
 
             # A rejected key fails every batch the same way
             if is_auth_error(status_code):
-                raise EmbeddingAuthError(short_message(error)) from None
+                raise EmbeddingAuthError(short_message(error))
 
             # Give up on errors a retry cannot fix, or when retries are used up
             if not is_retryable(status_code, error) or attempt == settings.max_retries:
                 raise
 
-            # Wait longer after each failed attempt
+            # Wait longer after each failed attempt, then try again
             delay = settings.retry_delay_seconds * (2 ** attempt)
             logger.warning(
                 "embedding request failed; retrying",
                 extra={"attempt": attempt + 1, "status_code": status_code, "delay_seconds": delay},
             )
             time.sleep(delay)
+            continue
+
+        return vectors
 
     # Not reached: the last attempt either returns or raises
     raise AssertionError("retry loop ended without a result")
 
 
-def split_reusable(
-    chunks: list[Chunk],
-    existing: dict[str, EmbeddedChunk],
-) -> tuple[list[EmbeddedChunk], list[Chunk]]:
+def split_reusable(chunks, existing):
     """Reuse earlier vectors when the chunk text is unchanged.
 
     The metadata is taken from the current chunk in case it was corrected.
@@ -260,6 +273,8 @@ def split_reusable(
     to_embed = []
 
     for chunk in chunks:
+
+        # Find the earlier embedding of this chunk, if there is one
         record = existing.get(chunk.chunk_id)
 
         # Same text: keep the vector, refresh the metadata
@@ -280,14 +295,14 @@ def split_reusable(
     return reused, to_embed
 
 
-def order_records(chunks: list[Chunk], records: list[EmbeddedChunk]) -> list[EmbeddedChunk]:
+def order_records(chunks, records):
 
     # Index the embedded records by chunk ID
     records_by_id = {}
     for record in records:
         records_by_id[record.chunk_id] = record
 
-    # Return them in the chunk file's order, skipping chunks that failed
+    # Put them in the chunk file's order, skipping chunks that failed
     ordered = []
     for chunk in chunks:
         if chunk.chunk_id in records_by_id:
@@ -296,10 +311,13 @@ def order_records(chunks: list[Chunk], records: list[EmbeddedChunk]) -> list[Emb
     return ordered
 
 
-def failed_batch(chunk_ids: list[str], error: Exception) -> FailedBatch:
+def failed_batch(chunk_ids, error):
 
-    return FailedBatch(
+    # Record which chunks failed and why, with a short error message
+    batch = FailedBatch(
         chunk_ids=chunk_ids,
         error_type=type(error).__name__,
         message=short_message(error),
     )
+
+    return batch

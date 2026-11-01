@@ -76,9 +76,9 @@ def load_settings(environ=None, env_file=ENV_FILE):
             raise EmbeddingConfigError(f"{name} is required in .env")
         values[name] = value
 
-    # Validate; the message lists only field names and reasons, never the key itself
     try:
-        return EmbeddingSettings(
+        # Check the values and build the settings
+        settings = EmbeddingSettings(
             api_key=values["NVIDIA_API_KEY"],
             model=values["EMBEDDING_MODEL"],
             batch_size=values["EMBEDDING_BATCH_SIZE"],
@@ -86,5 +86,9 @@ def load_settings(environ=None, env_file=ENV_FILE):
             retry_delay_seconds=values["EMBEDDING_RETRY_DELAY_SECONDS"],
             truncate=values["EMBEDDING_TRUNCATE"].upper(),
         )
+
     except ValidationError as error:
+        # "from None" drops the Pydantic error, whose input values include the API key
         raise EmbeddingConfigError(format_validation_error(error)) from None
+
+    return settings
