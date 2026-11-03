@@ -276,8 +276,11 @@ func TestPostgresContracts(t *testing.T) {
 		if !errors.Is(b.Persist(ctx, wrong), registration.ErrProfileConflict) {
 			t.Fatal("wrong profile owner accepted")
 		}
-		if b.Persist(ctx, p) != nil || b.Persist(ctx, p) != nil {
-			t.Fatal("idempotent profile commit failed")
+		if err := b.Persist(ctx, p); err != nil {
+			t.Fatal("initial profile commit failed", err)
+		}
+		if err := b.Persist(ctx, p); err != nil {
+			t.Fatal("idempotent profile replay failed", err)
 		}
 		advance(t, s, registration.ProfileReady, "")
 		if ready, e := b.HasReadyProfile(ctx, r.Issuer, "subject-test"); e != nil || ready {

@@ -91,18 +91,19 @@ func Migrate(ctx context.Context, p *pgxpool.Pool) error {
 	checksum := hex.EncodeToString(sum[:])
 	var old string
 	e = tx.QueryRow(ctx, "SELECT checksum FROM public.govai_auth_migrations WHERE version=1").Scan(&old)
-	if e == nil {
+	switch e {
+	case nil:
 		if old != checksum {
 			return ErrStore
 		}
-	} else if e == pgx.ErrNoRows {
+	case pgx.ErrNoRows:
 		if _, e = tx.Exec(ctx, string(sql)); e != nil {
 			return ErrStore
 		}
 		if _, e = tx.Exec(ctx, "INSERT INTO public.govai_auth_migrations(version,checksum) VALUES(1,$1)", checksum); e != nil {
 			return ErrStore
 		}
-	} else {
+	default:
 		return ErrStore
 	}
 	if tx.Commit(ctx) != nil {

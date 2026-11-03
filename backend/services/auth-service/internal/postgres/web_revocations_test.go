@@ -12,7 +12,10 @@ import (
 func TestWebRevocationDatabase(t *testing.T) {
 	a, b, admin := testDatabase(t)
 	ctx := context.Background()
-	if MigrateWebSessions(ctx, admin) != nil || MigrateWebSessions(ctx, admin) != nil {
+	if MigrateWebSessions(ctx, admin) != nil {
+		t.Fatal("migration failed")
+	}
+	if MigrateWebSessions(ctx, admin) != nil {
 		t.Fatal("migration failed")
 	}
 	key := bytes.Repeat([]byte{21}, 32)
