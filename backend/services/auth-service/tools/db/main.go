@@ -18,7 +18,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) != 2 || (os.Args[1] != "migrate" && os.Args[1] != "check" && os.Args[1] != "migrate-web" && os.Args[1] != "check-web" && os.Args[1] != "prune-web" && os.Args[1] != "prune-web-jobs" && os.Args[1] != "migrate-recovery" && os.Args[1] != "check-recovery") {
-		return fmt.Errorf("usage: go run ./cmd/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|migrate-recovery|check-recovery")
+		return fmt.Errorf("usage: go run ./tools/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|migrate-recovery|check-recovery")
 	}
 	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
 	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"

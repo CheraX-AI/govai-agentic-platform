@@ -229,8 +229,8 @@ Before a separately approved rollout, stop the API, take a private SQL backup an
 preserve existing environment keys. Explicit commands (from this service directory):
 
 ```powershell
-go run ./cmd/db migrate-recovery
-go run ./cmd/db check-recovery
+go run ./tools/db migrate-recovery
+go run ./tools/db check-recovery
 ```
 
 Migrate-recovery adds optional migrations 004/005/006, preserving existing users,
@@ -276,7 +276,7 @@ were preserved; legacy browser sessions were revoked as documented. No commit/pu
 ### Current local verification and next manual test
 
 API runs on https://localhost:5001 with recovery and guarded browser sessions.
-`go run ./cmd/dev-auth recovery-check` checks fixed loopback readiness, invalid
+`go run ./tools/dev-auth recovery-check` checks fixed loopback readiness, invalid
 recovery bodies and local-origin CORS using the trusted CA; it never sends a real
 NIC/password/token or reads email contents. That check, login/session boundary
 checks, SQL recovery readiness and the reset inbox API passed after rollout.
@@ -324,8 +324,8 @@ distributed rate enforcement or production disaster-recovery readiness.
 | cmd/api/main.go | The executable entry point: loads configuration, starts HTTP, and handles shutdown. |
 | internal/config/config.go | Validates PORT and the exact CORS origin allowlist before starting. |
 | internal/config/config_test.go | Checks default/custom ports and invalid configuration. |
-| internal/handler/router.go | Maps URLs to handlers using Gin. c.JSON sends JSON to the caller. |
-| internal/handler/router_test.go | Simulates HTTP requests using httptest without opening a network port. |
+| internal/http/handlers/router.go | Maps URLs to handlers using Gin. c.JSON sends JSON to the caller. |
+| internal/http/handlers/router_test.go | Simulates HTTP requests using httptest without opening a network port. |
 | .env.example | Documents PORT and CORS_ALLOWED_ORIGINS; copy to .env for local loading. |
 
 Go starts an executable at func main() in package main. The internal directory
@@ -434,7 +434,7 @@ Express retirement is authorized; the existing removal changes were preserved.
 ## Package boundaries for future development
 
 `cmd/api` owns startup, dependency construction and shutdown. `internal/config`
-owns validated settings. `internal/handler` currently owns routes, health handlers
+owns validated settings. `internal/http/handlers` currently owns routes, health handlers
 and HTTP middleware together because the API is small. Extract `internal/middleware`
 and `internal/routes` as reusable policies and route groups grow. Add
 `internal/service` for application use cases and `internal/repository` for database
@@ -457,7 +457,7 @@ not a clean shell exit code or draining under concurrent load.
 
 ## OIDC discovery and JWKS connectivity check
 
-`cmd/oidc-check` is a separate read-only diagnostic. It never runs during API
+`tools/oidc-check` is a separate read-only diagnostic. It never runs during API
 startup or health requests and does not change /health or /api/health. No admin
 password, user password, client secret or token is needed. Existing local dotenv
 loading and process-environment precedence apply.
@@ -468,7 +468,7 @@ From the repository root:
 cd backend/services/auth-service
 $env:OIDC_ISSUER_URL = "http://localhost:8180/realms/GovAI"
 $env:OIDC_CHECK_TIMEOUT = "5s"
-go run ./cmd/oidc-check
+go run ./tools/oidc-check
 ```
 
 Alternatively put those settings into this service's ignored .env. Do not copy
@@ -518,3 +518,30 @@ Verification on 2026-10-27: gofmt, go test ./..., go vet ./..., and
 http://localhost:8180/realms/GovAI: discovery matched and nonempty JWKS was
 retrieved. Existing health tests passed; no live login, JWT validation, or
 Keycloak outage manipulation was performed. No identity configuration changed.
+
+## Folder guide
+
+| Location | Purpose |
+| --- | --- |
+| `cmd/api/main.go` | Start the authentication API; command remains `go run ./cmd/api`. |
+| `internal/http/handlers/router.go` | Gin routes and shared HTTP request policies. |
+| `internal/http/handlers/` | Registration, login, reset and session request handlers. |
+| `internal/config/` | Environment settings and validation. |
+| `internal/application/` | Assemble feature dependencies. |
+| `internal/registration/`, `login/`, `recovery/`, `websession/` | Feature rules and workflows. |
+| `internal/keycloak/` | Keycloak communication. |
+| `internal/postgres/` | Application database operations. |
+| `internal/postgres/migrations/` | Versioned SQL schema; existing migrations unchanged. |
+| `internal/oidccheck/` | OIDC checks also used by configuration validation. |
+| `tools/db/` | Explicit database checks/migrations. |
+| `tools/dev-auth/`, `tools/oidc-check/` | Local setup and connectivity commands. |
+| `tools/web-maintenance/` | Session-revocation queue maintenance. |
+| `tools/permission-lab/`, `tools/keycloak-transition-check/` | Opt-in isolated experiments and transition checks. |
+| `tools/internal/` | Implementation of development/experiment tools. |
+
+Run tools from this service directory, for example `go run ./tools/db check`.
+Tool arguments and environment requirements remain unchanged. Unit tests stay
+beside their packages as `*_test.go` because they exercise private implementation
+boundaries. Use the VS Code Testing view to navigate tests separately. No separate
+routes package is introduced: router.go uses package-private handler policies.
+Live Docker experiments remain opt-in; ordinary tests do not rerun them.

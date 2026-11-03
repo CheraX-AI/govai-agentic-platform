@@ -16,8 +16,8 @@ docker compose --env-file .env config --quiet
 docker compose --env-file .env up -d --wait
 
 cd ..\..\services\auth-service
-go run ./cmd/db migrate
-go run ./cmd/db check
+go run ./tools/db migrate
+go run ./tools/db check
 go test ./...
 go run ./cmd/api
 ```
