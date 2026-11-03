@@ -140,7 +140,7 @@ repository root in another terminal:
 cd backend/services/auth-service
 $env:OIDC_ISSUER_URL = 'http://localhost:8180/realms/GovAI'
 $env:OIDC_CHECK_TIMEOUT = '5s'
-go run ./cmd/oidc-check
+go run ./tools/oidc-check
 ```
 
 This bounded read-only check verifies discovery issuer and JWKS connectivity;

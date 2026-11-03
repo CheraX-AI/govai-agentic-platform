@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/permissionlab"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/tools/internal/permissionlab"
 )
 
 func main() {

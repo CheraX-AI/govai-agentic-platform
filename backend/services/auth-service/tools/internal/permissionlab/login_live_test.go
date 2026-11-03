@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/handler"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/gin-gonic/gin"
 	"io"

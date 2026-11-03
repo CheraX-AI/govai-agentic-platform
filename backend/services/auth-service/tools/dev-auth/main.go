@@ -4,7 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/devsetup"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/tools/internal/devsetup"
 	"os"
 	"path/filepath"
 	"time"

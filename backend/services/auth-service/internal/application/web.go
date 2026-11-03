@@ -3,7 +3,7 @@ package application
 import (
 	"context"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/handler"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"

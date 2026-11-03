@@ -3,7 +3,7 @@
 
 Later login update: the [mobile/Postman login API](../../services/auth-service/docs/GA-48-login.md)
 now has a separate non-admin client and private `.env.login`. Provision it with
-`go run ./cmd/dev-auth configure-login` from the auth-service directory, then
+`go run ./tools/dev-auth configure-login` from the auth-service directory, then
 restart the API. Registration manual evidence below predates this login slice;
 real web/mobile integration and browser sessions remain pending.
 
@@ -40,7 +40,7 @@ docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compo
 docker start govai-mailpit
 
 cd ..\..\services\auth-service
-go run ./cmd/dev-auth check
+go run ./tools/dev-auth check
 go run ./cmd/api
 ```
 
@@ -51,7 +51,7 @@ the unrelated application on port 5000.
 From a second terminal in the auth-service directory:
 
 ```powershell
-go run ./cmd/dev-auth smoke
+go run ./tools/dev-auth smoke
 ```
 
 This sends a **synthetic** registration through the actual TLS Go API, checks
@@ -97,10 +97,10 @@ After the base Keycloak `.env` and database setup exist:
 
 ```powershell
 # From backend/services/auth-service; only when the tls directory does not exist:
-go run ./cmd/dev-auth certs
+go run ./tools/dev-auth certs
 # Start Keycloak using the HTTPS Compose overlay, then:
-go run ./cmd/dev-auth inspect
-go run ./cmd/dev-auth configure
+go run ./tools/dev-auth inspect
+go run ./tools/dev-auth configure
 ```
 
 The tool is hardcoded to the local HTTPS address and GovAI realm. It logs in as
