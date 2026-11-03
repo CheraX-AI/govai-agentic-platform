@@ -1,0 +1,8 @@
+.verification-code { display: grid; grid-template-columns: repeat(6, minmax(0, 52px)); justify-content: center; gap: 10px; padding: 0; margin: 0; border: 0; min-width: 0; }
+.verification-code input { width: 100%; min-width: 0; height: 60px; border: 1px solid #9ca3af; border-radius: 12px; text-align: center; font-size: 24px; color: inherit; background: white; }
+.verification-code input[aria-invalid=true] { border-color: var(--brand); }
+.verification-warning { padding: 10px 14px; border-radius: 12px; background: #fff7df; color: #624400; font-size: 13px; line-height: 1.5; }
+.verification-hint, .verification-timer, .verification-back { text-align: center; font-size: 13px; line-height: 1.5; }
+.verification-resend { align-self: center; min-height: 44px; padding: 10px; border: 0; border-radius: 8px; background: transparent; color: var(--brand); font-size: 14px; }
+.verification-resend:disabled { color: #666; }
+@media (max-width: 480px) { .verification-code { gap: 6px; grid-template-columns: repeat(6, minmax(0, 1fr)); } .verification-code input { height: 52px; } }
