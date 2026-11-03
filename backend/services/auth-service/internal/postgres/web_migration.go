@@ -41,18 +41,19 @@ func MigrateWebSessions(ctx context.Context, p *pgxpool.Pool) error {
 	sum = sha256.Sum256(sql)
 	checksum := hex.EncodeToString(sum[:])
 	err = tx.QueryRow(ctx, "SELECT checksum FROM public.govai_auth_migrations WHERE version=2").Scan(&old)
-	if err == nil {
+	switch err {
+	case nil:
 		if old != checksum {
 			return ErrStore
 		}
-	} else if err == pgx.ErrNoRows {
+	case pgx.ErrNoRows:
 		if _, err = tx.Exec(ctx, string(sql)); err != nil {
 			return ErrStore
 		}
 		if _, err = tx.Exec(ctx, "INSERT INTO public.govai_auth_migrations(version,checksum) VALUES(2,$1)", checksum); err != nil {
 			return ErrStore
 		}
-	} else {
+	default:
 		return ErrStore
 	}
 	if err = applyWebRevocations(ctx, tx); err != nil {
@@ -101,7 +102,8 @@ func applyWebRevocations(ctx context.Context, tx pgx.Tx) error {
 	checksum := hex.EncodeToString(sum[:])
 	var old string
 	err = tx.QueryRow(ctx, "SELECT checksum FROM public.govai_auth_migrations WHERE version=3").Scan(&old)
-	if err == nil {
+	switch err {
+	case nil:
 		if old != checksum {
 			return ErrStore
 		}

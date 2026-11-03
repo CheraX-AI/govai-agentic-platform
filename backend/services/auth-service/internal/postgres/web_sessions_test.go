@@ -44,7 +44,10 @@ func TestWebSessionEncryption(t *testing.T) {
 func TestWebSessionDatabase(t *testing.T) {
 	a, b, admin := testDatabase(t)
 	ctx := context.Background()
-	if MigrateWebSessions(ctx, admin) != nil || MigrateWebSessions(ctx, admin) != nil {
+	if MigrateWebSessions(ctx, admin) != nil {
+		t.Fatal("web migration replay failed")
+	}
+	if MigrateWebSessions(ctx, admin) != nil {
 		t.Fatal("web migration replay failed")
 	}
 	if WebSessionsReady(ctx, a.pool) != nil {

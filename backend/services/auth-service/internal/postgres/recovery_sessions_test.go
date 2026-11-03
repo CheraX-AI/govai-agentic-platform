@@ -14,7 +14,10 @@ import (
 func TestRecoverySessionFencesDatabase(t *testing.T) {
 	a, b, admin := testDatabase(t)
 	ctx := context.Background()
-	if MigrateRecoverySessions(ctx, admin) != nil || MigrateRecoverySessions(ctx, admin) != nil {
+	if MigrateRecoverySessions(ctx, admin) != nil {
+		t.Fatal("fence migration/replay failed")
+	}
+	if MigrateRecoverySessions(ctx, admin) != nil {
 		t.Fatal("fence migration/replay failed")
 	}
 	if RecoveryReady(ctx, a.pool) != nil {

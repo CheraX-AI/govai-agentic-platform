@@ -13,7 +13,10 @@ import (
 func TestRecoveryBindingDatabase(t *testing.T) {
 	a, b, admin := testDatabase(t)
 	ctx := context.Background()
-	if MigrateRecovery(ctx, admin) != nil || MigrateRecovery(ctx, admin) != nil {
+	if MigrateRecovery(ctx, admin) != nil {
+		t.Fatal("migration replay failed")
+	}
+	if MigrateRecovery(ctx, admin) != nil {
 		t.Fatal("migration replay failed")
 	}
 	root, _ := NewRecoveryStore(a.pool)
