@@ -142,3 +142,6 @@ GET /api/health returned HTTP 200 with {"status":"ok"} and X-Request-ID.
 Ctrl+C emitted both shutdown and server-stopped logs; the PTY wrapper reported
 exit code 1 for the interrupted command, so this verifies the shutdown path ran,
 not a clean shell exit code or draining under concurrent load.
+# auth-service
+
+Placeholder for the auth-service. Demo only — implementation coming soon.
