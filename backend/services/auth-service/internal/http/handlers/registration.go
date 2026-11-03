@@ -196,7 +196,7 @@ func (h *RegistrationHandler) respond(c *gin.Context, status int, body any, star
 		case <-c.Request.Context().Done():
 		}
 	}
-	c.AbortWithStatusJSON(status, body)
+	abortJSON(c, status, body)
 }
 func (h *RegistrationHandler) received(c *gin.Context, t time.Time) {
 	h.respond(c, 202, struct {

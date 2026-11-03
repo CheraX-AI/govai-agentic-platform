@@ -92,7 +92,7 @@ func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *Registra
 			if recover() != nil {
 				logger.Error("request panic", "request_id", requestID)
 				if !c.Writer.Written() {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+					abortJSON(c, http.StatusInternalServerError, gin.H{"error": "internal server error"})
 				} else {
 					c.Abort()
 				}
@@ -127,7 +127,7 @@ func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *Registra
 			}
 		}
 		if !allowed {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
+			abortJSON(c, http.StatusForbidden, gin.H{"error": "origin not allowed"})
 			return
 		}
 		c.Header("Access-Control-Allow-Origin", origin)
@@ -143,7 +143,7 @@ func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *Registra
 				allowedMethod = "POST"
 			}
 			if method != allowedMethod {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CORS method not allowed"})
+				abortJSON(c, http.StatusForbidden, gin.H{"error": "CORS method not allowed"})
 				return
 			}
 			for _, header := range strings.Split(c.GetHeader("Access-Control-Request-Headers"), ",") {
@@ -151,11 +151,11 @@ func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *Registra
 				case "", "authorization", "content-type":
 				case "idempotency-key":
 					if !registrationPath {
-						c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
+						abortJSON(c, http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
 						return
 					}
 				default:
-					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
+					abortJSON(c, http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
 					return
 				}
 			}
@@ -203,7 +203,7 @@ func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *Registra
 			// Ignore Forwarded/X-Forwarded-Proto. Credentials require direct TLS;
 			// proxy termination requires a separate reviewed deployment design.
 			if c.Request.TLS == nil {
-				c.AbortWithStatusJSON(http.StatusUpgradeRequired, gin.H{"error": "HTTPS required"})
+				abortJSON(c, http.StatusUpgradeRequired, gin.H{"error": "HTTPS required"})
 				return
 			}
 			h.Handle(c)

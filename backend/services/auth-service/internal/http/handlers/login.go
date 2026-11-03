@@ -31,7 +31,7 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
 	fail := func(status int, code, message string) {
-		c.AbortWithStatusJSON(status, gin.H{"error": message, "code": code})
+		errorResponse(c, status, code, message)
 	}
 	unavailable := func() { fail(503, "login_unavailable", "Login is temporarily unavailable.") }
 	denied := func() {
