@@ -48,7 +48,7 @@ func (h *WebSessionHandler) SetLoginLimiter(l RegistrationLimiter) {
 type webPermitKey struct{}
 
 func webFail(c *gin.Context, status int, code string) {
-	c.AbortWithStatusJSON(status, gin.H{"code": code, "error": "Unable to complete the web session request."})
+	errorResponse(c, status, code, "Unable to complete the web session request.")
 }
 func webError(c *gin.Context, err error) {
 	if errors.Is(err, websession.ErrDenied) {

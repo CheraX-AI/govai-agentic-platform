@@ -36,7 +36,7 @@ func (h *NativeSessionHandler) handle(c *gin.Context, revoke bool) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
 	fail := func(status int, code string) {
-		c.AbortWithStatusJSON(status, gin.H{"code": code, "error": "Unable to complete the session request."})
+		errorResponse(c, status, code, "Unable to complete the session request.")
 	}
 	if c.Request.Method != http.MethodPost {
 		c.Header("Allow", "POST")

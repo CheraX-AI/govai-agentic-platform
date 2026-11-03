@@ -25,18 +25,18 @@ func NewProtected(verifier *authn.Verifier, profiles ReadyProfiles) (*Protected,
 func (p *Protected) readyProfile(c *gin.Context) {
 	identity, ok := authn.Current(c)
 	if !ok {
-		c.AbortWithStatusJSON(401, gin.H{"error": "Authentication required.", "code": "unauthorized"})
+		abortJSON(c, 401, gin.H{"error": "Authentication required.", "code": "unauthorized"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	ready, e := p.profiles.HasReadyProfile(ctx, identity.Issuer, identity.Subject)
 	cancel()
 	if e != nil {
-		c.AbortWithStatusJSON(503, gin.H{"error": "Profile service temporarily unavailable.", "code": "profile_unavailable"})
+		abortJSON(c, 503, gin.H{"error": "Profile service temporarily unavailable.", "code": "profile_unavailable"})
 		return
 	}
 	if !ready {
-		c.AbortWithStatusJSON(403, gin.H{"error": "Access denied.", "code": "forbidden"})
+		abortJSON(c, 403, gin.H{"error": "Access denied.", "code": "forbidden"})
 		return
 	}
 	c.Next()

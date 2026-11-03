@@ -48,7 +48,7 @@ func NewRecoveryHandler(service RecoveryService, requestLimit, resetLimit Regist
 	return &RecoveryHandler{service: service, requestLimit: requestLimit, resetLimit: resetLimit, cfg: cfg}, nil
 }
 func recoveryFail(c *gin.Context, status int, code string) {
-	c.AbortWithStatusJSON(status, gin.H{"code": code})
+	errorResponse(c, status, code, "")
 }
 func recoveryUnavailable(c *gin.Context) {
 	c.Header("Retry-After", "5")
