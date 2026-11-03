@@ -1,47 +1,8 @@
-# GovAI Backend
+# GovAI Go backend
 
-Node.js + Express API for the GovAI agentic platform.
+Express has been retired. The Go/Gin foundation lives in services/auth-service.
+See [the service guide](services/auth-service/README.md) for setup and tests.
+Other service directories remain placeholders.
 
-## Requirements
-
-- Node.js 24+ (see `.nvmrc`; run `nvm use` if you use nvm)
-
-## Setup
-
-```bash
-cd backend
-npm install
-cp .env.example .env
-npm run dev      # start with auto-reload on http://localhost:5000
-```
-
-| Script          | Description                          |
-| --------------- | ------------------------------------ |
-| `npm run dev`   | Start the server with `--watch`      |
-| `npm start`     | Start the server                     |
-| `npm test`      | Run tests with the built-in test runner |
-
-## Structure
-
-```
-backend/
-├── src/
-│   ├── config/        # Environment-based configuration
-│   ├── controllers/   # Request handlers
-│   ├── middlewares/   # Express middleware (errors, auth, ...)
-│   ├── models/        # Data models / schemas
-│   ├── routes/        # Route definitions, mounted under /api
-│   ├── services/      # Business logic
-│   ├── utils/         # Shared helpers
-│   ├── validators/    # Request validation
-│   ├── app.js         # Express app setup
-│   └── server.js      # Entry point
-├── tests/
-├── logs/
-├── .env.example
-└── package.json
-```
-
-## Endpoints
-
-- `GET /api/health`: health check
+The root README still describes the older Node backend; use this backend guide
+for current instructions. The teammate-owned web app still uses Node/npm.
