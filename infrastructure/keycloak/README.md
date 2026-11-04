@@ -1,6 +1,6 @@
 # Current local database: PostgreSQL
 
-The approved H2-to-PostgreSQL transition completed on 2026-10-31. Follow [current startup and migration evidence](../keycloak-postgres/README.md) and [HTTPS setup](HTTPS-SETUP.md). Historical H2 commands below are not the current startup procedure. Do not start H2 and PostgreSQL as competing identity stores.
+The approved H2-to-PostgreSQL transition completed on 2026-10-31. Follow [current startup and migration evidence](../postgres/keycloak/README.md) and [HTTPS setup](HTTPS-SETUP.md). Historical H2 commands below are not the current startup procedure. Do not start H2 and PostgreSQL as competing identity stores.
 
 # Current local Keycloak development environment
 
@@ -12,7 +12,7 @@ historical; use the HTTPS Compose overlay for the configured environment.
 Planning update, 2026-10-29: team/mentor approved custom registration through the
 Go Admin API adapter and password login through Go to Keycloak's token endpoint.
 Direct Grant/ROPC conflicts with RFC 9700 and is not PKCE. See the
-[current architecture/API plan](../../services/auth-service/docs/GA-48-registration-plan.md)
+[current architecture/API plan](../../backend/services/auth-service/docs/GA-48-registration-plan.md)
 for limitations, separate credentials, validated HTTPS on both legs, custody
 proposals and release gates. This guide's hosted/PKCE instructions and results
 describe the existing historical setup, not permission to enable Direct Grants.
@@ -82,7 +82,7 @@ coordinate its restoration rather than assuming the Compose file provides it.
 Start Docker Desktop with the Linux engine. From the repository root:
 
 ```powershell
-cd backend/dev/keycloak
+cd infrastructure/keycloak
 docker version
 docker compose version
 # First setup only, if .env does not already exist:
@@ -125,7 +125,7 @@ to this local Mailpit setup, not deployed email services.
 
 ## Discovery and Go connectivity verification
 
-From backend/dev/keycloak:
+From infrastructure/keycloak:
 
 ```powershell
 $discovery = Invoke-RestMethod -TimeoutSec 5 http://localhost:8180/realms/GovAI/.well-known/openid-configuration
@@ -176,7 +176,7 @@ recorded below.
 Historical hosted-flow evidence: GA-48 now selects custom registration through
 React/mobile -> Go/Gin -> Keycloak Admin API, with planned password login through
 Go to the token endpoint under the exception documented above.
-See the [draft implementation plan and API contract](../../services/auth-service/docs/GA-48-registration-plan.md).
+See the [draft implementation plan and API contract](../../backend/services/auth-service/docs/GA-48-registration-plan.md).
 The selected path is not implemented; the results below do not test it.
 
 The operator confirmed the following local configuration and manual results on
@@ -232,7 +232,7 @@ GA-48 is not marked complete by these manual results.
 
 ## Persistence, logs, shutdown and resume
 
-From backend/dev/keycloak, restart only Keycloak to repeat the persistence check:
+From infrastructure/keycloak, restart only Keycloak to repeat the persistence check:
 
 ```powershell
 docker compose --env-file .env -f compose.yaml restart keycloak

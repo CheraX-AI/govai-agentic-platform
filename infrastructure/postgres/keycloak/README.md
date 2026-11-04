@@ -16,7 +16,7 @@ superuser, create-role, create-database, replication or bypass-RLS. Bootstrap
 credentials are separate and are never supplied to Go or Keycloak.
 
 `setup.ps1` requires PowerShell 7+ and is for a fresh installation only: it generates ignored `.env` and
-`../keycloak/.env.postgres` and refuses existing credentials. Keep credentials with
+`../../keycloak/.env.postgres` and refuses existing credentials. Keep credentials with
 their volumes. Do not regenerate passwords for existing data or rerun SQL init by
 removing a volume. Keycloak manages its own SQL tables; Go migrations must not.
 Remote/shared SQL deployments additionally require verified TLS; this local SQL
@@ -24,11 +24,11 @@ connection stays inside the private Docker network.
 
 ## Normal startup
 
-From `backend/dev/keycloak-postgres`:
+From `infrastructure/postgres/keycloak`:
 
 ```powershell
 docker compose --env-file .env -f compose.yaml up -d --wait
-cd ../keycloak
+cd ../../keycloak
 docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml config --quiet
 docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml up -d
 ```

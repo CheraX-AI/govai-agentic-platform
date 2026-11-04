@@ -208,7 +208,7 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	// Snapshot only changed settings/attribute definitions, never realm secrets or
 	// user representations. Files are private and outside tracked source.
 	snapshot := object{"time": time.Now().UTC(), "registrationAllowed": realm["registrationAllowed"], "adminPermissionsEnabled": realm["adminPermissionsEnabled"], "verifyEmail": realm["verifyEmail"], "profile": profile, "previous_user_count": len(users)}
-	state := filepath.Join(root, "..", "..", "services", "auth-service", ".local")
+	state := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".local")
 	if os.MkdirAll(state, 0700) != nil {
 		return ErrSetup
 	}
@@ -235,7 +235,7 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	if a.check(ctx) != nil {
 		return ErrSetup
 	}
-	runtimeFile := filepath.Join(root, "..", "..", "services", "auth-service", ".env.registration")
+	runtimeFile := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration")
 	env, e := godotenv.Read(runtimeFile)
 	if e != nil {
 		return ErrSetup
@@ -368,7 +368,7 @@ func (a *localAdmin) configure(ctx context.Context, root string, realm, profile 
 	rm := a.clientID(ctx, "realm-management")
 	queryRole := a.get(ctx, realmPath+"/clients/"+rm+"/roles/query-users")
 	a.must(ctx, "POST", realmPath+"/users/"+principal+"/role-mappings/clients/"+rm, []object{queryRole}, 204)
-	serviceRoot := filepath.Clean(filepath.Join(root, "..", "..", "services", "auth-service"))
+	serviceRoot := filepath.Clean(filepath.Join(root, "..", "..", "backend", "services", "auth-service"))
 	runtimeFile := filepath.Join(serviceRoot, ".env.registration")
 	env, e := godotenv.Read(runtimeFile)
 	if os.IsNotExist(e) {

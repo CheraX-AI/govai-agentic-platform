@@ -14,8 +14,8 @@ coverage.out
 govai-ga48-*/
 
 # Local TLS material and private keys
-/dev/keycloak/certs/
-/dev/keycloak/tls/
+
+
 *.key
 *.p12
 *.pfx
@@ -24,4 +24,3 @@ govai-ga48-*/
 coverage-*.out
 *.prof
 *.dump
-/dev/auth-postgres/*.backup

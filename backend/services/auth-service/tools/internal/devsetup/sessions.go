@@ -20,7 +20,7 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 	if a.check(ctx) != nil {
 		return ErrSetup
 	}
-	service := filepath.Join(root, "..", "..", "services", "auth-service")
+	service := filepath.Join(root, "..", "..", "backend", "services", "auth-service")
 	webFile := filepath.Join(service, ".env.web")
 	loginFile := filepath.Join(service, ".env.login")
 	web, e := godotenv.Read(webFile)

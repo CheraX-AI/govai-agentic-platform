@@ -18,9 +18,9 @@ Go owns application profiles and session custody in a separate PostgreSQL databa
 - [Refresh, browser sessions and logout](docs/GA-50-token-management.md),
   [Postman instructions](docs/GA-50-local-postman.md), and
   [rollout configuration](docs/GA-50-local-rollout-review.md).
-- [HTTPS startup](../../dev/keycloak/HTTPS-SETUP.md),
-  [application database setup](../../dev/auth-postgres/README.md), and
-  [Keycloak PostgreSQL startup/rollback](../../dev/keycloak-postgres/README.md).
+- [HTTPS startup](../../../infrastructure/keycloak/HTTPS-SETUP.md),
+  [application database setup](../../../infrastructure/postgres/auth/README.md), and
+  [Keycloak PostgreSQL startup/rollback](../../../infrastructure/postgres/keycloak/README.md).
 
 ## Verification and remaining work
 
@@ -249,7 +249,7 @@ pinned, persistent reset-email sink is prepared so existing messages/container a
 Keycloak verification SMTP settings stay untouched. From the repository root:
 
 ```powershell
-docker compose -f backend/dev/keycloak/compose.recovery-mail.yaml up -d
+docker compose -f infrastructure/keycloak/compose.recovery-mail.yaml up -d
 ```
 
 It uses the built-in bridge (no new default address-pool allocation), SMTP on

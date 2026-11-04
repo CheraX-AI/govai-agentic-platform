@@ -20,7 +20,7 @@ func (a *localAdmin) configureAuthorization(ctx context.Context, root string) er
 	if e != nil {
 		return ErrSetup
 	}
-	path := filepath.Join(root, "..", "..", "services", "auth-service", ".env.authorization")
+	path := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.authorization")
 	if os.WriteFile(path, []byte(text+"\n"), 0600) != nil {
 		return ErrSetup
 	}

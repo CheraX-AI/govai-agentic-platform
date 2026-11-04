@@ -9,7 +9,7 @@ import (
 )
 
 func (a *localAdmin) diagnose(ctx context.Context, root string) error {
-	env, e := godotenv.Read(filepath.Join(root, "..", "..", "services", "auth-service", ".env.registration"))
+	env, e := godotenv.Read(filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration"))
 	if e != nil {
 		return ErrSetup
 	}

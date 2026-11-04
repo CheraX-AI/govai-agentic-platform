@@ -32,7 +32,7 @@ func (a *localAdmin) smoke(ctx context.Context, root string) error {
 	if a.check(ctx) != nil {
 		return ErrSetup
 	}
-	serviceRoot := filepath.Clean(filepath.Join(root, "..", "..", "services", "auth-service"))
+	serviceRoot := filepath.Clean(filepath.Join(root, "..", "..", "backend", "services", "auth-service"))
 	path := filepath.Join(serviceRoot, ".local", "registration-smoke.json")
 	var sample smokeCase
 	b, e := os.ReadFile(path)
