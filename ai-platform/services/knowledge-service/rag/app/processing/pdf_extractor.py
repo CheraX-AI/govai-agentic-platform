@@ -56,13 +56,24 @@ class DocumentType(str, Enum):
     SERVICE_GUIDELINE = "service_guideline"
 
 
+class PublicationStatus(str, Enum):
+    """Only published documents can be found by semantic search; drafts are stored but hidden."""
+
+    PUBLISHED = "published"
+    DRAFT = "draft"
+
+
 class DocumentSource(BaseModel):
-    """Who owns the document. Supplied by the caller, never read from the PDF."""
+    """Who owns the document, and where its original is stored. Supplied by the caller, never read from the PDF."""
 
     department_id: str = Field(min_length=1)
     service_id: str | None = Field(default=None, min_length=1)
     document_type: DocumentType
     title: str | None = Field(default=None, min_length=1)
+    # Admins upload only verified documents, so they are published unless marked as drafts
+    publication_status: PublicationStatus = PublicationStatus.PUBLISHED
+    # SeaweedFS key of the original PDF; set when the PDF was read from object storage
+    object_key: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def check_service_matches_type(self):
@@ -158,6 +169,7 @@ def to_langchain_documents(document):
         "source_file": document.source_file,
         "department_id": document.source.department_id,
         "document_type": document.source.document_type.value,
+        "publication_status": document.source.publication_status.value,
         "total_pages": document.total_pages,
     }
 
@@ -166,6 +178,8 @@ def to_langchain_documents(document):
         metadata["service_id"] = document.source.service_id
     if document.source.title is not None:
         metadata["document_title"] = document.source.title
+    if document.source.object_key is not None:
+        metadata["object_key"] = document.source.object_key
 
     # Create one LangChain Document per page that has text
     langchain_documents = []

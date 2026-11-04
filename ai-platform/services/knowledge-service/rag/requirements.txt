@@ -11,10 +11,20 @@ langchain-core==1.7.0
 # Embeddings through the NVIDIA API
 langchain-nvidia-ai-endpoints==1.5.0
 
+# Settings, chunk, and result models
+pydantic==2.14.1
+
 # Vector checks and similarity maths
 numpy==2.5.4
 
-# Loads embedding settings from .env
+# S3 client for the SeaweedFS object storage (botocore is imported directly for its errors)
+boto3==1.43.123
+botocore==1.43.123
+
+# HTTP client for the ChromaDB vector database (no local database or models)
+chromadb-client==1.5.9
+
+# Loads embedding, storage, and vector database settings from .env
 python-dotenv==1.2.4
 
 # Tests
