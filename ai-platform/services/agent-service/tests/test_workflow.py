@@ -4,7 +4,13 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.knowledge_agent.prompts import EMPTY_QUESTION_REPLY, SHORT_QUESTION_REPLY, InvalidQuestionError
 from app.agents.knowledge_agent.schemas import KnowledgeAnswer, SourceReference
-from app.graph.workflow import ASSISTANT_UNAVAILABLE_REPLY, KNOWLEDGE_AGENT_NODE, build_graph
+from app.graph.workflow import (
+    ASSISTANT_UNAVAILABLE_REPLY,
+    FAILURE_INVALID_QUESTION,
+    FAILURE_UNAVAILABLE,
+    KNOWLEDGE_AGENT_NODE,
+    build_graph,
+)
 from app.llm.exceptions import LLMTimeoutError
 from app.tools.knowledge_rag_client import KnowledgeServiceUnavailableError
 
@@ -140,3 +146,30 @@ def test_conversation_without_a_question_asks_for_one():
     result = graph.invoke({"messages": [AIMessage(content="Hello")]})
 
     assert result["messages"][-1].content == EMPTY_QUESTION_REPLY
+
+
+# Failure reason
+
+def test_answer_has_no_failure():
+
+    result = ask(build_graph(FakeKnowledgeAgent()), "Synthetic question?")
+
+    assert result["failure"] is None
+
+
+def test_unavailable_service_is_marked_as_unavailable():
+
+    agent = FakeKnowledgeAgent(error=KnowledgeServiceUnavailableError("down"))
+
+    result = ask(build_graph(agent), "Synthetic question?")
+
+    assert result["failure"] == FAILURE_UNAVAILABLE
+
+
+def test_invalid_question_is_marked_as_invalid():
+
+    agent = FakeKnowledgeAgent(error=InvalidQuestionError(SHORT_QUESTION_REPLY))
+
+    result = ask(build_graph(agent), "hi")
+
+    assert result["failure"] == FAILURE_INVALID_QUESTION

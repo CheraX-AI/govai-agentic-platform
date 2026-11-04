@@ -66,7 +66,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(verifier.Close)
-	agent := &fakeAgent{reply: chat.Reply{Answer: "Synthetic answer only.", Sources: []chat.Source{{Title: "Synthetic source", URL: "https://official.example.test/guide"}}}}
+	agent := &fakeAgent{reply: chat.Reply{Answer: "Synthetic answer only.", Sources: []chat.Source{{Number: 1, Title: "Synthetic source", Page: 2, URL: "https://official.example.test/guide"}}}}
 	logs := &bytes.Buffer{}
 	router, err := NewRouter(verifier, agent, []string{"https://web.example.test"}, slog.New(slog.NewJSONHandler(logs, nil)))
 	if err != nil {

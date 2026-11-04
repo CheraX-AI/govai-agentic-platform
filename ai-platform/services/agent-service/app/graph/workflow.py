@@ -23,6 +23,10 @@ KNOWLEDGE_AGENT_NODE = "knowledge_agent"
 # Shown instead of internal errors; the details are only logged
 ASSISTANT_UNAVAILABLE_REPLY = "The GovAI assistant cannot answer right now. Please try again later."
 
+# Why a turn has no answer, so callers such as the HTTP API can pick a status code
+FAILURE_INVALID_QUESTION = "invalid_question"
+FAILURE_UNAVAILABLE = "unavailable"
+
 
 # Models
 
@@ -31,9 +35,12 @@ class AgentState(MessagesState):
 
     messages holds the chat; knowledge_answer holds the last answer with its
     cited sources, scope, and prompt version (None when no answer was made).
+    failure says why there is no answer: FAILURE_INVALID_QUESTION,
+    FAILURE_UNAVAILABLE, or None when the turn succeeded.
     """
 
     knowledge_answer: dict | None
+    failure: str | None
 
 
 # Node
@@ -57,7 +64,7 @@ class KnowledgeAgentNode:
 
         except InvalidQuestionError as error:
             # Empty, too short, or too long: tell the citizen how to ask instead
-            update = reply_without_answer(str(error))
+            update = reply_without_answer(str(error), FAILURE_INVALID_QUESTION)
             return update
 
         except (KnowledgeServiceError, LLMError) as error:
@@ -66,13 +73,14 @@ class KnowledgeAgentNode:
                 "knowledge agent failed",
                 extra={"request_id": request_id, "error_type": type(error).__name__},
             )
-            update = reply_without_answer(ASSISTANT_UNAVAILABLE_REPLY)
+            update = reply_without_answer(ASSISTANT_UNAVAILABLE_REPLY, FAILURE_UNAVAILABLE)
             return update
 
         # Add the reply to the chat and keep the full answer for the caller
         update = {
             "messages": [AIMessage(content=answer.answer)],
             "knowledge_answer": answer.model_dump(),
+            "failure": None,
         }
 
         return update
@@ -120,12 +128,13 @@ def latest_question(messages):
     raise InvalidQuestionError(EMPTY_QUESTION_REPLY)
 
 
-def reply_without_answer(reply):
+def reply_without_answer(reply, failure):
 
-    # A chat reply with no knowledge answer behind it
+    # A chat reply with no knowledge answer behind it, and the reason why
     update = {
         "messages": [AIMessage(content=reply)],
         "knowledge_answer": None,
+        "failure": failure,
     }
 
     return update

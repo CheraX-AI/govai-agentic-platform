@@ -35,7 +35,7 @@ func TestHTTPAgentPayloadAndServiceAuthentication(t *testing.T) {
 			t.Error("incorrect question envelope")
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = io.WriteString(w, `{"answer":"Synthetic response.","sources":[{"title":"Synthetic source","url":"https://official.example.test/doc?lang=ta#section"}]}`)
+		_, _ = io.WriteString(w, `{"answer":"Synthetic response.","sources":[{"number":1,"title":"Synthetic source","url":"https://official.example.test/doc?lang=ta#section"}]}`)
 	}))
 	defer server.Close()
 	cfg := HTTPConfig{URL: server.URL + "/chat", AuthMode: "bearer", BearerToken: "synthetic-service-secret", Timeout: time.Second}
@@ -162,7 +162,28 @@ func TestDecodeReplyContract(t *testing.T) {
 			t.Fatal("optional sources failed")
 		}
 	}
-	for _, value := range []string{`null`, `[]`, `{"Answer":"wrong case"}`, `{"answer":null}`, `{"answer":"synthetic","identity":"caller"}`, `{"answer":"synthetic","sources":{}}`, `{"answer":"synthetic","sources":[{"title":"a","url":"https://source.test","url":"https://other.test"}]}`, `{"answer":"synthetic","sources":[{"title":"a","url":"http://source.test"}]}`, `{"answer":"\ud800"}`, `{"answer":"synthetic"}{}`} {
+	// The shape agent-service sends: number and title, page when known, no URL yet.
+	reply, err := DecodeReply([]byte(`{"answer":"synthetic [2]","sources":[{"number":2,"title":"Synthetic guide","page":3},{"number":4,"title":"Other","page":null,"url":null}]}`))
+	if err != nil || len(reply.Sources) != 2 || reply.Sources[0] != (Source{Number: 2, Title: "Synthetic guide", Page: 3}) || reply.Sources[1] != (Source{Number: 4, Title: "Other"}) {
+		t.Fatal("agent-service source shape rejected or changed")
+	}
+	for _, value := range []string{`null`, `[]`, `{"Answer":"wrong case"}`, `{"answer":null}`, `{"answer":"synthetic","identity":"caller"}`, `{"answer":"synthetic","sources":{}}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a","url":"https://source.test","url":"https://other.test"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a","url":"http://source.test"}]}`,
+		`{"answer":"synthetic","sources":[{"title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1}]}`,
+		`{"answer":"synthetic","sources":[{"number":0,"title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":-1,"title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1.5,"title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1e1,"title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":"1","title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":101,"title":"a"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a"},{"number":1,"title":"b"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a","page":0}]}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a","page":"3"}]}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a","url":""}]}`,
+		`{"answer":"synthetic","sources":[{"number":1,"title":"a","document_title":"extra"}]}`,
+		`{"answer":"\ud800"}`, `{"answer":"synthetic"}{}`} {
 		if _, err := DecodeReply([]byte(value)); !errors.Is(err, ErrResponse) {
 			t.Fatal("invalid agent contract accepted")
 		}

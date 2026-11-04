@@ -68,7 +68,7 @@ func NewRouter(verifier *authn.Verifier, agent chat.Agent, origins []string, log
 		c.Header("X-Request-ID", requestID)
 		ctx, cancel := context.WithTimeout(c.Request.Context(), budget)
 		defer cancel()
-		c.Request = c.Request.WithContext(ctx)
+		c.Request = c.Request.WithContext(chat.WithRequestID(ctx, requestID))
 		c.Next()
 	})
 	router.Use(func(c *gin.Context) {

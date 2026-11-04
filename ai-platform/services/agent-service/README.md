@@ -5,8 +5,10 @@ answers questions from the government documents in the knowledge service (RAG),
 which it reaches through the knowledge service's internal retrieval API.
 
 ```text
-Client (Chainlit chat, LangGraph Studio)
-   └─► graph: knowledge_agent node ─► KnowledgeAgent
+core-service (Go) ── POST /api/v1/chat ──► app/api (FastAPI)
+Client (Chainlit chat, LangGraph Studio)         │
+   └─► graph: knowledge_agent node ◄─────────────┘
+         └─► KnowledgeAgent
          ├─ KnowledgeRagClient ── POST /api/v1/retrieve ──► knowledge-service (RAG)
          ├─ RAG prompt with the numbered chunks
          └─ NVIDIA chat model ─► answer with [n] citations
@@ -18,8 +20,13 @@ Client (Chainlit chat, LangGraph Studio)
 agent-service/
 ├── agent.py                        # Builds the graph from .env; loaded by langgraph.json
 ├── app/
+│   ├── api/
+│   │   ├── main.py                 # create_app(): POST /api/v1/chat and GET /health for core-service
+│   │   ├── schemas.py              # ChatRequest, ChatResponse, ChatSource: the core-service contract
+│   │   ├── auth.py                 # Service token check (constant time)
+│   │   └── config.py               # AGENT_API_AUTH_MODE and AGENT_API_TOKEN read from .env
 │   ├── graph/
-│   │   └── workflow.py             # AgentState, KnowledgeAgentNode, build_graph(), create_graph()
+│   │   └── workflow.py             # AgentState (with failure), KnowledgeAgentNode, build_graph(), create_graph()
 │   ├── agents/
 │   │   └── knowledge_agent/
 │   │       ├── agent.py            # KnowledgeAgent: retrieve, prompt, LLM, cited sources
@@ -35,9 +42,9 @@ agent-service/
 │   ├── chat_ui.py                  # Chainlit chat with the agent graph
 │   └── check_llm.py                # Sends one synthetic question to the configured model
 ├── tests/                          # Unit tests, and live tests skipped without the services
-├── Dockerfile                      # Image for the Chainlit chat and LangGraph Studio
+├── Dockerfile                      # Image for the Chainlit chat, LangGraph Studio and the chat API
 ├── .dockerignore                   # Keeps .env, .venv, tests, and caches out of the image
-├── .env.example                    # Template for .env (NVIDIA, LLM, knowledge service, LangSmith)
+├── .env.example                    # Template for .env (NVIDIA, LLM, knowledge service, agent API, LangSmith)
 ├── langgraph.json
 ├── pytest.ini
 └── requirements.txt
@@ -217,6 +224,94 @@ The graph never shows internal errors. The details are logged with the request I
 | `KnowledgeServiceRequestError` | The knowledge service rejected the request (4xx) |
 | `KnowledgeServiceError` | Base class; also an invalid response |
 
+## Chat API for core-service
+
+`app/api` is the internal HTTP API that core-service (Go) calls for the citizen chat
+(the "FastAPI AI API" box in the GovAI block diagram). Citizens never call it directly:
+core-service checks their Keycloak login, verified email and `citizen` role first, then
+forwards only the question text.
+
+```text
+Citizen app ─► core-service POST /api/chat/message (JWT, citizen)
+                 └─► agent-api POST /api/v1/chat (service token, X-Request-ID)
+                       └─► graph ─► Knowledge Agent ─► knowledge-service + NVIDIA
+```
+
+The API runs the graph, not the Knowledge Agent, so a Coordinator Agent can be added
+inside the graph later without changing the contract.
+
+### Contract
+
+The same contract is enforced in `backend/services/core-service/internal/chat/decode.go`,
+which rejects unknown fields; change both sides together.
+
+```http
+POST /api/v1/chat
+Authorization: Bearer <AGENT_API_TOKEN>
+X-Request-ID: <optional, [A-Za-z0-9-]{1,64}>
+Content-Type: application/json
+
+{"message": "What documents do I need for a passport?"}
+```
+
+```json
+{"answer": "Bring form TF-1 [2].", "sources": [{"number": 2, "title": "Passport guide", "page": 3}]}
+```
+
+- `number` matches the `[n]` citation in the answer. `page` is left out when unknown.
+  `url` is allowed by core-service but not sent yet: the documents have no public address.
+- `title` is the document title, else the file name, else `Document <n>`, cut to 512 bytes.
+
+| Situation | Status | Body |
+| --- | --- | --- |
+| Answer, or "not in the documents" | 200 | answer and cited sources (may be `[]`) |
+| Empty, too short or too long question | 200 | advice on how to ask, `sources: []` |
+| Knowledge service or NVIDIA failed, or the graph crashed | 503 | `{"detail": "..."}` |
+| Missing or wrong token (checked before the body) | 401 | `{"detail": "..."}` |
+| Body is not exactly `{"message": "<1-4000 characters>"}` | 422 | fixed message; the input is never echoed |
+
+`GET /health` needs no token. There are no `/docs` or OpenAPI pages. Logs hold the
+request ID, outcome and source count, never the question, answer or token.
+
+### Settings
+
+| Variable | Value |
+| --- | --- |
+| `AGENT_API_AUTH_MODE` | `bearer` (normal) or `none` (local test only, API on 127.0.0.1) |
+| `AGENT_API_TOKEN` | 32+ printable ASCII characters; the same value as core-service's `KNOWLEDGE_AGENT_BEARER_TOKEN` |
+
+Make a token with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Startup stops with an error if the mode or token is invalid.
+
+### Run it and connect core-service
+
+core-service sends its token only over HTTPS. The `agent-api` compose service serves
+HTTPS with the local development certificate (`infrastructure/keycloak/tls/api-cert.pem`,
+see `infrastructure/keycloak/HTTPS-SETUP.md`) on `127.0.0.1:8030`:
+
+```powershell
+docker compose up -d --build knowledge-service agent-api
+```
+
+Then in `backend/services/core-service/.env`:
+
+```dotenv
+KNOWLEDGE_AGENT_ENABLED=true
+KNOWLEDGE_AGENT_URL=https://127.0.0.1:8030/api/v1/chat
+KNOWLEDGE_AGENT_AUTH_MODE=bearer
+KNOWLEDGE_AGENT_BEARER_TOKEN=<same value as AGENT_API_TOKEN>
+KNOWLEDGE_AGENT_CA_FILE=../../../infrastructure/keycloak/tls/ca.pem
+```
+
+Without Docker, from this folder (plain HTTP is accepted by core-service only with
+`AUTH_MODE=none` on a loopback address and `KNOWLEDGE_AGENT_ALLOW_LOOPBACK_HTTP=true`):
+
+```powershell
+uvicorn app.api.main:app --host 127.0.0.1 --port 8030
+```
+
+On Linux the container user (uid 10001) must be able to read the mounted `api-key.pem`.
+
 ## Run with Docker
 
 `ai-platform/docker-compose.ai.yml` runs the knowledge service and the agent together
@@ -225,6 +320,7 @@ with the root `docker-compose.yml` (ChromaDB, SeaweedFS, and the `govai-network`
 ```text
 Browser ──► agent-chat (Chainlit, 127.0.0.1:8502) ──► knowledge-service (no published port)
 Browser ──► agent-studio (LangGraph dev, 127.0.0.1:2024, optional)   └─► chromadb
+core-service ──► agent-api (HTTPS chat API, 127.0.0.1:8030) ──► knowledge-service
 ```
 
 | Service | Image | Port on your machine | Purpose |
@@ -232,6 +328,7 @@ Browser ──► agent-studio (LangGraph dev, 127.0.0.1:2024, optional)   └�
 | `knowledge-service` | `govai-knowledge-service` | none | Internal retrieval API; only the agent can reach it |
 | `agent-chat` | `govai-agent-service` | `127.0.0.1:8502` (`AGENT_CHAT_PORT`) | Chainlit chat with the Knowledge Agent |
 | `agent-studio` | `govai-agent-service` | `127.0.0.1:2024` (`AGENT_STUDIO_PORT`) | LangGraph Studio; only with `--profile studio` |
+| `agent-api` | `govai-agent-service` | `127.0.0.1:8030` (`AGENT_API_PORT`) | HTTPS chat API for core-service (see "Chat API for core-service") |
 
 ### Before the first run
 
@@ -253,6 +350,7 @@ $env:COMPOSE_FILE = "docker-compose.yml;ai-platform/docker-compose.ai.yml"   # o
 
 docker compose up -d --build knowledge-service agent-chat     # start the chat
 docker compose --profile studio up -d agent-studio            # also start LangGraph Studio
+docker compose up -d --build knowledge-service agent-api      # chat API for core-service
 docker compose logs -f agent-chat knowledge-service           # logs
 docker compose stop agent-chat agent-studio knowledge-service # stop
 ```

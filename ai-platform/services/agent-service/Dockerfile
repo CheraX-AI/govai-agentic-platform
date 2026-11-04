@@ -1,7 +1,8 @@
 # GovAI agent service: the Knowledge Agent graph, with the Chainlit chat UI.
 #
 # The default command starts the Chainlit chat; the agent-studio compose service
-# runs the same image with `langgraph dev` for LangGraph Studio instead.
+# runs the same image with `langgraph dev` for LangGraph Studio, and agent-api
+# runs it with uvicorn for the internal chat API that core-service calls.
 # Settings (NVIDIA, knowledge service, LangSmith) come from the environment at
 # runtime, never from the image. See ai-platform/docker-compose.ai.yml.
 
@@ -29,6 +30,6 @@ RUN useradd --create-home --uid 10001 govai \
     && chown -R govai:govai /app
 USER govai
 
-# Chainlit chat (8502); LangGraph dev server (2024) when run by agent-studio
-EXPOSE 8502 2024
+# Chainlit chat (8502); LangGraph dev server (2024) for agent-studio; chat API (8030) for agent-api
+EXPOSE 8502 2024 8030
 CMD ["chainlit", "run", "scripts/chat_ui.py", "--host", "0.0.0.0", "--port", "8502", "--headless"]

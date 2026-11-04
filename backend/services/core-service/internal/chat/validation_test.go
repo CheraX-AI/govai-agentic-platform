@@ -34,7 +34,7 @@ func TestQuestionValidation(t *testing.T) {
 	}
 }
 func TestReplyContract(t *testing.T) {
-	reply := Reply{Answer: "Synthetic test answer.", Sources: []Source{{Title: "Synthetic source", URL: "https://official.example.test/guide?lang=ta#docs"}}}
+	reply := Reply{Answer: "Synthetic test answer.", Sources: []Source{{Number: 1, Title: "Synthetic source", Page: 4, URL: "https://official.example.test/guide?lang=ta#docs"}}}
 	encoded, err := Encode(reply)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,17 @@ func TestReplyContract(t *testing.T) {
 	if err != nil || !strings.Contains(string(encoded), `"sources":[]`) {
 		t.Fatal("missing sources array")
 	}
-	for _, reply := range []Reply{{Answer: " "}, {Answer: strings.Repeat("x", (32<<10)+1)}, {Answer: "test", Sources: []Source{{Title: "bad", URL: "javascript:alert(1)"}}}, {Answer: "test", Sources: []Source{{Title: "bad", URL: "https://user:pass@example.test/"}}}} {
+	encoded, err = Encode(Reply{Answer: "Synthetic [1].", Sources: []Source{{Number: 1, Title: "Synthetic source"}}})
+	if err != nil || string(encoded) != `{"answer":"Synthetic [1].","sources":[{"number":1,"title":"Synthetic source"}]}` {
+		t.Fatal("optional page and url not omitted")
+	}
+	for _, reply := range []Reply{{Answer: " "}, {Answer: strings.Repeat("x", (32<<10)+1)},
+		{Answer: "test", Sources: []Source{{Number: 1, Title: "bad", URL: "javascript:alert(1)"}}},
+		{Answer: "test", Sources: []Source{{Number: 1, Title: "bad", URL: "https://user:pass@example.test/"}}},
+		{Answer: "test", Sources: []Source{{Title: "no number"}}},
+		{Answer: "test", Sources: []Source{{Number: 1, Title: " "}}},
+		{Answer: "test", Sources: []Source{{Number: 1, Title: "a", Page: -1}}},
+		{Answer: "test", Sources: []Source{{Number: 1, Title: "a"}, {Number: 1, Title: "b"}}}} {
 		if _, err := Encode(reply); err == nil {
 			t.Fatal("invalid response accepted")
 		}
