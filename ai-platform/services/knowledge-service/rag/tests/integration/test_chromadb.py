@@ -7,7 +7,7 @@ one axis, which makes the nearest chunk for a query predictable.
 
 import pytest
 
-from app.embeddings.models import EmbeddedChunk, EmbeddingFile
+from app.embeddings.models import EmbeddedChunk, DocumentEmbeddings
 from app.vector_store.exceptions import (
     ChunkNotFoundError,
     EmbeddingMismatchError,
@@ -70,9 +70,9 @@ def make_document(
             )
         )
 
-    embedding_file = EmbeddingFile(document_id=document_id, model=model, dimension=dimension, records=records)
+    document_embeddings = DocumentEmbeddings(document_id=document_id, model=model, dimension=dimension, records=records)
 
-    return embedding_file
+    return document_embeddings
 
 
 # Connection

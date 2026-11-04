@@ -1,8 +1,6 @@
 """Split extracted PDF pages into overlapping chunks for embedding."""
 
-import json
 import logging
-from pathlib import Path
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -87,18 +85,13 @@ def chunk_documents(documents, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLA
     return chunks
 
 
-def save_chunks(chunks, output_dir):
-    """Save chunks as one UTF-8 JSON file per document, named by document_id."""
+def to_chunk_records(chunks):
+    """Turn chunk Documents into the chunk_id, text, and metadata records the embedder validates."""
 
-    # Create output directory
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Group chunks by the document they came from
-    chunks_by_document = {}
+    # One record per chunk, in chunk order
+    records = []
     for chunk in chunks:
-        document_id = chunk.metadata["document_id"]
-        chunks_by_document.setdefault(document_id, []).append(
+        records.append(
             {
                 "chunk_id": chunk.metadata["chunk_id"],
                 "text": chunk.page_content,
@@ -106,17 +99,7 @@ def save_chunks(chunks, output_dir):
             }
         )
 
-    # Save each document's chunks as JSON
-    output_paths = []
-    for document_id, document_chunks in chunks_by_document.items():
-        output_path = output_dir / f"{document_id}.chunks.json"
-        output_path.write_text(
-            json.dumps(document_chunks, ensure_ascii=False, indent=2),
-            encoding="utf-8"
-        )
-        output_paths.append(output_path)
-
-    return output_paths
+    return records
 
 
 # Helper functions

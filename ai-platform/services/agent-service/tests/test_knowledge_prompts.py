@@ -4,17 +4,23 @@ import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.knowledge_agent.prompts import (
+    AVAILABLE_DOCUMENTS_SCOPE,
+    EMPTY_QUESTION_REPLY,
     INSUFFICIENT_INFORMATION_REPLY,
+    LONG_QUESTION_REPLY,
+    MAX_QUESTION_LENGTH,
     NO_DOCUMENTS_CONTEXT,
-    PASSPORT_SERVICE_SCOPE,
     PROMPT_VERSION,
+    SHORT_QUESTION_REPLY,
     SYSTEM_PROMPT,
+    InvalidQuestionError,
     build_rag_messages,
     build_trace_config,
+    clean_question,
     format_context,
 )
 from app.agents.knowledge_agent.schemas import KnowledgeSource, ServiceScope
-from tests.helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE
+from helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE
 
 
 # Helper functions
@@ -80,7 +86,7 @@ def test_system_message_has_the_scope_and_the_fixed_reply():
 
     messages = build_rag_messages(SYNTHETIC_QUESTION, [make_source()])
 
-    assert PASSPORT_SERVICE_SCOPE.description in system_text(messages)
+    assert AVAILABLE_DOCUMENTS_SCOPE.description in system_text(messages)
     assert INSUFFICIENT_INFORMATION_REPLY in system_text(messages)
     assert "{" not in system_text(messages)
 
@@ -94,7 +100,7 @@ def test_user_message_has_the_question_and_the_document():
     assert "test form TF-1" in question_text(messages)
 
 
-def test_another_scope_replaces_the_passport_scope():
+def test_another_scope_replaces_the_default_scope():
 
     # Other departments are supported by passing a different scope
     scope = ServiceScope(scope_id="test_scope", description="Synthetic test services")
@@ -102,7 +108,7 @@ def test_another_scope_replaces_the_passport_scope():
     messages = build_rag_messages(SYNTHETIC_QUESTION, [make_source()], service_scope=scope)
 
     assert "Synthetic test services" in system_text(messages)
-    assert PASSPORT_SERVICE_SCOPE.description not in system_text(messages)
+    assert AVAILABLE_DOCUMENTS_SCOPE.description not in system_text(messages)
 
 
 def test_question_whitespace_is_cleaned():
@@ -112,9 +118,32 @@ def test_question_whitespace_is_cleaned():
     assert "<question>\nWhat do I hand in?\n</question>" in question_text(messages)
 
 
-def test_empty_question_is_rejected():
+@pytest.mark.parametrize(
+    "question, reply",
+    [
+        ("   ", EMPTY_QUESTION_REPLY),
+        ("hi", SHORT_QUESTION_REPLY),
+        ("x" * (MAX_QUESTION_LENGTH + 1), LONG_QUESTION_REPLY),
+    ],
+)
+def test_unsearchable_questions_are_rejected_with_a_reply(question, reply):
 
-    with pytest.raises(ValueError, match="Question is empty"):
+    # The error message is the reply shown to the citizen
+    with pytest.raises(InvalidQuestionError) as error:
+        clean_question(question)
+
+    assert str(error.value) == reply
+
+
+def test_question_limits_are_inclusive():
+
+    assert clean_question("abc") == "abc"
+    assert clean_question("x" * MAX_QUESTION_LENGTH) == "x" * MAX_QUESTION_LENGTH
+
+
+def test_empty_question_is_rejected_by_the_prompt_builder():
+
+    with pytest.raises(InvalidQuestionError):
         build_rag_messages("   ", [make_source()])
 
 
@@ -213,11 +242,11 @@ def test_trace_config_labels_the_run():
     config = build_trace_config()
 
     assert config["run_name"] == "knowledge_agent_answer"
-    assert config["tags"] == ["govai", "knowledge_agent", "passport"]
+    assert config["tags"] == ["govai", "knowledge_agent", "govai_documents"]
     assert config["metadata"] == {
         "agent": "knowledge_agent",
         "prompt_version": PROMPT_VERSION,
-        "service_scope": "passport",
+        "service_scope": "govai_documents",
     }
 
 

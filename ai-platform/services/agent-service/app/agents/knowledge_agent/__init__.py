@@ -2,9 +2,7 @@
 
 Modules:
 
-- schemas.py  KnowledgeSource (a retrieved document chunk) and ServiceScope
+- agent.py    KnowledgeAgent: retrieve from the knowledge service, prompt, LLM, cited sources
+- schemas.py  KnowledgeSource, ServiceScope, SourceReference, KnowledgeAnswer
 - prompts.py  versioned system and RAG prompts, context formatting, LangSmith run config
-
-The agent node (agent.py) and the knowledge-service client are added with the
-RAG answer-generation work.
 """

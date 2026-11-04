@@ -5,7 +5,6 @@ key is missing they are skipped with a clear reason. They send only the short
 synthetic sentences built here, never real government documents.
 """
 
-import json
 
 import pytest
 from dotenv import dotenv_values
@@ -16,7 +15,7 @@ from app.embeddings import (
     EmbeddedChunk,
     Embedder,
     EmbeddingConfigError,
-    EmbeddingFile,
+    DocumentEmbeddings,
     EmbeddingSettings,
     create_embedder,
     load_settings,
@@ -210,7 +209,7 @@ def write_env_file(path, values):
 
 def make_chunk_records(count, document_id="doc001"):
 
-    # Records in the same shape the chunker saves
+    # Records in the same shape as chunker.to_chunk_records()
     records = []
     for index in range(count):
         records.append(
@@ -242,18 +241,9 @@ def topic_records():
     return records
 
 
-def write_chunk_file(folder, records, document_id="doc001"):
+def make_document_embeddings(count, model=TEST_MODEL, dimension=DIMENSION):
 
-    # Save records as a chunk file
-    chunks_path = folder / f"{document_id}.chunks.json"
-    chunks_path.write_text(json.dumps(records), encoding="utf-8")
-
-    return chunks_path
-
-
-def make_embedding_file(count, model=TEST_MODEL, dimension=DIMENSION):
-
-    # Build an embeddings file whose records follow make_chunk_records
+    # Build a document's embeddings whose records follow make_chunk_records
     records = []
     for record in make_chunk_records(count):
         records.append(
@@ -265,9 +255,9 @@ def make_embedding_file(count, model=TEST_MODEL, dimension=DIMENSION):
             )
         )
 
-    embedding_file = EmbeddingFile(document_id="doc001", model=model, dimension=dimension, records=records)
+    document_embeddings = DocumentEmbeddings(document_id="doc001", model=model, dimension=dimension, records=records)
 
-    return embedding_file
+    return document_embeddings
 
 
 def chunk_ids(records):

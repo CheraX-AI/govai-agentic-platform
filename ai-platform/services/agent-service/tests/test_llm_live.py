@@ -11,7 +11,7 @@ from pydantic import SecretStr
 from app.agents.knowledge_agent.prompts import build_rag_messages
 from app.llm.exceptions import LLMAuthError
 from app.llm.provider import create_llm_provider, invoke_llm
-from tests.helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE, TEST_NVIDIA_KEY, real_settings
+from helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE, TEST_NVIDIA_KEY, real_settings
 
 
 def test_model_answers_from_the_document():

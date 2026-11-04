@@ -12,13 +12,13 @@ __pycache__/
 # LangGraph local server data
 .langgraph_api/
 
-# Chainlit local chat UI: generated config, translations, welcome page, uploads
+# Chainlit chat UI: generated config, translations, welcome page, uploads
+# (Chainlit recreates them; scripts/chat_ui.py itself is part of the service)
 .chainlit/
 .files/
 chainlit.md
 
-# Local test scripts, not part of the service (scripts/check_llm.py is kept)
-scripts/chat_ui.py
+# Local test scripts, not part of the service
 scripts/test_langsmith.py
 scripts/test_llm_trace.py
 

@@ -21,7 +21,7 @@ from app.llm.exceptions import (
     LLMUnavailableError,
 )
 from app.llm.provider import LLMProvider, create_llm_provider, invoke_llm, load_llm_provider, to_llm_error
-from tests.helpers import TEST_MODEL, TEST_NVIDIA_KEY, make_env, make_settings, write_env_file
+from helpers import TEST_MODEL, TEST_NVIDIA_KEY, make_env, make_settings, write_env_file
 
 MESSAGES = [HumanMessage(content="Synthetic test question")]
 

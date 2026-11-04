@@ -83,7 +83,6 @@ def test_search_finds_the_matching_page(store, vector_store, env_file, tmp_path,
             "--department-id", "IRD",
             "--service-id", "TIN_REGISTRATION",
             "--document-type", "service_guideline",
-            "--output-dir", str(tmp_path / "output"),
             "--env-file", str(env_file),
         ]
     )
@@ -130,7 +129,6 @@ def process_test_pdf(store, env_file, tmp_path, *extra):
             "--service-id", "TIN_REGISTRATION",
             "--document-type", "service_guideline",
             "--title", "Obtaining a Taxpayer Identification Number (TIN)",
-            "--output-dir", str(tmp_path / "output"),
             "--env-file", str(env_file),
             *extra,
         ]

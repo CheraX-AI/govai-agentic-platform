@@ -1,14 +1,12 @@
 """Tests for document text chunking."""
 
-import json
-
 import pytest
 from langchain_core.documents import Document
 
 from app.processing.chunker import (
-    chunk_documents,
-    save_chunks,
     ChunkingError,
+    chunk_documents,
+    to_chunk_records,
 )
 
 
@@ -214,9 +212,9 @@ def test_chunk_ids_are_unique():
     assert len(chunk_ids) == len(set(chunk_ids))
 
 
-def test_save_chunks(tmp_path):
+def test_chunk_records():
 
-    # Check that chunks are saved correctly as JSON
+    # Chunks become chunk_id, text, and metadata records for the embedder
     documents = [
         Document(
             page_content="TIN registration information.",
@@ -229,21 +227,12 @@ def test_save_chunks(tmp_path):
 
     chunks = chunk_documents(documents)
 
-    output_paths = save_chunks(chunks, tmp_path)
+    records = to_chunk_records(chunks)
 
-    assert len(output_paths) == 1
-    assert output_paths[0].exists()
-    assert output_paths[0].name == "doc001.chunks.json"
-
-    # Read the saved JSON file
-    saved_data = json.loads(
-        output_paths[0].read_text(encoding="utf-8")
-    )
-
-    assert len(saved_data) == 1
-    assert saved_data[0]["text"] == "TIN registration information."
-    assert saved_data[0]["chunk_id"] == "doc001:0"
-    assert saved_data[0]["metadata"]["document_id"] == "doc001"
+    assert len(records) == 1
+    assert records[0]["text"] == "TIN registration information."
+    assert records[0]["chunk_id"] == "doc001:0"
+    assert records[0]["metadata"]["document_id"] == "doc001"
 
 
 def test_multiple_document_ids():
@@ -272,32 +261,3 @@ def test_multiple_document_ids():
 
     assert chunks[0].metadata["chunk_id"] == "doc001:0"
     assert chunks[1].metadata["chunk_id"] == "doc002:0"
-
-
-def test_save_multiple_documents(tmp_path):
-
-    # Different documents should be saved to separate JSON files
-    documents = [
-        Document(
-            page_content="TIN registration guidelines.",
-            metadata={
-                "document_id": "doc001",
-                "page_number": 1
-            }
-        ),
-        Document(
-            page_content="Income tax guidelines.",
-            metadata={
-                "document_id": "doc002",
-                "page_number": 1
-            }
-        )
-    ]
-
-    chunks = chunk_documents(documents)
-
-    output_paths = save_chunks(chunks, tmp_path)
-
-    assert len(output_paths) == 2
-    assert (tmp_path / "doc001.chunks.json").exists()
-    assert (tmp_path / "doc002.chunks.json").exists()

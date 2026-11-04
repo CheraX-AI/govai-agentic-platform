@@ -19,10 +19,11 @@ PROMPT_VERSION = "v1"
 
 AGENT_NAME = "knowledge_agent"
 
-# Sprint 1 covers passport services only
-PASSPORT_SERVICE_SCOPE = ServiceScope(
-    scope_id="passport",
-    description="Sri Lankan passport services provided by the Department of Immigration and Emigration",
+# The agent answers from every published document in the knowledge service, and
+# nothing else; a narrower scope (department_id, service_id) can be passed later
+AVAILABLE_DOCUMENTS_SCOPE = ServiceScope(
+    scope_id="govai_documents",
+    description="Sri Lankan government services described in the official GovAI documents",
 )
 
 # The exact reply for a question the documents do not answer, so callers and tests can detect it
@@ -33,8 +34,23 @@ INSUFFICIENT_INFORMATION_REPLY = (
 
 NO_DOCUMENTS_CONTEXT = "No documents were found."
 
+# Question limits, the same as the knowledge service's
+MIN_QUESTION_LENGTH = 3
+MAX_QUESTION_LENGTH = 1000
+
+# Replies for questions that cannot be searched
+EMPTY_QUESTION_REPLY = "Please type a question."
+SHORT_QUESTION_REPLY = "Please ask a full question, for example: What documents do I need?"
+LONG_QUESTION_REPLY = f"Please shorten your question to at most {MAX_QUESTION_LENGTH} characters."
+
 # A document tag inside a chunk could close the real tag and smuggle in instructions
 DOCUMENT_TAG_PATTERN = re.compile(r"<\s*/?\s*document\b", re.IGNORECASE)
+
+
+# Errors
+
+class InvalidQuestionError(ValueError):
+    """The question is empty, too short, or too long. The message can be shown to the citizen."""
 
 
 # Prompts
@@ -76,7 +92,7 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
 
 # Public functions
 
-def build_rag_messages(question, sources, service_scope=PASSPORT_SERVICE_SCOPE):
+def build_rag_messages(question, sources, service_scope=AVAILABLE_DOCUMENTS_SCOPE):
     """Build the system and user messages for one citizen question.
 
     sources are KnowledgeSource objects, or dicts with the same fields, best
@@ -84,10 +100,8 @@ def build_rag_messages(question, sources, service_scope=PASSPORT_SERVICE_SCOPE):
     braces or prompt-like text inside them are never treated as template code.
     """
 
-    # Join runs of spaces and line breaks; an empty question cannot be answered
-    question = " ".join(str(question).split())
-    if not question:
-        raise ValueError("Question is empty")
+    # An empty question cannot be answered
+    question = clean_question(question)
 
     # Number the documents so the answer can cite them
     context = format_context(sources)
@@ -134,7 +148,29 @@ def format_context(sources):
     return context
 
 
-def build_trace_config(service_scope=PASSPORT_SERVICE_SCOPE):
+def clean_question(question):
+    """Join runs of spaces and line breaks, then check the length.
+
+    Uses the same limits as the knowledge service, so a question it would reject
+    gets a clear reply here instead of a failed search. Raises InvalidQuestionError
+    with a message that can be shown to the citizen.
+    """
+
+    # Normalise the whitespace, so a question of only spaces counts as empty
+    question = " ".join(str(question).split())
+
+    # Check the length of the cleaned question
+    if not question:
+        raise InvalidQuestionError(EMPTY_QUESTION_REPLY)
+    if len(question) < MIN_QUESTION_LENGTH:
+        raise InvalidQuestionError(SHORT_QUESTION_REPLY)
+    if len(question) > MAX_QUESTION_LENGTH:
+        raise InvalidQuestionError(LONG_QUESTION_REPLY)
+
+    return question
+
+
+def build_trace_config(service_scope=AVAILABLE_DOCUMENTS_SCOPE):
     """LangChain run config that names and labels a Knowledge Agent call in LangSmith.
 
     Only fixed labels are added; the question and personal details never go into

@@ -4,7 +4,7 @@ import pytest
 
 from app.llm.config import REQUIRED_VARIABLES, load_llm_settings
 from app.llm.exceptions import LLMConfigError
-from tests.helpers import TEST_MODEL, TEST_NVIDIA_KEY, make_env, write_env_file
+from helpers import TEST_MODEL, TEST_NVIDIA_KEY, make_env, write_env_file
 
 
 # Helper functions

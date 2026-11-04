@@ -27,8 +27,29 @@ class ServiceScope(BaseModel):
     """The government services the agent answers questions about.
 
     scope_id is a short label for logs and LangSmith metadata; description is
-    the text placed in the prompt.
+    the text placed in the prompt. department_id and service_id narrow the
+    document search; None searches every published document.
     """
 
     scope_id: str = Field(min_length=1, pattern=r"^[a-z0-9_]+$")
     description: str = Field(min_length=1)
+    department_id: str | None = None
+    service_id: str | None = None
+
+
+class SourceReference(BaseModel):
+    """A document cited in an answer. number matches the [n] citation in the answer text."""
+
+    number: int
+    document_title: str | None = None
+    source_file: str | None = None
+    page_number: int | None = None
+
+
+class KnowledgeAnswer(BaseModel):
+    """The agent's answer, the documents it cited, and the scope and prompt that produced it."""
+
+    answer: str
+    sources: list[SourceReference]
+    scope: str
+    prompt_version: str

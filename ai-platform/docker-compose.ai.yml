@@ -1,0 +1,77 @@
+# GovAI AI platform: the knowledge service (RAG) and the agent service.
+#
+# Use it together with the root docker-compose.yml (ChromaDB, SeaweedFS, network),
+# from the repository root (all commands: ai-platform/README.md):
+#
+#   $env:COMPOSE_FILE = "docker-compose.yml;ai-platform/docker-compose.ai.yml"
+#   docker compose up -d --build knowledge-service agent-chat
+#
+# Compose resolves every path from the folder of the first -f file, so the paths
+# below start at the repository root.
+#
+# Clients reach only the agent (the Chainlit chat, or LangGraph Studio with the
+# "studio" profile). The knowledge service has no published port: only the agent
+# can call it, inside govai-network.
+
+services:
+  knowledge-service:
+    build: ./ai-platform/services/knowledge-service/rag
+    image: govai-knowledge-service
+    container_name: govai-knowledge-service
+    restart: unless-stopped
+    env_file: ./ai-platform/services/knowledge-service/rag/.env
+    environment:
+      # Docker service names replace the localhost addresses in rag/.env
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      OBJECT_STORAGE_ENDPOINT: http://seaweedfs:8333
+    expose:
+      - "8020"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      - chromadb
+      - seaweedfs
+    networks:
+      - govai-network
+
+  agent-chat:
+    build: ./ai-platform/services/agent-service
+    image: govai-agent-service
+    container_name: govai-agent-chat
+    restart: unless-stopped
+    env_file: ./ai-platform/services/agent-service/.env
+    environment:
+      # The knowledge service by its Docker service name
+      KNOWLEDGE_SERVICE_URL: http://knowledge-service:8020
+    ports:
+      - "127.0.0.1:${AGENT_CHAT_PORT:-8502}:8502" # Chainlit chat
+    depends_on:
+      knowledge-service:
+        condition: service_healthy
+    networks:
+      - govai-network
+
+  agent-studio:
+    build: ./ai-platform/services/agent-service
+    image: govai-agent-service
+    container_name: govai-agent-studio
+    restart: unless-stopped
+    # Started only with: --profile studio
+    profiles:
+      - studio
+    command: ["langgraph", "dev", "--host", "0.0.0.0", "--port", "2024", "--no-browser", "--no-reload"]
+    env_file: ./ai-platform/services/agent-service/.env
+    environment:
+      KNOWLEDGE_SERVICE_URL: http://knowledge-service:8020
+    ports:
+      - "127.0.0.1:${AGENT_STUDIO_PORT:-2024}:2024" # LangGraph dev server for LangGraph Studio
+    depends_on:
+      knowledge-service:
+        condition: service_healthy
+    networks:
+      - govai-network
