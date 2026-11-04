@@ -7,6 +7,7 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
 	"github.com/gin-gonic/gin"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -187,5 +188,20 @@ func TestBrowserRuntimeCORS(t *testing.T) {
 	disabled.ServeHTTP(w, r)
 	if w.Code != 403 && w.Code != 404 {
 		t.Fatal("web enabled implicitly")
+	}
+}
+
+func TestWebLoginAcceptsNICIdentifier(t *testing.T) {
+	service := &browserDouble{}
+	router := browserRouter(t, service)
+	request := browserRequest("/login")
+	request.Body = io.NopCloser(strings.NewReader(`{"identifier":"123456789v","password":"synthetic-password"}`))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != 200 || service.calls != 1 {
+		t.Fatalf("NIC web login status=%d calls=%d", response.Code, service.calls)
+	}
+	if strings.Contains(response.Body.String(), "123456789") {
+		t.Fatal("NIC disclosed")
 	}
 }

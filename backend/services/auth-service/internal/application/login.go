@@ -18,7 +18,7 @@ func Login(c config.Login, store *postgres.Store) (*handler.LoginHandler, func()
 	return h, close, e
 }
 
-func LoginWithSessions(c config.Login, store *postgres.Store) (*handler.LoginHandler, *handler.NativeSessionHandler, func(), error) {
+func LoginWithSessions(c config.Login, store *postgres.Store, resolvers ...login.IdentifierResolver) (*handler.LoginHandler, *handler.NativeSessionHandler, func(), error) {
 	if !c.Enabled || store == nil {
 		return nil, nil, nil, login.ErrUnavailable
 	}
@@ -52,7 +52,7 @@ func LoginWithSessions(c config.Login, store *postgres.Store) (*handler.LoginHan
 		provider.Close()
 		return nil, nil, nil, login.ErrUnavailable
 	}
-	service, e := login.NewService(provider, provider, store)
+	service, e := login.NewService(provider, provider, store, resolvers...)
 	if e != nil {
 		return fail()
 	}

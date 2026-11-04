@@ -12,6 +12,12 @@ import (
 )
 
 func Web(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgres.Store, fenceKeys ...[]byte) (*handler.WebSessionHandler, func(), error) {
+	return webWithIdentifiers(ctx, c, pool, profiles, nil, fenceKeys...)
+}
+func WebWithIdentifiers(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgres.Store, resolver login.IdentifierResolver, fenceKeys ...[]byte) (*handler.WebSessionHandler, func(), error) {
+	return webWithIdentifiers(ctx, c, pool, profiles, resolver, fenceKeys...)
+}
+func webWithIdentifiers(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgres.Store, resolver login.IdentifierResolver, fenceKeys ...[]byte) (*handler.WebSessionHandler, func(), error) {
 	if !c.Enabled || profiles == nil || !c.Provider.EnableRefresh || postgres.WebSessionsReady(ctx, pool) != nil {
 		return nil, nil, websession.ErrUnavailable
 	}
@@ -23,7 +29,7 @@ func Web(ctx context.Context, c config.Web, pool *pgxpool.Pool, profiles *postgr
 		provider.Close()
 		return nil, nil, websession.ErrUnavailable
 	}
-	l, err := login.NewService(provider, provider, profiles)
+	l, err := login.NewService(provider, provider, profiles, resolver)
 	if err != nil {
 		return fail()
 	}

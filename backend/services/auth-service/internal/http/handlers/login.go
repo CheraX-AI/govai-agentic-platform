@@ -116,7 +116,7 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		}
 		return
 	}
-	retry, e = permit.CheckEmail(ctx, request.Email())
+	retry, e = permit.CheckEmail(ctx, request.LimitKey())
 	if e != nil {
 		if errors.Is(e, ErrRegistrationLimited) {
 			limited(retry)

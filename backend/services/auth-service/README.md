@@ -545,3 +545,40 @@ beside their packages as `*_test.go` because they exercise private implementatio
 boundaries. Use the VS Code Testing view to navigate tests separately. No separate
 routes package is introduced: router.go uses package-private handler policies.
 Live Docker experiments remain opt-in; ordinary tests do not rerun them.
+
+## Login using email or NIC
+
+Both `POST /api/v1/auth/login` (mobile/Postman) and
+`POST /api/v1/web/login` accept the preferred request:
+
+```json
+{"identifier":"YOUR_EMAIL_OR_NIC","password":"YOUR_PASSWORD"}
+```
+
+The legacy `{"email":"YOUR_EMAIL","password":"YOUR_PASSWORD"}` body remains
+supported for email only. Do not send both `email` and `identifier`, or an extra
+`nic` field. Phone identifiers are not supported. Old NIC suffixes V/X normalize
+to uppercase; 12-digit NICs retain all digits, including leading zeros. No
+old/new-number equivalence or NIC ownership verification is implied.
+
+NIC login is available only for a ready application profile linked to the fixed
+GovAI issuer and Keycloak subject. It uses the existing keyed NIC index, then
+reads the current verified/enabled owned Keycloak account email and verifies the
+password through the configured login client. The returned JWT must match the
+resolved issuer AND subject before profile authorization. It never returns the
+resolved email or NIC to the caller. No schema or database-permission change is
+needed. NIC login needs the configured registration administrative adapter;
+email login continues when that optional resolver is unavailable/not configured.
+The accepted prototype group-wide administrative authority remains unchanged.
+No additional grants or Keycloak realm settings were changed for this feature.
+
+Existing HTTPS, cookie/CSRF, role/email, and token-custody policies are unchanged.
+Wrong password, unknown/not-ready NIC and disallowed account states return the
+same generic authentication failure, with no existence/contact disclosure in the
+response. This does not promise indistinguishable timing. Rate limits apply to
+IP and normalized supplied identifier; email and NIC aliases have separate
+identifier buckets, not a unified distributed account lockout.
+
+Automated tests cover legacy email, email/NIC identifiers, old/new NIC syntax,
+ambiguous/phone rejection, redaction, resolution failure, mismatched token subject,
+and both HTTP entry points. User-confirmed Postman tests after API restart returned 200 for mobile/Postman and web NIC login with a synthetic registered account. Actual frontend/mobile UI integration remains pending.

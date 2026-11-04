@@ -14,6 +14,7 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -105,6 +106,19 @@ func run() error {
 		}
 		slog.Info("authentication database connected")
 	}
+	var identifierResolver login.IdentifierResolver
+	if regCfg.Enabled && (loginCfg.Enabled || webCfg.Enabled) {
+		expectedIssuer := regCfg.Admin.BaseURL + "/realms/" + regCfg.Admin.Realm
+		if (loginCfg.Enabled && loginCfg.Provider.Issuer != expectedIssuer) || (webCfg.Enabled && webCfg.Provider.Issuer != expectedIssuer) {
+			return login.ErrUnavailable
+		}
+		var closeIdentifiers func()
+		identifierResolver, closeIdentifiers, err = application.NICLogin(regCfg, store)
+		if err != nil {
+			return err
+		}
+		defer closeIdentifiers()
+	}
 	var registrationHandler *handler.RegistrationHandler
 	if regCfg.Enabled {
 		var closeRegistration func()
@@ -119,7 +133,7 @@ func run() error {
 	var sessionHandler *handler.NativeSessionHandler
 	if loginCfg.Enabled {
 		var closeLogin func()
-		loginHandler, sessionHandler, closeLogin, err = application.LoginWithSessions(loginCfg, store)
+		loginHandler, sessionHandler, closeLogin, err = application.LoginWithSessions(loginCfg, store, identifierResolver)
 		if err != nil {
 			return err
 		}
@@ -143,7 +157,7 @@ func run() error {
 		if len(recoveryCfg.FenceKey) > 0 {
 			fenceKeys = append(fenceKeys, recoveryCfg.FenceKey)
 		}
-		webHandler, closeWeb, err = application.Web(ctx, webCfg, pool, store, fenceKeys...)
+		webHandler, closeWeb, err = application.WebWithIdentifiers(ctx, webCfg, pool, store, identifierResolver, fenceKeys...)
 		if err != nil {
 			return err
 		}
