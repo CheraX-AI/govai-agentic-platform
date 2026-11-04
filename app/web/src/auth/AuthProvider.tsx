@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { createMockAuthAdapter } from '../services/mockAuthAdapter'
+import { browserAuthAdapter } from '../services/browserAuthAdapter'
 import { AuthContext } from './AuthContext'
 import type { AuthenticationAdapter, AuthState } from './types'
 
-const defaultAdapter = createMockAuthAdapter(() => sessionStorage, import.meta.env.DEV)
+const defaultAdapter = browserAuthAdapter
 
 export function AuthProvider({ children, adapter = defaultAdapter }: { children: ReactNode; adapter?: AuthenticationAdapter }) {
   const [state, setState] = useState<AuthState>({ status: 'checking' })
@@ -30,8 +30,22 @@ export function AuthProvider({ children, adapter = defaultAdapter }: { children:
       if (mounted.current && request === generation.current) publish({ status: 'unauthenticated' })
     } catch { if (mounted.current && request === generation.current) publish({ status: 'error' }) }
   }, [adapter, publish])
+  const login = useCallback(async (identifier: string, password: string) => {
+    if (!adapter.login) throw new Error('Login is unavailable.')
+    const request = ++generation.current
+    publish({ status: 'checking' })
+    try {
+      const session = await adapter.login(identifier, password)
+      if (!mounted.current || request !== generation.current) return false
+      publish({ status: 'authenticated', session })
+      return true
+    } catch (error) {
+      if (mounted.current && request === generation.current) publish({ status: 'unauthenticated' })
+      throw error
+    }
+  }, [adapter, publish])
   const startMockSession = useCallback(async () => {
-    if (!import.meta.env.DEV) return false
+    if (!import.meta.env.DEV || adapter === defaultAdapter) return false
     const request = ++generation.current
     publish({ status: 'checking' })
     try {
@@ -63,5 +77,15 @@ export function AuthProvider({ children, adapter = defaultAdapter }: { children:
       removeEventListener('focus', checkExpiry); removeEventListener('hashchange', checkExpiry); removeEventListener('pageshow', checkExpiry); document.removeEventListener('visibilitychange', checkExpiry)
     }
   }, [adapter, retry, publish])
-  return <AuthContext.Provider value={{ state, retry, startMockSession, logout }}>{children}</AuthContext.Provider>
+  useEffect(() => {
+    if (state.status !== 'authenticated' || !adapter.refresh) return
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void adapter.refresh!().catch(() => { void retry() })
+    }, 120_000)
+    const check = () => { void retry() }
+    addEventListener('focus', check)
+    return () => { clearInterval(interval); removeEventListener('focus', check) }
+  }, [state.status, adapter, retry])
+  return <AuthContext.Provider value={{ state, retry, login, startMockSession, logout }}>{children}</AuthContext.Provider>
 }

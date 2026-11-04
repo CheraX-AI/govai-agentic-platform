@@ -1,3 +1,4 @@
+import { installAuthFixtures } from './integration/authFixtures.mjs'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -52,12 +53,13 @@ try {
   }
   await send('Runtime.enable')
   await send('Network.enable')
+  const fixture = await installAuthFixtures(socket, send)
 
 
   const measurements=[]
   const sizes=[[1440,820],[1366,768],[1536,864],[1920,1080],[1024,768],[768,900],[375,667],[320,568]]
   if(process.argv[3]&&process.argv[4])sizes.unshift([Number(process.argv[3]),Number(process.argv[4])])
-  await send('Page.navigate',{url:'http://127.0.0.1:5173/#/register'});await delay(600)
+  await send('Page.navigate',{url:'https://localhost:5173/#/register'});await delay(600)
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'0',code:'Digit0',windowsVirtualKeyCode:48,modifiers:2})
   await send('Input.dispatchKeyEvent',{type:'keyUp',key:'0',code:'Digit0',windowsVirtualKeyCode:48,modifiers:2})
   for(const [width,height] of sizes){
@@ -65,14 +67,14 @@ try {
     for(const state of ['initial','errors','expanded-demo','errors+expanded-demo']){
       await send('Page.reload');await delay(250)
       if(state.includes('errors'))await evaluate('document.querySelector("button[type=submit]").click()')
-      if(state.includes('expanded'))await evaluate('document.querySelector("details summary").click()')
-      const metrics=await evaluate(`(() => {const root=document.documentElement,c=document.querySelector('.login-card'),p=document.querySelector('.form-panel'),s=getComputedStyle(c);return {viewport:[innerWidth,innerHeight],vertical:Math.max(0,root.scrollHeight-innerHeight),horizontal:root.scrollWidth-root.clientWidth,card:[c.offsetWidth,c.offsetHeight],cardPadding:s.padding,cardGap:s.gap,panelPadding:getComputedStyle(p).padding,panelGap:getComputedStyle(p).gap,inputHeight:document.querySelector('.input-shell').getBoundingClientRect().height,buttonHeight:document.querySelector('button[type=submit]').getBoundingClientRect().height,visualScale:visualViewport.scale,cssZoom:getComputedStyle(root).zoom,errors:document.querySelectorAll('.field-error').length,detailsOpen:document.querySelector('details').open}})()`)
+      if(state.includes('expanded'))await evaluate('document.querySelector("details summary")?.click()')
+      const metrics=await evaluate(`(() => {const root=document.documentElement,c=document.querySelector('.login-card'),p=document.querySelector('.form-panel'),s=getComputedStyle(c);return {viewport:[innerWidth,innerHeight],vertical:Math.max(0,root.scrollHeight-innerHeight),horizontal:root.scrollWidth-root.clientWidth,card:[c.offsetWidth,c.offsetHeight],cardPadding:s.padding,cardGap:s.gap,panelPadding:getComputedStyle(p).padding,panelGap:getComputedStyle(p).gap,inputHeight:document.querySelector('.input-shell').getBoundingClientRect().height,buttonHeight:document.querySelector('button[type=submit]').getBoundingClientRect().height,visualScale:visualViewport.scale,cssZoom:getComputedStyle(root).zoom,errors:document.querySelectorAll('.field-error').length,detailsOpen:document.querySelector('details')?.open ?? false}})()`)
       assert.equal(metrics.horizontal,0)
       assert.equal(metrics.visualScale,1)
       assert.equal(metrics.cssZoom,'1')
       assert.ok(metrics.inputHeight>=46&&metrics.buttonHeight>=50,'control sizes preserved')
       assert.equal(metrics.errors,state.includes('errors')?7:0)
-      assert.equal(metrics.detailsOpen,state.includes('expanded'))
+      assert.equal(metrics.detailsOpen,false,'registration no longer contains demo controls')
       await evaluate('document.querySelector("footer").scrollIntoView({block:"end"})')
       assert.ok(await evaluate('document.querySelector("footer").getBoundingClientRect().bottom<=innerHeight+1'),'footer reachable')
       measurements.push({width,height,state,...metrics})
@@ -82,6 +84,7 @@ try {
   await writeFile(output,JSON.stringify(measurements,null,2))
   console.table(measurements.filter(m=>m.width>=1024).map(({width,height,state,vertical,card})=>({width,height,state,vertical,card})))
   console.log('PASS: separate initial/error/disclosure states at 100% scale; zero horizontal overflow; full-size controls and natural scroll reachability; '+output)
+  assert.deepEqual(fixture.errors,[])
   await send('Browser.close')
 } finally {
   for (const call of pending.values()) clearTimeout(call.timer)
