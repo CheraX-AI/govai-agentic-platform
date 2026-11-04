@@ -6,11 +6,13 @@ import pytest
 from chromadb.errors import NotFoundError
 
 from app.embeddings.models import EmbeddingFile
-from app.vector_store.exceptions import VectorStoreConnectionError, VectorStoreError
+from app.vector_store.config import VectorStoreSettings
+from app.vector_store.exceptions import EmbeddingMismatchError, VectorStoreConnectionError, VectorStoreError
 from app.vector_store.vector_store import (
     MAX_TOP_K,
     VectorStore,
     chunk_order,
+    create_vector_store,
     metadata_filter,
     old_version_filter,
     run_chroma,
@@ -155,3 +157,75 @@ def test_successful_calls_return_their_result():
         return a + b
 
     assert run_chroma(add, a=2, b=3) == 5
+
+
+# Publication status filter
+
+def test_publication_status_alone_is_a_single_condition():
+
+    assert metadata_filter(publication_status="published") == {"publication_status": "published"}
+
+
+def test_publication_status_comes_first_with_the_ids():
+
+    where = metadata_filter(department_id="IRD", service_id="TIN_REGISTRATION", publication_status="published")
+
+    assert where == {
+        "$and": [
+            {"publication_status": "published"},
+            {"department_id": "IRD"},
+            {"service_id": "TIN_REGISTRATION"},
+        ]
+    }
+
+
+# Stored embedding model
+
+class FakeCollection:
+    """Answers collection.get like ChromaDB, with the given records."""
+
+    def __init__(self, ids=(), metadatas=(), embeddings=()):
+
+        self.response = {"ids": list(ids), "metadatas": list(metadatas), "embeddings": list(embeddings)}
+
+    def get(self, **arguments):
+
+        return self.response
+
+
+def test_empty_collection_has_no_embedding_info():
+
+    store = VectorStore(client=None, collection=FakeCollection())
+
+    assert store.embedding_info() is None
+
+
+def test_embedding_info_reads_the_model_and_size_of_a_stored_record():
+
+    collection = FakeCollection(ids=["doc:0"], metadatas=[{"embedding_model": "test-model"}], embeddings=[[0.1] * 8])
+    store = VectorStore(client=None, collection=collection)
+
+    info = store.embedding_info()
+
+    assert info.model == "test-model"
+    assert info.dimension == 8
+
+
+def test_vectors_from_another_model_are_rejected_before_storing():
+
+    collection = FakeCollection(ids=["doc:0"], metadatas=[{"embedding_model": "model-a"}], embeddings=[[0.1] * 8])
+    store = VectorStore(client=None, collection=collection)
+
+    with pytest.raises(EmbeddingMismatchError, match="model-a"):
+        store.check_embedding_model("model-b", 8)
+
+
+# Opening an existing collection
+
+def test_opening_without_a_running_database_is_a_connection_error():
+
+    # Nothing listens on port 1; search opens the collection without creating it
+    settings = VectorStoreSettings(host="127.0.0.1", port=1, collection="govai_knowledge")
+
+    with pytest.raises(VectorStoreConnectionError):
+        create_vector_store(settings, create_if_missing=False)

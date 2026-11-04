@@ -31,12 +31,13 @@ import logging
 import chromadb
 import httpx
 from chromadb.config import Settings
-from chromadb.errors import ChromaError
+from chromadb.errors import ChromaError, NotFoundError
 from pydantic import BaseModel
 
 from app.embeddings.storage import to_vector_store_batch
 from app.vector_store.exceptions import (
     ChunkNotFoundError,
+    CollectionNotFoundError,
     EmbeddingMismatchError,
     VectorStoreConnectionError,
     VectorStoreError,
@@ -66,6 +67,13 @@ class StoredChunk(BaseModel):
     chunk_id: str
     text: str
     metadata: dict
+
+
+class EmbeddingInfo(BaseModel):
+    """The embedding model and vector size of the records in a collection."""
+
+    model: str | None
+    dimension: int
 
 
 class SearchResult(BaseModel):
@@ -213,22 +221,34 @@ class VectorStore:
 
         return record_count
 
+    def embedding_info(self):
+        """The model and vector size of the stored records, or None when the collection is empty."""
+
+        # Every record has the same model and size (store_document checks it), so one is enough
+        sample = run_chroma(self.collection.get, limit=1, include=["metadatas", "embeddings"])
+        if not sample["ids"]:
+            return None
+
+        info = EmbeddingInfo(
+            model=sample["metadatas"][0].get("embedding_model"),
+            dimension=len(sample["embeddings"][0]),
+        )
+
+        return info
+
     # Helper methods
 
     def check_embedding_model(self, model, dimension):
         """Fail when the collection already holds vectors from another model or of another size."""
 
-        # Look at one stored record; an empty collection accepts any model
-        sample = run_chroma(self.collection.get, limit=1, include=["metadatas", "embeddings"])
-        if not sample["ids"]:
+        # An empty collection accepts any model
+        stored = self.embedding_info()
+        if stored is None:
             return
 
-        stored_model = sample["metadatas"][0].get("embedding_model")
-        stored_dimension = len(sample["embeddings"][0])
-
-        if stored_model != model or stored_dimension != dimension:
+        if stored.model != model or stored.dimension != dimension:
             raise EmbeddingMismatchError(
-                f"Collection holds vectors from {stored_model} ({stored_dimension} dimensions), "
+                f"Collection holds vectors from {stored.model} ({stored.dimension} dimensions), "
                 f"not {model} ({dimension}); re-embed every document or use a new collection"
             )
 
@@ -304,8 +324,13 @@ class VectorStore:
 
 # Factory
 
-def create_vector_store(settings):
-    """Connect to ChromaDB and open the collection, creating it the first time."""
+def create_vector_store(settings, create_if_missing=True):
+    """Connect to ChromaDB and open the collection.
+
+    Ingestion creates the collection the first time. Search passes
+    create_if_missing=False, so a missing collection is reported instead of
+    being replaced by a new, empty one.
+    """
 
     try:
         # Telemetry is off so nothing about the documents leaves this machine
@@ -316,11 +341,17 @@ def create_vector_store(settings):
         )
 
         # The service always supplies its own NVIDIA vectors, so no embedding function is set
-        collection = client.get_or_create_collection(
-            name=settings.collection,
-            configuration={"hnsw": {"space": DISTANCE_SPACE}},
-            embedding_function=None,
-        )
+        if create_if_missing:
+            collection = client.get_or_create_collection(
+                name=settings.collection,
+                configuration={"hnsw": {"space": DISTANCE_SPACE}},
+                embedding_function=None,
+            )
+        else:
+            collection = client.get_collection(name=settings.collection, embedding_function=None)
+
+    except NotFoundError:
+        raise CollectionNotFoundError(f"Collection {settings.collection} does not exist; process documents first")
 
     except ValueError:
         # The client raises ValueError when no server answers
@@ -339,11 +370,13 @@ def create_vector_store(settings):
 
 # Filters
 
-def metadata_filter(department_id=None, service_id=None):
-    """Build a search filter from optional IDs, or None for no filter."""
+def metadata_filter(department_id=None, service_id=None, publication_status=None):
+    """Build a search filter from optional values, or None for no filter."""
 
-    # Add a condition for each ID that is given
+    # Add a condition for each value that is given
     conditions = []
+    if publication_status is not None:
+        conditions.append({"publication_status": publication_status})
     if department_id is not None:
         conditions.append({"department_id": department_id})
     if service_id is not None:

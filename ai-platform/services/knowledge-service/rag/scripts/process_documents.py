@@ -33,7 +33,7 @@ from app.embeddings.embedding_service import (
     load_embeddings,
     load_settings,
 )
-from app.processing.pdf_extractor import DocumentSource, DocumentType
+from app.processing.pdf_extractor import DocumentSource, DocumentType, PublicationStatus
 from app.processing.pipeline import FailedDocument, process_documents
 from app.storage.config import load_storage_settings
 from app.storage.exceptions import StorageError
@@ -66,6 +66,7 @@ def main(argv=None):
             service_id=args.service_id,
             document_type=args.document_type,
             title=args.title,
+            publication_status=args.status,
         )
     except ValidationError as error:
         print(f"Invalid document source: {format_validation_error(error)}", file=sys.stderr)
@@ -150,6 +151,12 @@ def parse_arguments(argv):
         "--document-type",
         required=True,
         choices=[document_type.value for document_type in DocumentType],
+    )
+    parser.add_argument(
+        "--status",
+        default=PublicationStatus.PUBLISHED.value,
+        choices=[status.value for status in PublicationStatus],
+        help="Only published documents can be found by search; drafts are stored but hidden",
     )
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Folder for generated files")
     parser.add_argument("--env-file", default=DEFAULT_ENV_FILE, help="File with the embedding, storage, and ChromaDB settings")

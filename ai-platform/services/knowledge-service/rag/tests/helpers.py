@@ -9,10 +9,12 @@ import json
 
 import pytest
 from dotenv import dotenv_values
+from langchain_core.embeddings import Embeddings
 from pydantic import SecretStr
 
 from app.embeddings import (
     EmbeddedChunk,
+    Embedder,
     EmbeddingConfigError,
     EmbeddingFile,
     EmbeddingSettings,
@@ -71,6 +73,45 @@ def make_invalid_key_embedder(**overrides):
     # The real NVIDIA client with a key NVIDIA rejects; any API call fails with 403
     overrides["api_key"] = SecretStr(TEST_NVIDIA_KEY)
     embedder = make_embedder(**overrides)
+
+    return embedder
+
+
+# Fake NVIDIA, for tests that must not call the API
+
+class FakeEmbeddings(Embeddings):
+    """Returns a fixed query vector, or raises the given errors first, and records each call."""
+
+    def __init__(self, vector=None, errors=()):
+
+        self.vector = vector if vector is not None else [1.0] + [0.0] * (DIMENSION - 1)
+        self.errors = list(errors)
+        self.query_calls = []
+        self.document_calls = []
+
+    def embed_query(self, text):
+
+        # Fail with the next queued error, then return the vector
+        self.query_calls.append(text)
+        if self.errors:
+            raise self.errors.pop(0)
+
+        return self.vector
+
+    def embed_documents(self, texts):
+
+        self.document_calls.append(texts)
+        vectors = []
+        for _ in texts:
+            vectors.append(self.vector)
+
+        return vectors
+
+
+def make_fake_embedder(vector=None, errors=(), **overrides):
+
+    # The fake client with valid settings; retries wait 0 seconds
+    embedder = Embedder(embedding_model=FakeEmbeddings(vector, errors), settings=make_settings(**overrides))
 
     return embedder
 

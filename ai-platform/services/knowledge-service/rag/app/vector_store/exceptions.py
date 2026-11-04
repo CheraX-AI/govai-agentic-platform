@@ -21,3 +21,7 @@ class EmbeddingMismatchError(VectorStoreError):
 
 class ChunkNotFoundError(VectorStoreError):
     """No record is stored under the requested chunk ID."""
+
+
+class CollectionNotFoundError(VectorStoreError):
+    """The collection does not exist, e.g. no documents were processed yet."""

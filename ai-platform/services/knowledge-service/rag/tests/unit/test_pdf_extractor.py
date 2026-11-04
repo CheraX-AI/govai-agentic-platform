@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from pypdf import PdfWriter
 
 from app.processing.pdf_extractor import (
@@ -12,6 +13,7 @@ from app.processing.pdf_extractor import (
     ExtractedDocument,
     ExtractedPage,
     InvalidPDFError,
+    PublicationStatus,
 )
 
 
@@ -141,3 +143,47 @@ def test_local_pdf_has_no_object_key_metadata():
     pages = to_langchain_documents(document)
 
     assert "object_key" not in pages[0].metadata
+
+
+# Publication status
+
+def make_one_page_document(source):
+
+    # A one-page document with text, built without a PDF file
+    document = ExtractedDocument(
+        document_id="doc001",
+        source_file="tin_guide.pdf",
+        source=source,
+        total_pages=1,
+        pages=[ExtractedPage(page_number=1, text="TIN steps.", char_count=10, has_text=True)],
+    )
+
+    return document
+
+
+def test_documents_are_published_by_default():
+
+    # Admins upload only verified documents, so they can be searched unless marked as drafts
+    source = DocumentSource(department_id="IRD", document_type=DocumentType.DEPARTMENT_GUIDELINE)
+
+    assert source.publication_status == PublicationStatus.PUBLISHED
+
+
+def test_publication_status_is_added_to_page_metadata():
+
+    source = DocumentSource(
+        department_id="IRD",
+        service_id="TIN_REGISTRATION",
+        document_type=DocumentType.SERVICE_GUIDELINE,
+        publication_status="draft",
+    )
+
+    pages = to_langchain_documents(make_one_page_document(source))
+
+    assert pages[0].metadata["publication_status"] == "draft"
+
+
+def test_unknown_publication_status_is_rejected():
+
+    with pytest.raises(ValidationError):
+        DocumentSource(department_id="IRD", document_type=DocumentType.DEPARTMENT_GUIDELINE, publication_status="old")

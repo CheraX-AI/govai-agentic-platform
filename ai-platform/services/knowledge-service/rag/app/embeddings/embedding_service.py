@@ -67,6 +67,7 @@ __all__ = [
     "create_embedder",
     "embed_chunk_file",
     "embed_chunks",
+    "embed_query",
     "format_validation_error",
     "load_chunks",
     "load_embeddings",
@@ -171,6 +172,26 @@ def embed_chunks(chunks, embedder):
     return result
 
 
+def embed_query(embedder, question):
+    """Embed one search question with the same model and settings as the documents.
+
+    NVIDIA embeds a question as a "query" and a document chunk as a "passage".
+    Both come from the same model, so they can be compared, and a question
+    then lands closer to the passages that answer it.
+
+    Raises EmbeddingAuthError when NVIDIA rejects the key, InvalidEmbeddingError
+    for an unusable vector, and the NVIDIA client's own error for other failures.
+    """
+
+    # Send the question to NVIDIA, retrying errors a later attempt can fix
+    vector = call_with_retry(embedder.embedding_model.embed_query, question, embedder.settings)
+
+    # Check the vector like a batch of one: a non-empty list of finite numbers
+    validate_vectors([vector], 1, None)
+
+    return vector
+
+
 def embed_chunk_file(chunks_path, embedder, output_dir):
     """Embed one chunk file and save the successful embeddings.
 
@@ -226,15 +247,21 @@ def embed_chunk_file(chunks_path, embedder, output_dir):
 # Helper functions
 
 def embed_with_retry(embedder, texts):
-    """Call NVIDIA, retrying only errors that a later attempt can fix."""
 
-    settings = embedder.settings
+    # Embed the document texts as passages
+    vectors = call_with_retry(embedder.embedding_model.embed_documents, texts, embedder.settings)
+
+    return vectors
+
+
+def call_with_retry(embed, inputs, settings):
+    """Call NVIDIA, retrying only errors that a later attempt can fix."""
 
     for attempt in range(settings.max_retries + 1):
 
         try:
-            # Send the texts to NVIDIA
-            vectors = embedder.embedding_model.embed_documents(texts)
+            # Send the inputs to NVIDIA
+            vectors = embed(inputs)
 
         except Exception as error:
             # The NVIDIA client raises a plain Exception, so the status is read from its message

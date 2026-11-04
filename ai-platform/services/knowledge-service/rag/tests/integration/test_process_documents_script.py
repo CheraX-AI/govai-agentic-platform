@@ -209,6 +209,48 @@ def test_chromadb_records_point_to_the_stored_pdf(store, test_settings, vector_s
         assert chunk.metadata["service_id"] == "TIN_REGISTRATION"
 
 
+def test_documents_are_stored_as_published_by_default(store, test_settings, vector_store, chroma_settings, folders):
+
+    stored = upload_pdf(store, folders, "tin_guide.pdf")
+    write_full_env(folders, test_settings, chroma_settings)
+
+    run_script(folders)
+
+    # Admins upload only verified documents, so search can find them
+    for chunk in vector_store.get_document_chunks(stored.document_id):
+        assert chunk.metadata["publication_status"] == "published"
+
+
+def test_status_change_updates_the_records_without_re_embedding(
+    store, test_settings, vector_store, chroma_settings, folders, capsys
+):
+
+    stored = upload_pdf(store, folders, "tin_guide.pdf")
+    write_full_env(folders, test_settings, chroma_settings)
+    run_script(folders)
+    first_count = vector_store.count()
+    capsys.readouterr()
+
+    # Mark the same document as a draft; the text is unchanged, so its vectors are reused
+    exit_code = run_script(folders, "--status", "draft")
+
+    output = capsys.readouterr().out
+    assert exit_code == script.EXIT_OK
+    assert "Chunks embedded: 0" in output
+    assert vector_store.count() == first_count
+    for chunk in vector_store.get_document_chunks(stored.document_id):
+        assert chunk.metadata["publication_status"] == "draft"
+
+
+def test_unknown_status_is_rejected(folders, capsys):
+
+    # argparse stops the run before any setting is read
+    with pytest.raises(SystemExit):
+        run_script(folders, "--status", "archived")
+
+    assert "invalid choice" in capsys.readouterr().err
+
+
 def test_running_again_creates_no_duplicates(store, test_settings, vector_store, chroma_settings, folders):
 
     # The second run reuses the saved embeddings and upserts the same chunk IDs
