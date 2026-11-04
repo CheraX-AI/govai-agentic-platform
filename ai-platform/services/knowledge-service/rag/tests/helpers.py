@@ -141,6 +141,19 @@ def storage_env_values(settings, **overrides):
     return values
 
 
+def chroma_env_values(settings, **overrides):
+    """The ChromaDB settings in .env format, with some values replaced by overrides."""
+
+    values = {
+        "CHROMA_HOST": settings.host,
+        "CHROMA_PORT": str(settings.port),
+        "CHROMA_COLLECTION": settings.collection,
+    }
+    values.update(overrides)
+
+    return values
+
+
 def write_env_file(path, values):
 
     # Write the values in .env format

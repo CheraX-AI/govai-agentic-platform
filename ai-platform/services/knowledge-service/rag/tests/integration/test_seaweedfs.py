@@ -128,6 +128,24 @@ def test_revised_pdf_is_stored_as_a_new_version(store, pdf_path, tmp_path):
     assert store.list_documents(SERVICE_SOURCE) == sorted([first.object_key, second.object_key])
 
 
+def test_only_the_newest_version_of_a_file_is_listed_for_processing(store, pdf_path, tmp_path):
+
+    # Two versions of tin_guide.pdf, plus another file
+    first = store.upload_document(pdf_path, SERVICE_SOURCE)
+    (tmp_path / "revised").mkdir()
+    revised = store.upload_document(
+        write_text_pdf(tmp_path / "revised" / "tin_guide.pdf", [PAGE_TWO_LINES]), SERVICE_SOURCE
+    )
+    other = store.upload_document(write_text_pdf(tmp_path / "tin_faq.pdf", [PAGE_ONE_LINES]), SERVICE_SOURCE)
+
+    latest = store.list_latest_documents(SERVICE_SOURCE)
+
+    # Both versions stay stored, but only the newer one is processed
+    assert len(store.list_documents(SERVICE_SOURCE)) == 3
+    assert first.object_key not in latest
+    assert sorted(latest) == sorted([revised.object_key, other.object_key])
+
+
 def test_file_that_is_not_a_pdf_is_not_uploaded(store, tmp_path):
 
     text_file = tmp_path / "notes.pdf"

@@ -17,6 +17,7 @@ gets a new key instead of overwriting the old version.
 
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, unquote
 
@@ -212,10 +213,50 @@ class DocumentStore:
         return pdf_path
 
     def list_documents(self, source):
-        """List the keys of the PDFs stored for a department and service, sorted by key."""
+        """List the keys of every PDF stored for a department and service, sorted by key."""
+
+        object_keys = []
+        for item in self.list_pdf_objects(source):
+            object_keys.append(item["Key"])
+
+        object_keys.sort()
+
+        return object_keys
+
+    def list_latest_documents(self, source):
+        """List the key of the newest upload of each original file, sorted by key.
+
+        A revised PDF is stored under a new key and the old version is kept, so
+        the same file name can be stored more than once. Processing only the
+        newest one makes sure an old version never replaces a newer one.
+        """
+
+        # Keep the newest upload for each original file name
+        latest = {}
+        for item in self.list_pdf_objects(source):
+            headers = self.read_headers(item["Key"])
+            file_name = stored_file_name(headers, item["Key"])
+            uploaded_at = upload_time(headers)
+
+            current = latest.get(file_name)
+            if current is None or uploaded_at > current["uploaded_at"]:
+                latest[file_name] = {"uploaded_at": uploaded_at, "key": item["Key"]}
+
+        # Collect the chosen keys
+        object_keys = []
+        for entry in latest.values():
+            object_keys.append(entry["key"])
+
+        object_keys.sort()
+
+        return object_keys
+
+    # Helper methods
+
+    def list_pdf_objects(self, source):
 
         prefix = prefix_for(source)
-        object_keys = []
+        items = []
 
         try:
             # A listing returns at most 1000 keys, so read every page
@@ -223,7 +264,7 @@ class DocumentStore:
             for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
                 for item in page.get("Contents", []):
                     if item["Key"].endswith(".pdf"):
-                        object_keys.append(item["Key"])
+                        items.append(item)
 
         except ClientError as error:
             if is_not_found(error):
@@ -233,9 +274,23 @@ class DocumentStore:
         except (BotoConnectionError, HTTPClientError):
             raise StorageConnectionError("Object storage is not reachable")
 
-        object_keys.sort()
+        return items
 
-        return object_keys
+    def read_headers(self, object_key):
+
+        try:
+            # Read the object's metadata and modification time, not its content
+            headers = self.client.head_object(Bucket=self.bucket, Key=object_key)
+
+        except ClientError as error:
+            if is_not_found(error):
+                raise DocumentNotFoundError(f"Document not found: {object_key}")
+            raise to_storage_error(error)
+
+        except (BotoConnectionError, HTTPClientError):
+            raise StorageConnectionError("Object storage is not reachable")
+
+        return headers
 
 
 # Factory
@@ -327,6 +382,8 @@ def object_metadata(document_id, source, source_file):
         "department-id": source.department_id,
         "document-type": source.document_type.value,
         "source-file": quote(source_file),
+        # Exact upload time, used to find the newest version of a file
+        "uploaded-at": datetime.now(timezone.utc).isoformat(),
     }
 
     # Department guidelines have no service ID
@@ -349,6 +406,31 @@ def original_file_name(response, document_id):
         file_name = f"{document_id}.pdf"
 
     return file_name
+
+
+def stored_file_name(headers, object_key):
+
+    # The original file name from the metadata; PDFs stored another way use their key
+    encoded_name = headers.get("Metadata", {}).get("source-file", "")
+    file_name = unquote(encoded_name) or object_key
+
+    return file_name
+
+
+def upload_time(headers):
+    """When the PDF was uploaded: the exact time saved at upload, or the object's modification time."""
+
+    # Saved by upload_document with microseconds, so quick re-uploads keep their order
+    saved_time = headers.get("Metadata", {}).get("uploaded-at", "")
+
+    try:
+        uploaded_at = datetime.fromisoformat(saved_time)
+
+    except ValueError:
+        # Missing or unreadable; the storage's own time has only one-second precision
+        uploaded_at = headers["LastModified"]
+
+    return uploaded_at
 
 
 def error_code(error):

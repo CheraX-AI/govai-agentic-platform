@@ -20,21 +20,26 @@ rag/
 │   │   ├── validators.py         # Chunk, metadata, and vector checks
 │   │   ├── storage.py            # Chunk and embeddings files, vector-store output
 │   │   └── embedding_service.py  # NVIDIA client, batching, retries, re-run reuse
-│   └── storage/
-│       ├── config.py             # SeaweedFS settings read from .env
-│       ├── exceptions.py         # Storage errors
-│       └── object_storage.py     # DocumentStore: upload, download, list PDFs (S3 API)
+│   ├── storage/
+│   │   ├── config.py             # SeaweedFS settings read from .env
+│   │   ├── exceptions.py         # Storage errors
+│   │   └── object_storage.py     # DocumentStore: upload, download, list PDFs (S3 API)
+│   └── vector_store/
+│       ├── config.py             # ChromaDB settings read from .env
+│       ├── exceptions.py         # Vector database errors
+│       └── vector_store.py       # VectorStore: store, read, delete, search chunks in ChromaDB
 ├── data/
 │   ├── input/                    # Only for the GA-73 validation tests
 │   └── output/                   # Generated chunks and embeddings
 ├── scripts/
 │   ├── upload_documents.py       # Uploads PDF files to SeaweedFS
-│   └── process_documents.py      # Processes the PDFs stored in SeaweedFS
+│   ├── process_documents.py      # SeaweedFS PDFs → chunks → embeddings → ChromaDB
+│   └── search_documents.py       # Searches the stored chunks with a question
 ├── tests/
 │   ├── unit/                     # Unit tests (embedding tests call the real NVIDIA API)
-│   ├── integration/              # PDF → chunks → embeddings, the scripts, and real SeaweedFS
+│   ├── integration/              # Real SeaweedFS, ChromaDB, and NVIDIA; the scripts end to end
 │   ├── validation/               # GA-73: real documents from data/input, report in data/output/reports
-├── .env.example                  # Template for .env (NVIDIA and SeaweedFS settings, empty secrets)
+├── .env.example                  # Template for .env (NVIDIA, SeaweedFS, ChromaDB settings, empty secrets)
 ├── pytest.ini
 └── requirements.txt
 ```
@@ -48,9 +53,11 @@ rag/
 | `langchain-text-splitters` | `RecursiveCharacterTextSplitter` for chunking |
 | `langchain-core` | Shared LangChain `Document` type |
 | `langchain-nvidia-ai-endpoints` | `NVIDIAEmbeddings` for the NVIDIA API |
+| `pydantic` | Settings, chunk, and result models |
 | `numpy` | Vector checks (NaN and infinity) and similarity maths |
-| `boto3` | S3 client for the SeaweedFS object storage |
-| `python-dotenv` | Loads embedding and storage settings from `.env` |
+| `boto3`, `botocore` | S3 client for the SeaweedFS object storage |
+| `chromadb-client` | HTTP client for the ChromaDB vector database |
+| `python-dotenv` | Loads embedding, storage, and ChromaDB settings from `.env` |
 | `pytest` | Running tests |
 
 ## Installation
@@ -143,7 +150,7 @@ All embedding settings, including the NVIDIA API key and every model detail, liv
 | Variable | Example | Purpose |
 | --- | --- | --- |
 | `NVIDIA_API_KEY` | `nvapi-...` | Secret API key; must start with `nvapi-` |
-| `EMBEDDING_MODEL` | `nvidia/nemotron-3.5-embed-1b` | NVIDIA embedding model |
+| `EMBEDDING_MODEL` | `nvidia/llama-nemotron-embed-vl-1b-v2` | NVIDIA embedding model; keep the `nvidia/` prefix |
 | `EMBEDDING_BATCH_SIZE` | `50` | Chunks per API request, 1–50 |
 | `EMBEDDING_MAX_RETRIES` | `2` | Retries for rate limits (408, 429) and server errors (5xx), 0–5 |
 | `EMBEDDING_RETRY_DELAY_SECONDS` | `1.0` | Wait before the first retry; doubles on each further retry |
@@ -336,19 +343,104 @@ changing `app/storage/object_storage.py` alone.
 | `BucketNotFoundError` | The bucket has not been created |
 | `DocumentNotFoundError` | No document is stored under the key |
 
+## Vector database (ChromaDB)
+
+The chunk embeddings are stored in ChromaDB, in the `govai_knowledge` collection. It is
+created automatically the first time a document is stored, with cosine distance.
+
+### Start ChromaDB
+
+From the repository root:
+
+```powershell
+docker compose up -d chromadb chromadb-dashboard
+```
+
+See [infrastructure/chromadb/README.md](../../../../infrastructure/chromadb/README.md).
+The dashboard at http://localhost:8501 shows the collections and records.
+
+### ChromaDB settings
+
+Add these to `rag/.env`:
+
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `CHROMA_HOST` | `localhost` | ChromaDB host; inside Docker use `chromadb` |
+| `CHROMA_PORT` | `8001` | The `CHROMA_PORT` from the root `.env`; inside Docker use `8000` |
+| `CHROMA_COLLECTION` | `govai_knowledge` | Collection for all document chunks |
+
+### What is stored
+
+One record per chunk:
+
+| Field | Content |
+| --- | --- |
+| ID | `chunk_id`, `<document_id>:<chunk_index>`, stable for the same PDF content |
+| Embedding | The NVIDIA vector |
+| Document | The chunk text |
+| Metadata | `document_id`, `department_id`, `service_id`, `document_type`, `document_title`, `source_file`, `page_number`, `chunk_index`, `object_key` (the PDF in SeaweedFS), `embedding_model` |
+
+### Storage rules
+
+- **No duplicates:** records are upserted by `chunk_id`, so processing again updates
+  them instead of adding copies.
+- **Stale chunks removed:** if a document now has fewer chunks (for example after a
+  chunk-size change), its extra old chunks are deleted.
+- **Old versions replaced:** a revised PDF with the same department, service (or
+  department guideline), and file name replaces the older version's chunks. The new
+  chunks are written first, so the document is never missing. Both PDFs stay in
+  SeaweedFS; processing only uses the newest upload of each file.
+- **Complete documents only:** a document is stored only when all its chunks were
+  embedded, so a partly embedded version never replaces a complete one.
+- **One model per collection:** vectors from another model, or of another size, are
+  rejected with `EmbeddingMismatchError`. After changing `EMBEDDING_MODEL`, use a new
+  collection name or delete the collection and process every document again.
+
+### Use in code
+
+```python
+from app.vector_store.config import load_vector_store_settings
+from app.vector_store.vector_store import create_vector_store, metadata_filter
+
+vector_store = create_vector_store(load_vector_store_settings())
+vector_store.store_document(embedding_file)          # from app.embeddings.load_embeddings
+chunks = vector_store.get_document_chunks(document_id)
+chunk = vector_store.get_chunk(chunk_id)
+results = vector_store.search(query_vector, top_k=5, where=metadata_filter(department_id="IRD"))
+vector_store.delete_document(document_id)
+```
+
+`VectorStore` is the only code that uses chromadb, so the vector database can be
+replaced by changing `app/vector_store/vector_store.py` alone.
+
+| Error | Meaning |
+| --- | --- |
+| `VectorStoreConfigError` | A ChromaDB setting is missing or invalid |
+| `VectorStoreConnectionError` | ChromaDB is not running or not reachable |
+| `EmbeddingMismatchError` | Vectors from another model or size than the collection holds |
+| `ChunkNotFoundError` | No record has the requested chunk ID |
+
 ## Processing documents
 
-Upload the PDFs first (see [Upload documents](#upload-documents)), then run from the
-`rag` folder:
+Upload the PDFs first (see [Upload documents](#upload-documents)) and start ChromaDB
+(see [Start ChromaDB](#start-chromadb)), then run from the `rag` folder:
 
 ```powershell
 python scripts/process_documents.py --department-id IRD --service-id TIN_REGISTRATION --document-type service_guideline
 ```
 
-The script processes every PDF stored for that department and service. The PDFs are
-downloaded to a temporary folder that is deleted afterwards, and each download is
-checked against the SHA-256 in its key. Every chunk gets an `object_key` metadata value,
-so each vector stored later in ChromaDB points back to its original PDF.
+For each PDF stored for that department and service (newest version of each file), the
+script:
+
+1. downloads it to a temporary folder (deleted afterwards) and checks it against the
+   SHA-256 in its key;
+2. extracts the text of every page;
+3. splits the text into chunks, each with an `object_key` pointing to the PDF in SeaweedFS;
+4. embeds the chunks with NVIDIA;
+5. stores the fully embedded documents in ChromaDB.
+
+It checks SeaweedFS, the NVIDIA settings, and ChromaDB before downloading anything, so a
+missing setting or a stopped container fails fast.
 
 | Option | Purpose |
 | --- | --- |
@@ -358,7 +450,21 @@ so each vector stored later in ChromaDB points back to its original PDF.
 | `--document-type` | `service_guideline` or `department_guideline` (required) |
 | `--output-dir` | Default `data/output` |
 | `--env-file` | Settings file, default `rag/.env` |
-| `--skip-embeddings` | Only extract and chunk |
+| `--skip-embeddings` | Only extract and chunk (no NVIDIA, no ChromaDB) |
+| `--skip-vector-store` | Extract, chunk, and embed, but do not store in ChromaDB |
+
+The summary ends with the ChromaDB result:
+
+```text
+Processed PDFs:  1
+Failed PDFs:     0
+Model:           nvidia / nvidia/llama-nemotron-embed-vl-1b-v2
+Chunks embedded: 9 (reused 0)
+Chunks failed:   0
+ChromaDB:        1 documents, 9 chunks stored
+Old versions:    0 removed
+Collection size: 9 chunks
+```
 
 Output in `data/output/`:
 
@@ -368,13 +474,31 @@ Output in `data/output/`:
 | `chunks/` | `<document_id>.chunks.json`, chunks with `chunk_id` and metadata |
 | `embeddings/` | `<document_id>.embeddings.json`, model, dimension, and one record per chunk |
 
-Exit codes: `0` success, `1` some PDFs or chunks failed, `2` invalid options, settings,
-or storage.
+Exit codes: `0` success, `1` some PDFs, chunks, or ChromaDB storage failed, `2` invalid
+options, settings, SeaweedFS, or ChromaDB.
 
 Failures do not lose finished work. A failed batch is reported and the other batches are
 saved. Running the script again embeds only the chunks that are new, changed, or failed
-before. If NVIDIA rejects the API key, embedding stops, but the remaining PDFs are
-still extracted and chunked.
+before, and then stores the document. If NVIDIA rejects the API key, embedding stops, but
+the remaining PDFs are still extracted and chunked.
+
+## Searching documents
+
+To check what the stored chunks return for a question, run from the `rag` folder:
+
+```powershell
+python scripts/search_documents.py "How do I register for a TIN?" --department-id IRD --service-id TIN_REGISTRATION --top-k 3
+```
+
+The question is embedded with the same NVIDIA model, and the closest chunks are printed
+with their distance (smaller is closer, 0 to 2), file, page, chunk ID, and SeaweedFS key.
+
+| Option | Purpose |
+| --- | --- |
+| `question` | The question (required) |
+| `--top-k` | Number of results, 1–50, default 5 |
+| `--department-id`, `--service-id` | Only search these documents |
+| `--env-file` | Settings file, default `rag/.env` |
 
 ## Tests
 
@@ -392,16 +516,28 @@ they are skipped, and pytest shows the reason. The other tests run offline.
 - Retries after server errors (5xx) and rate limits (429) cannot be triggered on demand,
   so they are not covered by tests.
 
-The SeaweedFS tests in `tests/integration/test_seaweedfs.py` use the **real SeaweedFS
-container** with the storage settings in `rag/.env`. They create a separate
-`govai-knowledge-test` bucket and delete it afterwards, so the real bucket is never
-touched. Without the settings or a running container they are skipped.
+The integration tests use the **real SeaweedFS and ChromaDB containers** with the
+settings in `rag/.env`, but never the real data: they use a separate
+`govai-knowledge-test` bucket and a `govai_knowledge_test` collection, created and
+deleted by the tests (see `tests/integration/conftest.py`). Without the settings or a
+running container they are skipped, and `pytest -rs` shows why.
+
+| Test file | Needs |
+| --- | --- |
+| `tests/unit/*` | Nothing (embedding service tests need the NVIDIA key) |
+| `tests/integration/test_seaweedfs.py` | SeaweedFS |
+| `tests/integration/test_chromadb.py` | ChromaDB (synthetic vectors, no NVIDIA) |
+| `tests/integration/test_process_documents_script.py` | SeaweedFS, ChromaDB, NVIDIA |
+| `tests/integration/test_search_script.py` | SeaweedFS, ChromaDB, NVIDIA |
 
 | What | Command |
 | --- | --- |
 | All tests | `pytest` |
+| Unit tests only | `pytest tests/unit` |
 | Embedding unit tests | `pytest tests/unit -k embedding` |
 | SeaweedFS tests | `pytest tests/integration/test_seaweedfs.py tests/unit/test_object_storage.py tests/unit/test_storage_config.py` |
+| ChromaDB tests | `pytest tests/integration/test_chromadb.py tests/unit/test_vector_store.py tests/unit/test_vector_store_config.py` |
+| Scripts end to end | `pytest tests/integration/test_process_documents_script.py tests/integration/test_search_script.py` |
 | One file | `pytest tests/unit/test_embedding_service.py` |
 | Show skipped tests and why | `pytest -rs` |
 

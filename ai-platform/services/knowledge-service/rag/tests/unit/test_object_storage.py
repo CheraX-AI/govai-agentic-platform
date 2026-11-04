@@ -1,6 +1,8 @@
 """Tests for app/storage/object_storage.py that need no running SeaweedFS:
 storage keys, object metadata, and error classification."""
 
+from datetime import datetime, timezone
+
 import pytest
 from botocore.exceptions import ClientError
 
@@ -13,7 +15,9 @@ from app.storage.object_storage import (
     object_metadata,
     original_file_name,
     prefix_for,
+    stored_file_name,
     to_storage_error,
+    upload_time,
 )
 
 DOCUMENT_ID = "a" * 64
@@ -158,3 +162,42 @@ def test_other_errors_keep_their_code():
 
     assert type(storage_error) is StorageError
     assert "InternalError" in str(storage_error)
+
+
+# Newest version helpers
+
+def test_metadata_records_the_upload_time():
+
+    metadata = object_metadata(DOCUMENT_ID, SERVICE_SOURCE, "guide.pdf")
+
+    uploaded_at = datetime.fromisoformat(metadata["uploaded-at"])
+
+    assert uploaded_at.tzinfo is not None
+
+
+def test_upload_time_prefers_the_saved_time():
+
+    # The saved time has microseconds; the storage time only has seconds
+    headers = {
+        "Metadata": {"uploaded-at": "2026-11-04T09:01:15.250000+00:00"},
+        "LastModified": datetime(2026, 11, 4, 9, 1, 15, tzinfo=timezone.utc),
+    }
+
+    assert upload_time(headers) == datetime(2026, 11, 4, 9, 1, 15, 250000, tzinfo=timezone.utc)
+
+
+def test_upload_time_falls_back_to_the_storage_time():
+
+    # PDFs stored without the upload script have no saved time
+    last_modified = datetime(2026, 11, 4, 9, 1, 15, tzinfo=timezone.utc)
+
+    assert upload_time({"Metadata": {}, "LastModified": last_modified}) == last_modified
+    assert upload_time({"Metadata": {"uploaded-at": "not a time"}, "LastModified": last_modified}) == last_modified
+
+
+def test_stored_file_name_is_decoded_or_falls_back_to_the_key():
+
+    with_name = {"Metadata": {"source-file": "TIN%20guide.pdf"}}
+
+    assert stored_file_name(with_name, "documents/IRD/x.pdf") == "TIN guide.pdf"
+    assert stored_file_name({}, "documents/IRD/x.pdf") == "documents/IRD/x.pdf"
