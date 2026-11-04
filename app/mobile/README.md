@@ -1,5 +1,34 @@
 # GovAI mobile
 
+## Repository availability
+
+The frontend screens, navigation, original Figma assets and guarded development
+launchers are included in the repository. Authentication, account recovery and
+chat still contain explicitly labelled development-only simulations; they do not
+authenticate users, send recovery messages or contact an AI service. Real
+backend/API integration, verified identity data, secure sessions and production
+chat behavior are still required.
+
+Optional mock regression and served-bundle diagnostic scripts are kept only in
+the development maintainer's local checkout and are excluded from Git. A GitHub
+clone therefore should use the shared `npm.cmd run typecheck`,
+`npm.cmd run check:expo`, preview launchers and Android export commands documented
+below; it should not expect the historical local checker commands to exist.
+
+## GA-55 Login Figma alignment - November 4, 2026
+
+Login is aligned to the live Figma `Display` frame 54:15 (400 x 772) and
+`LoginForm` frame 58:3. The Digital ID button, its OR divider, exclusive runtime
+asset registration and exclusive styles were removed because that option is not
+present in the inspected frame. The original fingerprint PNG/SVG remain unchanged
+as provenance assets and are not bundled through Login.
+
+The original GovAI logo and documented crop remain unchanged. Removing the unused
+section and using section-specific spacing lets the responsive height budget reach
+the full 196 x 198 Figma slot at the reference viewport when available space
+permits. Short windows retain proportional sizing and natural scrolling; text is
+not scaled down and interactive controls retain at least 48-dp targets.
+
 ## Connected development-only UI demo - October 27, 2026
 
 From app/mobile in Windows PowerShell, launch the connected flow with:
@@ -49,18 +78,12 @@ shared layout helpers, English-only behavior, and form keyboard helpers remain.
 The approved demo changes only confirmation labels, hides Account Created Exit,
 and enables its Continue action with a caption identifying Login as its destination.
 
-Repeat checks:
+Shared repeat checks:
 
 ```powershell
 npm.cmd run typecheck
 npm.cmd run check:expo
-node scripts/check-register.cjs
-node scripts/check-connected-ui-demo.cjs
-node scripts/check-forgot-password.cjs
-node scripts/check-account-created-preview.cjs
-node scripts/check-email-preview.cjs
-node scripts/check-reset-password-preview.cjs
-node scripts/check-password-updated-preview.cjs
+npm.cmd run export:android
 ```
 
 The Register harness defines __DEV__ explicitly. Its direct command runs the
@@ -91,11 +114,11 @@ restored byte-for-byte afterward. This simulates missing local evidence in the
 existing installed checkout; it is not a separate clean dependency installation.
 
 A fresh checkout needs only the tracked source/assets, package.json and lockfile;
-run npm.cmd ci to install dependencies, then the direct commands above.
-Export checks additionally require generating the Android export being inspected.
+run `npm.cmd ci` to install dependencies, then use the shared npm commands above.
+Optional mock regression and historical audit scripts are not distributed.
 
-Run the commands above directly: no filesystem overrides, hidden snapshots,
-skipped assertions, or generated whole-snapshot replacements are needed.
+Local historical results below are retained for context, but their checker and
+snapshot commands are not available in a GitHub clone.
 
 Validation on October 28, 2026: all seven direct checkers, TypeScript and Expo
 compatibility passed without skips. The Register command passed in both modes.
@@ -105,17 +128,9 @@ keyboard-first Back, both confirmation destinations, fresh recovery forms,
 standalone priority, 36 synthetic confirmation layouts, and launcher arguments.
 Mocks are not native rendering or accessibility verification.
 
-Production-exclusion validation was rerun against fresh Android/Hermes exports
-in dist/review-demo-off (flag absent) and dist/review-demo-on (flag=1):
-
-```powershell
-node scripts/check-connected-ui-demo.cjs --export dist/review-demo-off
-node scripts/check-connected-ui-demo.cjs --export dist/review-demo-on
-node scripts/check-account-created-preview.cjs --export dist/review-demo-on
-node scripts/check-email-preview.cjs --export dist/review-demo-on
-node scripts/check-reset-password-preview.cjs --export dist/review-demo-on
-node scripts/check-password-updated-preview.cjs --export dist/review-demo-on
-```
+Production-exclusion validation was previously run locally against fresh
+Android/Hermes flag-off and flag-on exports. The optional diagnostic commands are
+not included in the repository.
 
 All five export-aware checkers passed against both fresh outputs with snapshots
 active. Android/Hermes production exports were checked with the dedicated demo flag
@@ -515,7 +530,7 @@ Screen/layout helpers, bundled Inter/Yaldevi/Noto Sans Tamil fonts and exactly v
 
 The decorative header compacts before readable form text. Content is bounded to 480dp, safe areas are owned once by Screen, all interactive targets/fields are at least 48dp, labels/errors wrap, and one overflow ScrollView contains the header/card with its indicator hidden and overscroll disabled. No text scaling caps or fixed card clipping. Keyboard overlap adds only the part not already handled by a resized viewport. Form/vision measurements are intrinsic and guarded, avoiding header/card measurement feedback.
 
-Validation: node scripts/check-register.cjs and TypeScript passed. Automated tests cover required fields, arbitrary identifiers without invented format rejection, Unicode names, raw/mismatched passwords, both visibility toggles, optional agreement, disabled Terms, notices, explicit exit and detached-ref unmount clearing; 18 synthetic layout/convergence cases and 36 resize/overlay keyboard cases across 320x568, 360x640, 360x800, 412x915, 600x960 and reference 400x772 with font scales 1/2/3; all six Login origins and Register Back routes; 12 original asset hashes. Existing file hashes and exact Login-only wiring changes were checked. PNG icons were visually inspected as assets, not rendered app UI.
+Validation: TypeScript and optional local mock regression checks passed. The local tests covered required fields, arbitrary identifiers without invented format rejection, Unicode names, raw/mismatched passwords, both visibility toggles, optional agreement, disabled Terms, notices, explicit exit and detached-ref unmount clearing; 18 synthetic layout/convergence cases and 36 resize/overlay keyboard cases across 320x568, 360x640, 360x800, 412x915, 600x960 and reference 400x772 with font scales 1/2/3; all six Login origins and Register Back routes; 12 original asset hashes. Existing file hashes and exact Login-only wiring changes were checked. PNG icons were visually inspected as assets, not rendered app UI. The optional mock checker is not included in Git.
 
 Android production export passed with Hermes and 43 bundled assets. It emitted only the environment warning that FORCE_COLOR overrides NO_COLOR. No emulator or physical-device rendering was performed.
 
@@ -527,11 +542,9 @@ Run `npm.cmd run preview:account-created:dev` to start Expo Go with a process-lo
 
 All content is explicitly labelled as a sample: no account has been created. Rathishan is static Figma copy, not user data. Continue is disabled because its destination is unimplemented. Exit preview and Android Back return to Welcome. Register validation, submission, navigation and credential cleanup remain unchanged. The preview sends no requests and persists no data.
 
-Validation commands:
-- npm.cmd run typecheck
-- node scripts/check-account-created-preview.cjs
-- node -e "global.__DEV__=false;require('./scripts/check-register.cjs')"
-- After production export: node scripts/check-account-created-preview.cjs --export
+Shared validation commands are `npm.cmd run typecheck`, `npm.cmd run check:expo`
+and `npm.cmd run export:android`. Optional guard/navigation/layout regressions were
+run locally and are not included in Git.
 
 Guard/navigation and layout checks use mocked React/native measurements, not native rendering. Synthetic windows: 320x568, 360x640, 360x800, 412x915, 600x960, and reference 400x772; font scales 1, 2 and 3. Repeated intrinsic measurements converge in these mocks.
 
@@ -548,7 +561,7 @@ The NIC starts empty and is checked only for nonblank input. No format, length, 
 
 Three new original icons are preserved under assets/figma/forgot-password with provenance; verified shared backgrounds/logo/Back are reused. Fonts, responsive text, hidden-indicator overflow, safe-area ownership and 48-dp targets follow existing conventions. Decorative space reduces first; keyboard resizing does not replace the closed-screen baseline.
 
-Validation: node scripts/check-forgot-password.cjs (includes existing Register/navigation regressions), node scripts/check-account-created-preview.cjs, npm.cmd run typecheck, and npm.cmd run export:android. The optional --export preview check requires a generated dist/android export. No EAS configuration or native APK build is involved. Synthetic measurements are not device rendering. Pending phone checks: actual wrapping/crops, enlarged text, keyboard resize/overlay/focus/error reachability, Back/Log in cleanup, TalkBack announcements and safe/system bars at narrow/short/tall/wide windows.
+Validation: shared TypeScript and Android export commands passed; optional local Forgot Password, Register/navigation and Account Created mock regressions also passed. Those local scripts are excluded from Git. No EAS configuration or native APK build is involved. Synthetic measurements are not device rendering. Pending phone checks: actual wrapping/crops, enlarged text, keyboard resize/overlay/focus/error reachability, Back/Log in cleanup, TalkBack announcements and safe/system bars at narrow/short/tall/wide windows.
 
 
 ## Check Email development-only preview
@@ -559,7 +572,11 @@ The App entry and direct screen mount require __DEV__ plus the Check Email flag.
 
 The compact notice reads Preview - No email sent. The footer keeps Use a different NIC with no visible Exit preview control; Back has an in-bounds 48-dp target. The intrinsic card uses reduced padding/gaps, and the burgundy disabled email button retains its unavailable caption. The address is always sample@example.test. No reset link exists or expires, Open email app and Resend are visibly/accessibly disabled with no handlers, and no network, mailbox, timer, token or resend logic is implemented. Back, Android Back and Use a different NIC close the preview and open fresh Forgot Password; The static resend row reads Didn't get it? Resend, with an adjacent unavailable caption and accessibility disabled state. The normal Forgot Password Log in flow preserves Login origin; standalone preview begins with Welcome as its original destination.
 
-Run node scripts/check-email-preview.cjs, node scripts/check-forgot-password.cjs, node scripts/check-account-created-preview.cjs and npm.cmd run typecheck. After Android export, add --export to both preview check scripts to inspect production bundle/assets. Tests cover flag combinations, direct mount, disabled actions, routes, launcher port/environment/status, and 18 synthetic logical-window/font-scale cases. They do not prove native rendering.
+Run `npm.cmd run typecheck`, `npm.cmd run check:expo` and
+`npm.cmd run export:android`. Optional local preview/recovery regressions previously
+covered flag combinations, direct mount, disabled actions, routes, launcher
+port/environment/status and synthetic logical-window/font-scale cases; they are
+excluded from Git and do not prove native rendering.
 
 Pending phone checks: actual wrapping at default/enlarged text, safe areas/system bars, logo/background crops, compact notice/overflow/measurement stability, TalkBack disabled-control announcements and Back/Login cleanup. No EAS setup or APK build is involved.
 
@@ -618,24 +635,17 @@ adjustment runs only when a field/error group is outside the visible region.
 Inputs, errors and the action stay in normal scroll flow; no entry-time forced
 scroll or typography shrink is used.
 
-Repeat checks from app/mobile:
+Shared repeat checks from app/mobile:
 
-    node scripts/check-reset-password-preview.cjs
-    node scripts/check-forgot-password.cjs
-    node scripts/check-email-preview.cjs
-    node scripts/check-account-created-preview.cjs
     npm.cmd run typecheck
+    npm.cmd run check:expo
     npm.cmd run export:android
-    node scripts/check-reset-password-preview.cjs --export dist/android
-    node scripts/check-email-preview.cjs --export
-    node scripts/check-account-created-preview.cjs --export
 
 For the flag-on production check, use a dedicated PowerShell shell or preserve
 and restore any existing variable:
 
     $env:EXPO_PUBLIC_RESET_PASSWORD_PREVIEW = '1'
     node scripts/expo.cjs export --platform android --output-dir dist/reset-preview-flag-on
-    node scripts/check-reset-password-preview.cjs --export dist/reset-preview-flag-on
     Remove-Item Env:EXPO_PUBLIC_RESET_PASSWORD_PREVIEW
 
 Actual coverage: TypeScript and all existing form/navigation/preview checks
@@ -706,26 +716,17 @@ The 150x151.531 logo crop retains existing ratios. Decorative header space yield
 before text, wide content is bounded, Screen owns safe areas and natural overflow
 scrolling has both indicators hidden. Native Android owns system chrome.
 
-Repeat checks:
+Shared repeat checks:
 
     npm.cmd run typecheck
-    node scripts/check-password-updated-preview.cjs
-    node scripts/check-reset-password-preview.cjs
-    node scripts/check-forgot-password.cjs
-    node scripts/check-email-preview.cjs
-    node scripts/check-account-created-preview.cjs
+    npm.cmd run check:expo
     npm.cmd run export:android
-    node scripts/check-password-updated-preview.cjs --export dist/android
-    node scripts/check-reset-password-preview.cjs --export dist/android
-    node scripts/check-email-preview.cjs --export
-    node scripts/check-account-created-preview.cjs --export
 
 For a flag-on production check, use a dedicated PowerShell shell or preserve
 and restore the previous variable value:
 
     $env:EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW = '1'
     node scripts/expo.cjs export --platform android --output-dir dist/password-updated-flag-on
-    node scripts/check-password-updated-preview.cjs --export dist/password-updated-flag-on
     Remove-Item Env:EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW
 
 Actual checks: TypeScript and all existing form/navigation/preview regression

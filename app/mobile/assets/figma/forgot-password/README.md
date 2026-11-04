@@ -15,7 +15,7 @@ Dynamic Island and home indicator belong to the operating system.
 | 47c35.svg | info.svg / info.png | 16 x 16 | 64 x 64 |
 
 All three SVGs are preserved unchanged; source hashes are checked by
-scripts/check-forgot-password.cjs. PNGs are transparent 4x rasterizations using
+an optional local regression script that is excluded from Git. PNGs are transparent 4x rasterizations using
 the existing Chrome/System.Drawing method and were visually inspected. The
 original lock/NIC color is #A30F2D; info color is #2D6FA6. No remote asset URL is
 used at runtime and no new dependency is required.

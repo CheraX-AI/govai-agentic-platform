@@ -12,7 +12,6 @@ export const loginAssets = {
   user: require('./assets/figma/login/user.png'),
   lock: require('./assets/figma/login/lock.png'),
   eye: require('./assets/figma/login/eye.png'),
-  fingerprint: require('./assets/figma/login/fingerprint.png'),
 };
 
 type Viewport = { width: number; height: number };
@@ -263,7 +262,7 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword }: { onBack: ()
             <Text style={[typography.body, styles.subtitle]}>{"Log in to continue to GovAI"}</Text>
             </View>
             <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
-            <View ref={identifierGroup} onLayout={scheduleVisibilityCheck}>
+            <View ref={identifierGroup} onLayout={scheduleVisibilityCheck} style={styles.identifierGroup}>
               <View style={[styles.field, identifierError && styles.invalid]}>
                 <Image source={loginAssets.user} accessible={false} style={styles.fieldIcon} />
                 <TextInput ref={identifierInput} value={identifier} onChangeText={setIdentifier} placeholder={"Email or National ID"}
@@ -295,11 +294,6 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword }: { onBack: ()
             <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel={"Log In. Sign-in is not connected; checks required fields only."} style={styles.primary}>
               <Text style={[typography.action, styles.primaryText]}>{"Log In →"}</Text>
             </Pressable>
-            <View style={styles.divider}><View style={styles.rule} /><Text style={styles.or}>{"OR"}</Text><View style={styles.rule} /></View>
-            <Pressable disabled accessibilityRole="button" accessibilityState={{ disabled: true }} accessibilityLabel={"Log in with Digital ID. Unavailable."} style={styles.digital}>
-              <Image source={loginAssets.fingerprint} accessible={false} style={styles.fingerprint} />
-              <Text style={styles.digitalText}>{"Log in with Digital ID →"}</Text>
-            </Pressable>
             <View style={styles.signup}>
               <Text style={styles.subtitle}>{"Don’t have an account?"}</Text>
               <Pressable onPress={onSignUp} accessibilityRole="link" accessibilityLabel="Sign up" style={styles.signupLink}>
@@ -330,12 +324,13 @@ const styles = StyleSheet.create({
   accent: { height: 2, width: 36, backgroundColor: '#f5a915' },
   logoSlot: { alignSelf: 'center', overflow: 'hidden', marginBottom: 8 },
   logo: { position: 'absolute' },
-  form: { gap: 8, width: '100%' },
-  formHeading: { gap: 6 },
+  form: { width: '100%' },
+  formHeading: { gap: 6, marginBottom: 8 },
   heading: { fontFamily: 'Inter_700Bold', color: '#142033', textAlign: 'center' },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, color: '#666', textAlign: 'center' },
-  notice: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, color: '#8b1a2e', backgroundColor: '#fff' },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 16, paddingRight: 8, minHeight: 52, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12 },
+  notice: { marginBottom: 10, fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, color: '#8b1a2e', backgroundColor: '#fff' },
+  identifierGroup: { marginBottom: 14 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 16, paddingRight: 8, minHeight: layout.touchTarget, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12 },
   fieldIcon: { width: 18, height: 18 },
   input: { flex: 1, minWidth: 0, fontFamily: 'Inter_400Regular', fontSize: 14, color: '#142033', paddingVertical: 14 },
   eye: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
@@ -345,12 +340,6 @@ const styles = StyleSheet.create({
   link: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 18, color: '#a30f2d' },
   primary: { minHeight: 52, borderRadius: 14, padding: 16, backgroundColor: '#8b1a2e', alignItems: 'center', justifyContent: 'center', boxShadow: '0px 6px 8px rgba(139,26,46,0.25)' },
   primaryText: { fontFamily: 'Inter_600SemiBold', color: '#fff', textAlign: 'center' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
-  rule: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
-  or: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#9ca3af' },
-  digital: { minHeight: 52, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 14, backgroundColor: '#fff' },
-  fingerprint: { width: 22, height: 22 },
-  digitalText: { flexShrink: 1, fontFamily: 'Inter_500Medium', fontSize: 14, lineHeight: 20, color: '#444', textAlign: 'center' },
   signup: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 4 },
   signupLink: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, justifyContent: 'center' },
   country: { paddingTop: 8, fontFamily: 'Inter_400Regular', color: '#9ca3af', fontSize: 9, letterSpacing: 4, textAlign: 'center' },
