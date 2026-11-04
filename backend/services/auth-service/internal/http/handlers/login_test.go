@@ -31,6 +31,10 @@ func TestLoginHTTPContract(t *testing.T) {
 		serviceErr                  error
 		want, calls                 int
 	}{
+		{name: "NIC success", body: `{"identifier":"123456789v","password":"p"}`, tls: true, want: 200, calls: 1},
+		{name: "identifier email", body: `{"identifier":"citizen@example.test","password":"p"}`, tls: true, want: 200, calls: 1},
+		{name: "unknown NIC", body: `{"identifier":"200000000001","password":"p"}`, tls: true, serviceErr: login.ErrFailed, want: 401, calls: 1},
+		{name: "phone rejected", body: `{"identifier":"+94771234567","password":"p"}`, tls: true, want: 400},
 		{name: "success", body: `{"email":"citizen@example.test","password":"p"}`, tls: true, want: 200, calls: 1},
 		{name: "wrong credentials", body: `{"email":"citizen@example.test","password":"p"}`, tls: true, serviceErr: login.ErrFailed, want: 401, calls: 1},
 		{name: "outage", body: `{"email":"citizen@example.test","password":"p"}`, tls: true, serviceErr: errors.New("private-upstream-response"), want: 503, calls: 1},

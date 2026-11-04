@@ -2,6 +2,8 @@ package login
 
 import (
 	"context"
+	"errors"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
 	"time"
 )
 
@@ -34,7 +36,15 @@ type AccessVerifier interface {
 type ProfileLookup interface {
 	HasReadyProfile(context.Context, string, string) (bool, error)
 }
+type NICAccount struct {
+	privateValue
+	Email, Issuer, Subject string
+}
+type IdentifierResolver interface {
+	ResolveNIC(context.Context, registration.NIC) (NICAccount, error)
+}
 type Service struct {
+	resolver IdentifierResolver
 	privateValue
 	provider PasswordProvider
 	verifier AccessVerifier
@@ -42,15 +52,40 @@ type Service struct {
 	now      func() time.Time
 }
 
-func NewService(p PasswordProvider, v AccessVerifier, profiles ProfileLookup) (*Service, error) {
+func NewService(p PasswordProvider, v AccessVerifier, profiles ProfileLookup, resolvers ...IdentifierResolver) (*Service, error) {
 	if p == nil || v == nil || profiles == nil {
 		return nil, ErrUnavailable
 	}
-	return &Service{provider: p, verifier: v, profiles: profiles, now: time.Now}, nil
+	if len(resolvers) > 1 {
+		return nil, ErrUnavailable
+	}
+	var resolver IdentifierResolver
+	if len(resolvers) == 1 {
+		resolver = resolvers[0]
+	}
+	return &Service{provider: p, verifier: v, profiles: profiles, resolver: resolver, now: time.Now}, nil
 }
 func (s *Service) Login(ctx context.Context, r Request) (Access, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	var bound NICAccount
+	if r.isNIC {
+		if s.resolver == nil {
+			return Access{}, ErrFailed
+		}
+		var err error
+		bound, err = s.resolver.ResolveNIC(ctx, r.nic)
+		if err != nil {
+			if errors.Is(err, ErrFailed) {
+				return Access{}, ErrFailed
+			}
+			return Access{}, ErrUnavailable
+		}
+		if bound.Email == "" || registration.CanonicalEmail(bound.Email) == "" || bound.Issuer == "" || bound.Subject == "" {
+			return Access{}, ErrFailed
+		}
+		r.email = bound.Email
+	}
 	issued, e := s.provider.Password(ctx, r)
 	if e != nil {
 		return Access{}, e
@@ -58,6 +93,9 @@ func (s *Service) Login(ctx context.Context, r Request) (Access, error) {
 	claims, e := s.verifier.Verify(ctx, issued.Token)
 	if e != nil {
 		return Access{}, e
+	}
+	if r.isNIC && (claims.Issuer != bound.Issuer || claims.Subject != bound.Subject) {
+		return Access{}, ErrFailed
 	}
 	if claims.Issuer == "" || claims.Subject == "" || !claims.Verified || !claims.Citizen {
 		return Access{}, ErrFailed

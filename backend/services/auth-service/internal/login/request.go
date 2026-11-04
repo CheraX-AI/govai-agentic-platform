@@ -28,9 +28,18 @@ func (privateValue) LogValue() slog.Value         { return slog.StringValue("[RE
 type Request struct {
 	privateValue
 	email, password string
+	nic             registration.NIC
+	isNIC           bool
 }
 
+// Email returns only an explicitly supplied email, never the NIC identifier.
 func (r Request) Email() string { return r.email }
+func (r Request) LimitKey() string {
+	if r.isNIC {
+		return "nic:" + r.nic.NormalizedNumber()
+	}
+	return r.email
+}
 func Parse(reader io.Reader) (Request, error) {
 	if reader == nil {
 		return Request{}, ErrInvalid
@@ -54,7 +63,7 @@ func Parse(reader io.Reader) (Request, error) {
 	for decoder.More() {
 		raw, e := decoder.Token()
 		key, ok := raw.(string)
-		if e != nil || !ok || (key != "email" && key != "password") {
+		if e != nil || !ok || (key != "email" && key != "identifier" && key != "password") {
 			return Request{}, ErrInvalid
 		}
 		if _, seen := fields[key]; seen {
@@ -76,10 +85,27 @@ func Parse(reader io.Reader) (Request, error) {
 	if _, e = decoder.Token(); e != io.EOF {
 		return Request{}, ErrInvalid
 	}
-	email := registration.CanonicalEmail(fields["email"])
 	password := fields["password"]
-	if len(fields) != 2 || email == "" || len(password) == 0 || len(password) > 1024 {
+	if len(fields) != 2 || len(password) == 0 || len(password) > 1024 {
 		return Request{}, ErrInvalid
 	}
-	return Request{email: email, password: password}, nil
+	if value, ok := fields["email"]; ok {
+		email := registration.CanonicalEmail(value)
+		if email == "" {
+			return Request{}, ErrInvalid
+		}
+		return Request{email: email, password: password}, nil
+	}
+	value, ok := fields["identifier"]
+	if !ok {
+		return Request{}, ErrInvalid
+	}
+	if email := registration.CanonicalEmail(value); email != "" {
+		return Request{email: email, password: password}, nil
+	}
+	nic, err := registration.ParseNIC(value)
+	if err != nil {
+		return Request{}, ErrInvalid
+	}
+	return Request{nic: nic, isNIC: true, password: password}, nil
 }

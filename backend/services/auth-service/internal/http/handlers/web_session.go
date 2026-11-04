@@ -178,7 +178,7 @@ func (h *WebSessionHandler) Login(c *gin.Context) {
 		webFail(c, 503, "session_unavailable")
 		return
 	}
-	retry, err := permit.CheckEmail(ctx, request.Email())
+	retry, err := permit.CheckEmail(ctx, request.LimitKey())
 	if err != nil {
 		if errors.Is(err, ErrRegistrationLimited) {
 			c.Header("Retry-After", retrySeconds(retry))
