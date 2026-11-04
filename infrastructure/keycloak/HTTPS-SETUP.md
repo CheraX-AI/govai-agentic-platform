@@ -1,7 +1,7 @@
-<!-- PostgreSQL cutover completed 2026-10-31. Start the dedicated keycloak-postgres project first; see ../keycloak-postgres/README.md. H2-only startup is rollback-only. -->
+<!-- PostgreSQL cutover completed 2026-10-31. Start the dedicated keycloak-postgres project first; see ../postgres/keycloak/README.md. H2-only startup is rollback-only. -->
 # Local GovAI HTTPS and registration
 
-Later login update: the [mobile/Postman login API](../../services/auth-service/docs/GA-48-login.md)
+Later login update: the [mobile/Postman login API](../../backend/services/auth-service/docs/GA-48-login.md)
 now has a separate non-admin client and private `.env.login`. Provision it with
 `go run ./tools/dev-auth configure-login` from the auth-service directory, then
 restart the API. Registration manual evidence below predates this login slice;
@@ -32,14 +32,14 @@ explicit identity-link migration before changing an issuer with existing real da
 Run in PowerShell with Docker Desktop running:
 
 ```powershell
-cd C:\Users\LENOVO\Desktop\govai-agentic-platform\backend\dev\auth-postgres
+cd C:\Users\LENOVO\Desktop\govai-agentic-platform\infrastructure\postgres\auth
 docker compose --env-file .env up -d --wait
 
 cd ..\keycloak
 docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml up -d
 docker start govai-mailpit
 
-cd ..\..\services\auth-service
+cd ..\..\..\backend\services\auth-service
 go run ./tools/dev-auth check
 go run ./cmd/api
 ```
@@ -64,7 +64,7 @@ profile are intentionally retained; no automatic destructive cleanup occurs.
 
 ## Local certificate trust
 
-Private files live in ignored `backend/dev/keycloak/tls/`:
+Private files live in ignored `infrastructure/keycloak/tls/`:
 
 - `ca.pem`: public development CA certificate; safe to inspect/import as trust.
 - `keycloak-cert.pem`, `api-cert.pem`: public server certificates.

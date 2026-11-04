@@ -30,7 +30,7 @@ func testReservation(nic, key string) registration.Reservation {
 func testDatabase(t *testing.T) (*Store, *Store, *pgxpool.Pool) {
 	t.Helper()
 	if os.Getenv("GOVAI_DB_TEST") != "1" {
-		t.Skip("opt-in: GOVAI_DB_TEST=1; requires isolated backend/dev/auth-postgres setup")
+		t.Skip("opt-in: GOVAI_DB_TEST=1; requires isolated infrastructure/postgres/auth setup")
 	}
 	env, e := godotenv.Read("../../.env.database")
 	if e != nil {

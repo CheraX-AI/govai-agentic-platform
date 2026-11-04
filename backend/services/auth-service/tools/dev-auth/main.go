@@ -20,7 +20,7 @@ func run() error {
 	if len(os.Args) != 2 {
 		return devsetup.ErrSetup
 	}
-	root, e := filepath.Abs(filepath.Join("..", "..", "dev", "keycloak"))
+	root, e := filepath.Abs(filepath.Join("..", "..", "..", "infrastructure", "keycloak"))
 	if e != nil {
 		return devsetup.ErrSetup
 	}

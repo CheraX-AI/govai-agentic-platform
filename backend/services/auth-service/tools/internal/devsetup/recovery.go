@@ -68,7 +68,7 @@ func (a *localAdmin) recoveryCheck(ctx context.Context) error {
 // Metadata-only inspection of the saved automatically generated test account.
 // This never resets credentials, marks email verified, or reads token material.
 func (a *localAdmin) recoverySampleCheck(ctx context.Context, root string, sendVerification ...bool) error {
-	path := filepath.Join(root, "..", "..", "services", "auth-service", ".local", "registration-smoke.json")
+	path := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".local", "registration-smoke.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ErrSetup
@@ -93,7 +93,7 @@ func (a *localAdmin) recoverySampleCheck(ctx context.Context, root string, sendV
 			fmt.Fprintln(a.out, "DEV_AUTH_SAVED_SAMPLE already_verified=true")
 			return nil
 		}
-		settings, err := godotenv.Read(filepath.Join(root, "..", "..", "services", "auth-service", ".env.registration"))
+		settings, err := godotenv.Read(filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration"))
 		if err != nil {
 			return ErrSetup
 		}

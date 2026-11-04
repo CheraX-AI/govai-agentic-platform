@@ -262,7 +262,7 @@ func fresh() string {
 func online(ctx context.Context, base, dir string, probe bool, align bool) {
 	require(base == "https://localhost:8443" || base == "https://localhost:8444", "fixed_loopback_only")
 	require(!probe || base == "https://localhost:8444", "probe_rehearsal_only")
-	root, e := filepath.Abs("../../dev/keycloak")
+	root, e := filepath.Abs("../../../infrastructure/keycloak")
 	require(e == nil, "root")
 	pem, e := os.ReadFile(filepath.Join(root, "tls", "ca.pem"))
 	require(e == nil, "ca")
@@ -424,7 +424,7 @@ func main() {
 	probe := flag.Bool("probe", false, "rehearsal-only synthetic probe")
 	align := flag.Bool("align-import-defaults", false, "restore source absent logout defaults in approved local target")
 	flag.Parse()
-	root, e := filepath.Abs("../../dev/keycloak-postgres/.local")
+	root, e := filepath.Abs("../../../infrastructure/postgres/keycloak/.local")
 	require(e == nil, "state_root")
 	absolute, e := filepath.Abs(*dir)
 	require(e == nil && strings.HasPrefix(absolute, root+string(os.PathSeparator)), "private_state_path")

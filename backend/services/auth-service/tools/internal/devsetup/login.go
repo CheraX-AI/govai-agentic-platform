@@ -31,7 +31,7 @@ func (a *localAdmin) configureLogin(ctx context.Context, root string) error {
 	a.ensureLoginMapper(ctx, id, mapper)
 	verified := object{"name": "govai-login-email-verified", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": object{"user.attribute": "emailVerified", "claim.name": "email_verified", "jsonType.label": "boolean", "access.token.claim": "true", "id.token.claim": "false", "userinfo.token.claim": "false"}}
 	a.ensureLoginMapper(ctx, id, verified)
-	state := filepath.Join(root, "..", "..", "services", "auth-service", ".env.login")
+	state := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.login")
 	env, e := godotenv.Read(state)
 	if os.IsNotExist(e) {
 		env = map[string]string{"LOGIN_RATE_KEY": base64Key()}

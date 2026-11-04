@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $taskComposeEnv = Join-Path $PSScriptRoot '.env'
-$taskKeycloakEnv = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../keycloak/.env.postgres'))
+$taskKeycloakEnv = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../keycloak/.env.postgres'))
 if ((Test-Path -LiteralPath $taskComposeEnv) -or (Test-Path -LiteralPath $taskKeycloakEnv)) {
     throw 'Private settings already exist. Preserve credentials for the existing volume; do not regenerate them.'
 }

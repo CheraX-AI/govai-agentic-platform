@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$taskService = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../services/auth-service'))
+$taskService = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../backend/services/auth-service'))
 $taskComposeEnv = Join-Path $PSScriptRoot '.env'
 $taskServiceEnv = Join-Path $taskService '.env.database'
 $taskAdminEnv = Join-Path $taskService '.env.database-admin'

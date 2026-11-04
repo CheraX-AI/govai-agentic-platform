@@ -10,12 +10,12 @@ Run these commands in **PowerShell**, with Docker Desktop running.
 ## First-time setup
 
 ```powershell
-cd C:\Users\LENOVO\Desktop\govai-agentic-platform\backend\dev\auth-postgres
+cd C:\Users\LENOVO\Desktop\govai-agentic-platform\infrastructure\postgres\auth
 .\setup.ps1
 docker compose --env-file .env config --quiet
 docker compose --env-file .env up -d --wait
 
-cd ..\..\services\auth-service
+cd ..\..\..\backend\services\auth-service
 go run ./tools/db migrate
 go run ./tools/db check
 go test ./...
@@ -56,7 +56,7 @@ runtime role separately; the Docker bootstrap owner here is local development on
 ## Subsequent starts / stops
 
 ```powershell
-cd C:\Users\LENOVO\Desktop\govai-agentic-platform\backend\dev\auth-postgres
+cd C:\Users\LENOVO\Desktop\govai-agentic-platform\infrastructure\postgres\auth
 docker compose --env-file .env up -d --wait
 ```
 
@@ -86,7 +86,7 @@ skips live database checks. The fixture reads the private runtime and admin sett
 
 ## Data and recovery
 
-See [database design](../../services/auth-service/docs/GA-48-postgresql.md).
+See [database design](../../../backend/services/auth-service/docs/GA-48-postgresql.md).
 Back up the volume/database **and** the private settings files to restricted
 storage outside Git. Losing the data key makes encrypted profiles unrecoverable.
 Changing the NIC index key without a coordinated migration breaks uniqueness.
