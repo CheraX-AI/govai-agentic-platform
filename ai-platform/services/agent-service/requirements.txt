@@ -4,5 +4,17 @@ langgraph==1.2.19
 # Local LangGraph server and Studio (`langgraph dev`)
 langgraph-cli[inmem]==0.4.40
 
+# Prompt templates and messages (ChatPromptTemplate)
+langchain-core==1.7.3
+
+# NVIDIA chat model (ChatNVIDIA)
+langchain-nvidia-ai-endpoints==1.5.0
+
+# Settings and prompt data models
+pydantic==2.14.2
+
+# Loads the LLM and LangSmith settings from .env
+python-dotenv==1.2.4
+
 # Tests
 pytest==9.1.1
