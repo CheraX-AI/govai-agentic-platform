@@ -52,7 +52,7 @@ export default function AppRouter() {
   if (route.path === '#/register') return <RegistrationPage />
   if (route.path === '#/forgot-password') return <ForgotPasswordPage onReceived={value => { setReceipt(value); navigate('#/check-email') }} />
   if (route.path === '#/check-email') return <ResetEmailConfirmationPage receipt={receipt} onReceived={setReceipt} />
-  if (route.path === '#/app/home' || route.path === '#/app/recent') return <ProtectedRoute destination={route.path}><ApplicationPageLayout page={route.path === '#/app/recent' ? 'recent' : 'home'} protectedDemo onDemoLogout={() => void logout()}>{route.path === '#/app/recent' ? <RecentPage protectedDemo /> : <HomePage />}</ApplicationPageLayout></ProtectedRoute>
+  if (route.path === '#/app/home' || route.path === '#/app/recent') return <ProtectedRoute destination={route.path}><ApplicationPageLayout page={route.path === '#/app/recent' ? 'recent' : 'home'} protectedDemo onDemoLogout={() => void logout()}>{route.path === '#/app/recent' ? <RecentPage protectedDemo /> : <HomePage chatEnabled />}</ApplicationPageLayout></ProtectedRoute>
   if (['#/preview/home', '#/preview/recent', '#/home', '#/recent'].includes(route.path)) {
     if (!import.meta.env.DEV) return <UnavailablePage developmentOnly />
     return <ApplicationPageLayout page={route.path.endsWith('/recent') ? 'recent' : 'home'}>{route.path.endsWith('/recent') ? <RecentPage /> : <HomePage />}</ApplicationPageLayout>

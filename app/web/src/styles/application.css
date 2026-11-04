@@ -109,3 +109,12 @@
   .home-hero > p:first-child { font-size: 26px; }
 }
 @media (max-height: 720px) and (min-width: 581px) { .home-content { justify-content: flex-start; padding-top: 56px; } }
+
+/* Live composer keeps the existing shell geometry and colour palette. */
+.composer-preview textarea { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1.5; resize: vertical; max-height: 160px; padding: 8px 0; }
+.composer-preview textarea:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.chat-exchange { width: 100%; max-width: 876px; overflow-wrap: anywhere; }
+.chat-question, .chat-answer { white-space: pre-wrap; margin-bottom: 16px; }
+.chat-question { font-weight: 600; }
+.chat-exchange ul { padding-left: 20px; }
+@media (max-width: 480px) { .composer-preview textarea { flex-basis: calc(100% - 70px); } }

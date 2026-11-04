@@ -69,6 +69,22 @@ export async function runAuthBrowserCheck(scenario) {
    await send('Page.navigate',{url:link});await until('Boolean(document.getElementById("reset-password"))','reuse form')
    await fill('reset-password','abcdefgh');await fill('reset-confirmation','abcdefgh');await submit();await until('document.body.innerText.includes("invalid, expired or already used")','used link')
    await go('#/verify-code');assert.match(await text(),/Open a valid reset link/)
+  } else if(scenario==='chat') {
+   await go('#/login');await until('!document.querySelector("button[type=submit]").disabled','session check');await login();await until('Boolean(document.getElementById("chat-message"))','chat composer')
+   const fillChat=async(value)=>evaluate(`(()=>{const i=document.getElementById('chat-message');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(i,${JSON.stringify(value)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`)
+   assert.equal(await evaluate('document.querySelector(".send-preview").disabled'),true)
+   await fillChat('Synthetic question');await evaluate('document.querySelector("form").requestSubmit()')
+   await until('document.body.innerText.includes("Chat is temporarily unavailable")','unavailable agent')
+   assert.equal(await evaluate('Boolean(document.querySelector(".chat-exchange"))'),false)
+   model.chatStatus=200;await evaluate('document.querySelector("form").requestSubmit();document.querySelector("form").requestSubmit()')
+   await until('Boolean(document.querySelector(".chat-exchange"))','answer')
+   assert.match(await text(),/Synthetic <img/)
+   assert.equal(await evaluate('document.querySelectorAll(".chat-exchange img").length'),0,'answer treated as text')
+   assert.equal(await evaluate('document.querySelector(".chat-exchange a").href'),'https://example.test/guide')
+   assert.equal(await evaluate('document.getElementById("chat-message").value.length'),0)
+   assert.equal(model.calls.filter(c=>c.path.endsWith('/web/chat')).length,2,'duplicate submit guarded')
+   model.unsafeChat=true;await fillChat('Another synthetic question');await evaluate('document.querySelector("form").requestSubmit()');await until('document.body.innerText.includes("Unable to retrieve valid sources")','unsafe citation rejected')
+   model.chatStatus=401;model.session=false;await evaluate('document.querySelector("form").requestSubmit()');await until('location.hash.startsWith("#/login")','expired session redirect')
   } else if(scenario==='ui') {
    for(const hash of ['#/login','#/register','#/forgot-password','#/check-email','#/preview/home']) {
     await go(hash);await evaluate('document.fonts.ready')

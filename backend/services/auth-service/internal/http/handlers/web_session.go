@@ -28,6 +28,7 @@ type WebSessionHandler struct {
 	limiter      RegistrationLimiter
 	loginLimiter RegistrationLimiter
 	origin       string
+	chat         *webChat
 }
 
 func NewWebSessionHandler(s WebSessionService, l RegistrationLimiter, origin string) (*WebSessionHandler, error) {
@@ -100,7 +101,11 @@ func (h *WebSessionHandler) begin(c *gin.Context, write bool, isLogin ...bool) (
 		webFail(c, 405, "method_not_allowed")
 		return nil, nil, false
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	budget := 10 * time.Second
+	if h.chat != nil && c.Request.URL.Path == "/api/v1/web/chat" {
+		budget = 35 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), budget)
 	source, ok := registrationSource(c.Request.RemoteAddr)
 	if !ok {
 		cancel()

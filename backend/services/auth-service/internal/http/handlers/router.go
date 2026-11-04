@@ -175,6 +175,9 @@ func configuredRecoveryRouter(logger *slog.Logger, origins []string, h *Registra
 	}
 	health := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
 	if web != nil {
+		if web.chat != nil {
+			router.POST("/api/v1/web/chat", web.Chat)
+		}
 		router.POST("/api/v1/web/login", web.Login)
 		router.GET("/api/v1/web/session", web.Check)
 		router.GET("/api/v1/web/csrf", web.CSRF)
