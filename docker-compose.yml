@@ -36,17 +36,46 @@ services:
       timeout: 5s
       retries: 5
 
-  s3mock:
-    image: adobe/s3mock:latest
-    container_name: govai-s3mock
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: govai-seaweedfs
     restart: unless-stopped
     environment:
-      initialBuckets: govai-documents
-      root: /data
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?Set OBJECT_STORAGE_ACCESS_KEY in .env}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?Set OBJECT_STORAGE_SECRET_KEY in .env}
+    # Write the S3 credentials file from the environment, then start SeaweedFS
+    # with the master (9333), filer (8888) and S3 API (8333)
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '{"identities":[{"name":"govai","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' "$$OBJECT_STORAGE_ACCESS_KEY" "$$OBJECT_STORAGE_SECRET_KEY" > /tmp/s3.json
+        exec weed server -dir=/data -master.port=9333 -filer -filer.port=8888 -s3 -s3.port=8333 -s3.config=/tmp/s3.json
     ports:
-      - "${S3MOCK_PORT}:9090"
+      - "127.0.0.1:${SEAWEEDFS_S3_PORT}:8333" # S3 API
+      - "127.0.0.1:8888:8888" # Filer UI
+      - "127.0.0.1:9333:9333" # Master UI
     volumes:
-      - s3mock_data:/data
+      - seaweedfs_data:/data
+    networks:
+      - govai-network
+
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs:latest
+    container_name: govai-seaweedfs-admin
+    restart: unless-stopped
+    environment:
+      SEAWEEDFS_ADMIN_PASSWORD: ${SEAWEEDFS_ADMIN_PASSWORD:?Set SEAWEEDFS_ADMIN_PASSWORD in .env}
+    # Web admin UI (23646): cluster overview, buckets, file browser, volumes, maintenance.
+    # Login is "admin" with the password from .env; it finds the filer through the master.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - exec weed admin -port=23646 -port.legacy=0 -master=seaweedfs:9333 -dataDir=/data -adminPassword="$$SEAWEEDFS_ADMIN_PASSWORD"
+    ports:
+      - "127.0.0.1:23646:23646" # Admin UI
+    volumes:
+      - seaweedfs_admin_data:/data
+    depends_on:
+      - seaweedfs
     networks:
       - govai-network
 
@@ -55,11 +84,26 @@ services:
     container_name: govai-chromadb
     restart: unless-stopped
     ports:
-      - "${CHROMA_PORT}:8000"
+      - "127.0.0.1:${CHROMA_PORT:?Set CHROMA_PORT in .env}:8000"
     volumes:
       - chroma_data:/chroma/chroma
     networks:
       - govai-network
+
+  chromadb-dashboard:
+    build: ./infrastructure/chromadb/dashboard
+    container_name: govai-chromadb-dashboard
+    restart: unless-stopped
+    environment:
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - chromadb
+    networks:
+      - govai-network
+
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -99,7 +143,8 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  s3mock_data:
+  seaweedfs_data:
+  seaweedfs_admin_data:
   chroma_data:
   pgadmin_data:
   redisinsight_data:
@@ -107,3 +152,4 @@ volumes:
 networks:
   govai-network:
     driver: bridge
+    

@@ -1,0 +1,8 @@
+# Agent workflow graph (StateGraph, MessagesState)
+langgraph==1.2.19
+
+# Local LangGraph server and Studio (`langgraph dev`)
+langgraph-cli[inmem]==0.4.40
+
+# Tests
+pytest==9.1.1

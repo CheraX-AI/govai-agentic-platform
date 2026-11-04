@@ -581,5 +581,4 @@ identifier buckets, not a unified distributed account lockout.
 
 Automated tests cover legacy email, email/NIC identifiers, old/new NIC syntax,
 ambiguous/phone rejection, redaction, resolution failure, mismatched token subject,
-and both HTTP entry points. Live NIC/password login still requires verification
-with a synthetic registered account after restarting the API.
+and both HTTP entry points. User-confirmed Postman tests after API restart returned 200 for mobile/Postman and web NIC login with a synthetic registered account. Actual frontend/mobile UI integration remains pending.
