@@ -1,0 +1,18 @@
+name: govai-keycloak-dev
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--db=dev-file"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:?Set bootstrap username in the local .env file}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?Set bootstrap password in the local .env file}
+      KC_HOSTNAME: http://localhost:8180
+    ports:
+      - "127.0.0.1:8180:8080"
+    volumes:
+      - keycloak_dev_data:/opt/keycloak/data
+    stop_grace_period: 30s
+
+volumes:
+  keycloak_dev_data:

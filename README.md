@@ -1,171 +1,101 @@
 # GovAI Agentic Platform
 
-A secure multi-agent AI platform for Sri Lankan government services. It helps citizens find the right service, complete applications and track their progress, and gives government staff AI support for handling requests.
+GovAI is a university prototype providing guidance about Sri Lankan government
+services. It is not an official government system. Sprint scope is informational
+service guidance; government application submission, payments and tracking are
+not implemented by this backend.
 
-> **Status:** early development. The project structure and development environment are set up; features are being built.
+## Architecture and current status
 
-## Features (planned)
+React web / future mobile client -> Go + Gin APIs -> Keycloak / PostgreSQL /
+teammate-owned Python AI services.
 
-- **Service guidance**: answers questions about government services, eligibility and required documents.
-- **Application assistance**: guides citizens step by step through filling in and submitting applications.
-- **Application tracking**: shows citizens the current status of their submitted applications.
-- **Staff support**: helps government staff review, summarize and respond to requests.
+- Authentication: custom registration, email/NIC password login, email verification,
+  browser sessions, native refresh/revoke and NIC-based email password recovery.
+- Chat: separate Go core-service, authenticated message endpoint, configurable
+  HTTP agent adapter and synthetic tests. Real agent integration and browser
+  session forwarding remain pending; no generated answers are fabricated.
+- Actual frontend/mobile integration remains to be verified. Postman results are
+  backend evidence, not browser/mobile end-to-end evidence.
+- Catalogue, KYC and notification service directories remain placeholders.
 
-## Architecture
+## Technology and folders
 
-```
-┌──────────────┐   ┌──────────────┐
-│   Web app    │   │  Mobile app  │
-│ React + Vite │   │  (planned)   │
-└──────┬───────┘   └──────┬───────┘
-       │      REST API    │
-       └────────┬─────────┘
-                ▼
-       ┌─────────────────┐
-       │     Backend     │   Node.js + Express
-       │  (API gateway)  │   auth, business logic, data
-       └────────┬────────┘
-                ▼
-       ┌─────────────────┐
-       │    AI agent     │   Python + FastAPI + LangChain
-       │    service      │   multi-agent orchestration, LLM calls
-       └─────────────────┘
-```
-
-The web and mobile apps talk only to the backend. The backend calls the AI agent service when a request needs AI.
-
-## Tech stack
-
-| Part | Technology |
+| Area | Technology / location |
 | --- | --- |
-| Web app | React 19, TypeScript, Vite, Oxlint |
-| Mobile app | Not chosen yet |
-| Backend | Node.js 24, Express 5, Helmet, CORS, Morgan |
-| AI agent | Python 3.13, FastAPI, Uvicorn, LangChain, OpenAI |
+| Backend APIs | Go 1.26+, Gin; `backend/services/` |
+| Shared JWT middleware | Go; `backend/pkg/authn/` |
+| Identity | Keycloak; `infrastructure/keycloak/` |
+| Auth application database | PostgreSQL; `infrastructure/postgres/auth/` |
+| Keycloak database | Separate PostgreSQL; `infrastructure/postgres/keycloak/` |
+| Web | React, TypeScript, Vite; `app/web/`; Node/npm are frontend tools |
+| Mobile | `app/mobile/`; consult its owner for current implementation |
+| AI | Teammate-owned Python services; `ai-platform/services/` |
+| Shared infrastructure | Root Compose; Redis/storage/ChromaDB and shared PostgreSQL |
 
-## Project structure
-
-```
-govai-agentic-platform/
-├── ai-agent/      # Python AI agent service (own virtual environment)
-├── app/
-│   ├── mobile/    # Mobile app (not started)
-│   └── web/       # React + TypeScript web app
-├── backend/       # Node.js + Express REST API
-├── LICENSE
-└── README.md
-```
-
-Each part has its own dependencies and is set up and run separately.
+The Go backend does not use Express or npm. Do not replace the isolated auth
+PostgreSQL instances with root Compose's shared PostgreSQL by assumption.
 
 ## Getting started
 
-### Prerequisites
+Clone the repository and use the approved branch/review process:
 
-- [Git](https://git-scm.com/)
-- [Node.js 24+](https://nodejs.org/) and npm
-- [Python 3.13+](https://www.python.org/downloads/)
-
-### 1. Clone the repository
-
-```bash
+```powershell
 git clone https://github.com/CheraX-AI/govai-agentic-platform.git
 cd govai-agentic-platform
 ```
 
-### 2. Backend
+Install Go, Git and Docker Desktop (Linux engine). Node/npm are needed for the
+web app; Python requirements belong to the AI owners' service guides.
 
-```bash
-cd backend
-npm install
-cp .env.example .env      # Windows Command Prompt: copy .env.example .env
-npm run dev
+### Backend
+
+Follow [backend guide](backend/README.md) and the individual service README.
+Fresh setup requires private environment settings, TLS trust, database provisioning,
+Keycloak realm/clients/SMTP setup and explicit migrations; pulling code alone is
+not a complete bootstrap. Do not copy another developer's private keys or secrets.
+
+After local setup, run from the authentication module:
+
+```powershell
+cd backend/services/auth-service
+go mod download
+go test ./...
+go vet ./...
+go run ./cmd/api
 ```
 
-The API runs at `http://localhost:5000`. Check it with `GET http://localhost:5000/api/health`.
+Configured local auth API: `https://localhost:5001`; health `/api/health`,
+database readiness `/api/ready`. Bare foundation mode can default to HTTP port
+5000 when authentication features are disabled; that is not the configured auth setup.
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start with auto-reload |
-| `npm start` | Start the server |
-| `npm test` | Run tests |
+Core/chat is a separate module at `backend/services/core-service`, with configured
+HTTPS port 5002. See its README before running it.
 
-See [backend/README.md](backend/README.md) for the backend folder layout.
+### Web
 
-### 3. Web app
+Follow [web guide](app/web/README.md). From `app/web`, `npm ci` installs locked
+dependencies and `npm run dev` starts Vite. Use the actual URL shown by Vite.
+`localhost` and `127.0.0.1` are distinct origins; agree exact origin and HTTPS/cookie
+settings with the backend owner before browser integration.
 
-```bash
-cd app/web
-npm install
-npm run dev
-```
+### AI services
 
-The web app runs at `http://localhost:5173`.
+Follow the existing [RAG guide](ai-platform/services/knowledge-service/rag/README.md)
+and coordinate endpoints/authentication with its owner. Go proxies questions;
+it does not implement ingestion, embeddings, retrieval or model orchestration.
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run build` | Type-check and build for production |
-| `npm run lint` | Lint the code with Oxlint |
-| `npm run preview` | Preview the production build |
+## Secrets and verification
 
-### 4. AI agent
+Each service owns its environment configuration. Only placeholder `.env.example`
+files belong in shared source; real `.env`, TLS private keys, backups and local
+state must stay ignored. Run tests from each Go module separately.
 
-The AI agent uses a Python virtual environment, so its packages stay separate from the rest of your system.
+Use synthetic accounts. Preserve existing named volumes and credentials; do not
+use `docker compose down -v` to repair configuration. Local health checks do not
+prove real AI integration, deployment readiness or government compliance.
 
-Create the environment (one time):
+## Contributing and license
 
-```bash
-cd ai-agent
-py -3.13 -m venv .venv        # Windows
-python3 -m venv .venv         # macOS / Linux
-```
-
-Activate it (in every new terminal):
-
-| Shell | Command |
-| --- | --- |
-| PowerShell | `.\.venv\Scripts\Activate.ps1` |
-| Command Prompt | `.venv\Scripts\activate.bat` |
-| Git Bash | `source .venv/Scripts/activate` |
-| macOS / Linux | `source .venv/bin/activate` |
-
-Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-When you add a package, save it for the rest of the team:
-
-```bash
-pip freeze > requirements.txt
-```
-
-Leave the environment with `deactivate`.
-
-> If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
-
-## Environment variables
-
-Never commit secrets. Each service reads its settings from its own `.env` file, which git ignores. Copy the `.env.example` file in that service to `.env` and fill in the values.
-
-**Backend** (`backend/.env`)
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `NODE_ENV` | `development` | `development`, `test` or `production` |
-| `PORT` | `5000` | Port the API listens on |
-| `CORS_ORIGIN` | `*` | Allowed frontend origin, for example `http://localhost:5173` |
-
-## Contributing
-
-1. Create a branch from `main`, for example `feature/service-guidance` or `fix/login-error`.
-2. Make your changes and run the tests and linter for the part you changed.
-3. Push the branch and open a pull request into `main`.
-
-Do not commit `node_modules/`, `.venv/` or `.env` files.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+Create a feature branch, run relevant checks and open a reviewed PR. Do not
+commit secrets or generated dependency/build directories. See [LICENSE](LICENSE).
