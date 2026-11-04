@@ -1,7 +1,7 @@
-"""Embed saved document chunks with the NVIDIA API: batching, retries, and re-run reuse.
+"""Embed a document's chunks with the NVIDIA API: batching and retries.
 
-Vectors from different models cannot be mixed, so every embeddings file records
-the model that produced it.
+Vectors from different models cannot be mixed, so every DocumentEmbeddings
+records the model that produced it.
 
 This module is also the package's public API: names from the other embedding
 modules are re-exported here, and app.embeddings re-exports this module.
@@ -12,10 +12,10 @@ import time
 
 from app.embeddings.config import EmbeddingSettings, load_settings
 from app.embeddings.exceptions import (
-    ChunkFileError,
     EmbeddingAuthError,
     EmbeddingConfigError,
     EmbeddingError,
+    InvalidChunkError,
     InvalidEmbeddingError,
     format_validation_error,
     get_status_code,
@@ -25,55 +25,44 @@ from app.embeddings.exceptions import (
 )
 from app.embeddings.models import (
     Chunk,
+    DocumentEmbeddingResult,
+    DocumentEmbeddings,
     EmbeddedChunk,
     Embedder,
-    EmbeddingFile,
-    EmbeddingFileResult,
     EmbeddingResult,
     FailedBatch,
     VectorStoreBatch,
 )
-from app.embeddings.storage import (
-    EMBEDDINGS_FOLDER,
-    embeddings_path_for,
-    load_chunks,
-    load_embeddings,
-    load_reusable_embeddings,
-    save_embeddings,
-    to_vector_store_batch,
-)
-from app.embeddings.validators import METADATA_VALUE_TYPES, validate_vectors
+from app.embeddings.storage import to_vector_store_batch
+from app.embeddings.validators import METADATA_VALUE_TYPES, validate_chunks, validate_vectors
 
 logger = logging.getLogger(__name__)
 
 # Public API; existing imports from embedding_service and app.embeddings use these names
 __all__ = [
-    "EMBEDDINGS_FOLDER",
     "METADATA_VALUE_TYPES",
     "Chunk",
-    "ChunkFileError",
+    "DocumentEmbeddingResult",
+    "DocumentEmbeddings",
     "EmbeddedChunk",
     "Embedder",
     "EmbeddingAuthError",
     "EmbeddingConfigError",
     "EmbeddingError",
-    "EmbeddingFile",
-    "EmbeddingFileResult",
     "EmbeddingResult",
     "EmbeddingSettings",
     "FailedBatch",
+    "InvalidChunkError",
     "InvalidEmbeddingError",
     "VectorStoreBatch",
     "create_embedder",
-    "embed_chunk_file",
     "embed_chunks",
+    "embed_document",
     "embed_query",
     "format_validation_error",
-    "load_chunks",
-    "load_embeddings",
     "load_settings",
-    "save_embeddings",
     "to_vector_store_batch",
+    "validate_chunks",
 ]
 
 
@@ -192,56 +181,41 @@ def embed_query(embedder, question):
     return vector
 
 
-def embed_chunk_file(chunks_path, embedder, output_dir):
-    """Embed one chunk file and save the successful embeddings.
+def embed_document(chunks, embedder):
+    """Embed one document's chunks and return its DocumentEmbeddingResult.
 
-    Chunks already embedded by the same model with the same text are reused,
-    so a re-run only embeds new or previously failed chunks. Raises
-    EmbeddingAuthError after saving, so the caller can stop the batch.
+    A failed batch is recorded and the other batches are kept. Nothing is saved
+    to disk: the embeddings go straight to the vector store. Raises
+    EmbeddingAuthError when NVIDIA rejects the key, so the caller can stop.
     """
 
     settings = embedder.settings
-
-    # Load the chunks saved by the chunker
-    chunks = load_chunks(chunks_path)
     document_id = chunks[0].metadata["document_id"]
 
-    # Split the chunks into those that can be reused and those to embed
-    output_path = embeddings_path_for(output_dir, document_id)
-    existing = load_reusable_embeddings(output_path, settings)
-    reused, to_embed = split_reusable(chunks, existing)
+    # Embed the chunks in batches, in chunk order
+    result = embed_chunks(chunks, embedder)
 
-    # Embed the remaining chunks
-    result = embed_chunks(to_embed, embedder)
-
-    # Put reused and new embeddings together, in chunk order
-    records = order_records(chunks, reused + result.embedded)
-
-    # Save them; nothing is written when every chunk failed
-    embeddings_path = None
-    if records:
-        embedding_file = EmbeddingFile(
-            document_id=document_id,
-            model=settings.model,
-            dimension=len(records[0].embedding),
-            records=records,
-        )
-        embeddings_path = save_embeddings(embedding_file, output_dir)
-
-    # Report what happened to the file
-    file_result = EmbeddingFileResult(
-        document_id=document_id,
-        embedded_count=len(result.embedded),
-        reused_count=len(reused),
-        failed=result.failed,
-        embeddings_path=embeddings_path,
-    )
-
-    # Stop the batch only after the successful embeddings are safely saved
+    # A rejected key fails every document the same way, so stop here
     if result.auth_failed:
         raise EmbeddingAuthError(result.failed[-1].message)
 
-    return file_result
+    # Keep the embedded chunks together with the model that made them
+    embeddings = None
+    if result.embedded:
+        embeddings = DocumentEmbeddings(
+            document_id=document_id,
+            model=settings.model,
+            dimension=len(result.embedded[0].embedding),
+            records=result.embedded,
+        )
+
+    document_result = DocumentEmbeddingResult(
+        document_id=document_id,
+        embeddings=embeddings,
+        failed=result.failed,
+    )
+
+    return document_result
 
 
 # Helper functions
@@ -290,44 +264,12 @@ def call_with_retry(embed, inputs, settings):
     raise AssertionError("retry loop ended without a result")
 
 
-def split_reusable(chunks, existing):
-    """Reuse earlier vectors when the chunk text is unchanged.
-
-    The metadata is taken from the current chunk in case it was corrected.
-    """
-
-    reused = []
-    to_embed = []
-
-    for chunk in chunks:
-
-        # Find the earlier embedding of this chunk, if there is one
-        record = existing.get(chunk.chunk_id)
-
-        # Same text and title: keep the vector, refresh the metadata
-        if record is not None and embedding_text(record) == embedding_text(chunk):
-            reused.append(
-                EmbeddedChunk(
-                    chunk_id=chunk.chunk_id,
-                    text=chunk.text,
-                    embedding=record.embedding,
-                    metadata=chunk.metadata,
-                )
-            )
-
-        # New or changed text or title: embed it
-        else:
-            to_embed.append(chunk)
-
-    return reused, to_embed
-
-
 def embedding_text(chunk):
     """The text sent to NVIDIA for a chunk: its document title, then the chunk text.
 
     A chunk deep in a document often does not repeat what the document is about,
     e.g. a page listing company forms never says "TIN". The title gives every
-    vector that context. Only the vector uses it; the saved text stays unchanged.
+    vector that context. Only the vector uses it; the stored text stays unchanged.
     """
 
     # Without a title, the chunk text is embedded as it is
@@ -339,22 +281,6 @@ def embedding_text(chunk):
     text = f"{title}\n\n{chunk.text}"
 
     return text
-
-
-def order_records(chunks, records):
-
-    # Index the embedded records by chunk ID
-    records_by_id = {}
-    for record in records:
-        records_by_id[record.chunk_id] = record
-
-    # Put them in the chunk file's order, skipping chunks that failed
-    ordered = []
-    for chunk in chunks:
-        if chunk.chunk_id in records_by_id:
-            ordered.append(records_by_id[chunk.chunk_id])
-
-    return ordered
 
 
 def failed_batch(chunk_ids, error):

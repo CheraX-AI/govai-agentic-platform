@@ -5,7 +5,7 @@ import httpx
 import pytest
 from chromadb.errors import NotFoundError
 
-from app.embeddings.models import EmbeddingFile
+from app.embeddings.models import DocumentEmbeddings
 from app.vector_store.config import VectorStoreSettings
 from app.vector_store.exceptions import EmbeddingMismatchError, VectorStoreConnectionError, VectorStoreError
 from app.vector_store.vector_store import (
@@ -114,9 +114,9 @@ def test_empty_embedding_file_stores_nothing():
 
     # No collection is needed: nothing is sent
     store = VectorStore(client=None, collection=None)
-    embedding_file = EmbeddingFile(document_id="doc001", model="test-model", dimension=8, records=[])
+    document_embeddings = DocumentEmbeddings(document_id="doc001", model="test-model", dimension=8, records=[])
 
-    result = store.store_document(embedding_file)
+    result = store.store_document(document_embeddings)
 
     assert result.stored_count == 0
     assert result.removed_old_versions == []

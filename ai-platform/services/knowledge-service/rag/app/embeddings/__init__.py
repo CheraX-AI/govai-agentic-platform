@@ -6,8 +6,8 @@ Modules:
 - exceptions.py         errors and NVIDIA API error classification
 - models.py             Pydantic models
 - validators.py         chunk, metadata, and vector checks
-- storage.py            chunk and embeddings files, and vector-store output
-- embedding_service.py  NVIDIA client, batching, retries, and re-run reuse
+- storage.py            vector-store output (to_vector_store_batch)
+- embedding_service.py  NVIDIA client, batching, retries, and embed_document()
 """
 
 from app.embeddings.embedding_service import *  # noqa: F401,F403

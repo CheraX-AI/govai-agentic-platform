@@ -4,5 +4,26 @@ langgraph==1.2.19
 # Local LangGraph server and Studio (`langgraph dev`)
 langgraph-cli[inmem]==0.4.40
 
+# Prompt templates and messages (ChatPromptTemplate)
+langchain-core==1.7.3
+
+# NVIDIA chat model (ChatNVIDIA)
+langchain-nvidia-ai-endpoints==1.5.0
+
+# Chat UI for the agent (scripts/chat_ui.py)
+chainlit==2.12.0
+
+# HTTP client for the knowledge-service retrieval API
+httpx==0.28.1
+
+# LangSmith tracing of the retrieval step (@traceable)
+langsmith==0.14.16
+
+# Settings and prompt data models
+pydantic==2.14.2
+
+# Loads the LLM, knowledge service, and LangSmith settings from .env
+python-dotenv==1.2.4
+
 # Tests
 pytest==9.1.1
