@@ -1,0 +1,11 @@
+.recovery-warning { color: #624400; background: #fff7df; border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+.recovery-back { text-align: center; font-size: 14px; line-height: 1.5; }
+.recovery-mail { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: #f2f8f4; align-self: center; }
+.recovery-tip { display: flex; align-items: start; gap: 10px; background: #f1f7fc; border-radius: 12px; padding: 12px 16px; color: #444; font-size: 13px; line-height: 1.5; }
+.recovery-tip img { flex-shrink: 0; margin-top: 2px; }
+.recovery-resend { align-self: center; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 8px; color: var(--brand); background: transparent; font: inherit; font-size: 13px; font-weight: 600; }
+
+.recovery-methods { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.recovery-methods legend { font-size: 13px; padding-inline: 4px; }
+.recovery-methods label { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; }
+.recovery-methods input { accent-color: var(--brand); width: 22px; height: 22px; }

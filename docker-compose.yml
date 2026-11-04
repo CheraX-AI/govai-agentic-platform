@@ -107,3 +107,4 @@ volumes:
 networks:
   govai-network:
     driver: bridge
+    
