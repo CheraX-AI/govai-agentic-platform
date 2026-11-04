@@ -13,23 +13,28 @@ rag/
 │   │   ├── pdf_extractor.py      # Extracts text from PDF pages
 │   │   ├── chunker.py            # Splits extracted text into chunks
 │   │   └── pipeline.py           # Runs extraction, chunking, and embedding in order
-│   └── embeddings/
-│       ├── config.py             # NVIDIA settings read from .env
-│       ├── exceptions.py         # Errors and NVIDIA API error classification
-│       ├── models.py             # Pydantic models
-│       ├── validators.py         # Chunk, metadata, and vector checks
-│       ├── storage.py            # Chunk and embeddings files, vector-store output
-│       └── embedding_service.py  # NVIDIA client, batching, retries, re-run reuse
+│   ├── embeddings/
+│   │   ├── config.py             # NVIDIA settings read from .env
+│   │   ├── exceptions.py         # Errors and NVIDIA API error classification
+│   │   ├── models.py             # Pydantic models
+│   │   ├── validators.py         # Chunk, metadata, and vector checks
+│   │   ├── storage.py            # Chunk and embeddings files, vector-store output
+│   │   └── embedding_service.py  # NVIDIA client, batching, retries, re-run reuse
+│   └── storage/
+│       ├── config.py             # SeaweedFS settings read from .env
+│       ├── exceptions.py         # Storage errors
+│       └── object_storage.py     # DocumentStore: upload, download, list PDFs (S3 API)
 ├── data/
-│   ├── input/                    # Original PDF documents
+│   ├── input/                    # Only for the GA-73 validation tests
 │   └── output/                   # Generated chunks and embeddings
 ├── scripts/
-│   └── process_documents.py      # Processes the PDFs in data/input
+│   ├── upload_documents.py       # Uploads PDF files to SeaweedFS
+│   └── process_documents.py      # Processes the PDFs stored in SeaweedFS
 ├── tests/
 │   ├── unit/                     # Unit tests (embedding tests call the real NVIDIA API)
-│   ├── integration/              # PDF → chunks → embeddings, and the script
+│   ├── integration/              # PDF → chunks → embeddings, the scripts, and real SeaweedFS
 │   ├── validation/               # GA-73: real documents from data/input, report in data/output/reports
-├── .env.example                  # Template for .env (all NVIDIA settings, empty key)
+├── .env.example                  # Template for .env (NVIDIA and SeaweedFS settings, empty secrets)
 ├── pytest.ini
 └── requirements.txt
 ```
@@ -44,7 +49,8 @@ rag/
 | `langchain-core` | Shared LangChain `Document` type |
 | `langchain-nvidia-ai-endpoints` | `NVIDIAEmbeddings` for the NVIDIA API |
 | `numpy` | Vector checks (NaN and infinity) and similarity maths |
-| `python-dotenv` | Loads embedding settings from `.env` |
+| `boto3` | S3 client for the SeaweedFS object storage |
+| `python-dotenv` | Loads embedding and storage settings from `.env` |
 | `pytest` | Running tests |
 
 ## Installation
@@ -114,7 +120,8 @@ deactivate
 
 ## Documents
 
-Place PDF documents to process in `data/input/`. Generated output is written to
+The original PDFs are stored in SeaweedFS (see [Document storage](#document-storage-seaweedfs)),
+and processing reads them only from there. Generated output is written to
 `data/output/`. Do not commit government documents or generated output to Git.
 
 ## Embedding settings
@@ -161,13 +168,187 @@ Every chunk is sent to NVIDIA's cloud. Use it only with documents that are appro
 for that. Changing the model means every document must be embedded again; each
 embeddings file records its model so vectors are never mixed.
 
+## Document storage (SeaweedFS)
+
+The original PDFs are kept in SeaweedFS, an S3-compatible object store that runs in
+Docker. `process_documents.py` reads PDFs only from SeaweedFS, so every document must
+be uploaded first.
+
+```text
+PDF on your computer ──upload_documents.py──► SeaweedFS ──process_documents.py──► data/output/
+```
+
+### Start SeaweedFS
+
+Follow [infrastructure/object-storage/README.md](../../../../infrastructure/object-storage/README.md):
+create the root `.env`, run `docker compose up -d seaweedfs`, and create the
+`govai-knowledge` bucket once.
+
+### Storage settings
+
+Add these to `rag/.env`, with the same values as the `OBJECT_STORAGE_*` entries in the
+repository root `.env` (docker-compose creates the SeaweedFS user from those):
+
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `OBJECT_STORAGE_ENDPOINT` | `http://localhost:8333` | S3 API address; inside Docker use `http://seaweedfs:8333` |
+| `OBJECT_STORAGE_BUCKET` | `govai-knowledge` | Bucket for verified government documents |
+| `OBJECT_STORAGE_REGION` | `ap-south-1` | Any region name; only used for request signing |
+| `OBJECT_STORAGE_ACCESS_KEY` | `govai_access_key` | Secret; same as the root `.env` |
+| `OBJECT_STORAGE_SECRET_KEY` | | Secret; same as the root `.env` |
+
+Both keys are held as `SecretStr` and never appear in logs or error messages.
+
+### Upload documents
+
+Every PDF must be uploaded with `scripts/upload_documents.py` before it can be processed.
+The PDF can be in any folder on your computer.
+
+#### Step 1: Check that SeaweedFS is running
+
+From the repository root:
+
+```powershell
+docker compose ps seaweedfs
+```
+
+The `STATUS` column must show `Up`. If it does not, run `docker compose up -d seaweedfs`.
+
+#### Step 2: Go to the RAG folder and activate the virtual environment
+
+```powershell
+cd ai-platform/services/knowledge-service/rag
+.venv\Scripts\Activate.ps1
+```
+
+#### Step 3: Upload the PDF
+
+Give the full path of the PDF with `--file`. Put the path in quotes if it has spaces.
+
+```powershell
+python scripts/upload_documents.py --department-id IRD --service-id TIN_REGISTRATION --document-type service_guideline --file "C:\Users\me\Downloads\TIN_guide.pdf"
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--department-id` | Department that owns the PDF, e.g. `IRD` (required) |
+| `--service-id` | Service the PDF belongs to, e.g. `TIN_REGISTRATION` (required for `service_guideline`) |
+| `--document-type` | `service_guideline` or `department_guideline` (required) |
+| `--file` | One or more PDF paths, separated by spaces (required) |
+| `--env-file` | Settings file, default `rag/.env` |
+
+IDs may contain only letters, digits, `_` and `-`, because they become folder names in
+the bucket.
+
+To upload several PDFs for the same service at once, list them all after `--file`:
+
+```powershell
+python scripts/upload_documents.py --department-id IRD --service-id TIN_REGISTRATION --document-type service_guideline --file "C:\docs\TIN_guide.pdf" "C:\docs\TIN_faq.pdf"
+```
+
+For a department guideline, leave out `--service-id`:
+
+```powershell
+python scripts/upload_documents.py --department-id IRD --document-type department_guideline --file "C:\docs\IRD_overview.pdf"
+```
+
+#### Step 4: Read the result
+
+The script prints one line for each file:
+
+```text
+  UPLOADED TIN_guide.pdf -> documents/IRD/TIN_REGISTRATION/619b6495...0085c.pdf
+  SKIPPED  TIN_faq.pdf (already stored as documents/IRD/TIN_REGISTRATION/3f2a...91d.pdf)
+  FAILED   notes.pdf: File is not a PDF: notes.pdf
+
+PDFs: 3, failed: 1
+```
+
+| Result | Meaning |
+| --- | --- |
+| `UPLOADED` | The PDF is now stored in SeaweedFS |
+| `SKIPPED` | The same PDF was already stored, so nothing changed |
+| `FAILED` | The file was not uploaded; the reason is shown after it |
+
+Exit codes: `0` success, `1` some files failed, `2` invalid options, settings, or
+storage (for example SeaweedFS not running).
+
+#### Step 5: Check the file in the browser (optional)
+
+Open http://localhost:8888/buckets/govai-knowledge/documents/ and go to the department
+and service folder. The PDF is listed under its `document_id`.
+
+Use the Filer page only to look at files, not to upload them. A PDF uploaded there gets
+no `document_id` name or metadata, so processing reports it as failed.
+
+#### Step 6: Process the uploaded PDFs
+
+See [Processing documents](#processing-documents).
+
+#### Upload problems
+
+| Message | Fix |
+| --- | --- |
+| `Object storage unavailable: Object storage is not reachable` | Start SeaweedFS (step 1) |
+| `Object storage unavailable: Bucket not found: govai-knowledge` | Create the bucket, see [infrastructure/object-storage/README.md](../../../../infrastructure/object-storage/README.md) |
+| `Object storage unavailable: ... rejected the access key or secret key` | Make the `OBJECT_STORAGE_*` keys in `rag/.env` match the root `.env` |
+| `OBJECT_STORAGE_... is required in .env` | Add the storage settings to `rag/.env` (see [Storage settings](#storage-settings)) |
+| `FAILED ... PDF file not found` | Check the path after `--file` |
+| `FAILED ... File is not a PDF` or `exceeds ... bytes` | Only real PDFs up to 50 MB can be uploaded |
+
+#### How the PDFs are stored
+
+Each PDF is stored under a key built from its content (its SHA-256 `document_id`):
+
+```text
+documents/<department_id>/<service_id>/<document_id>.pdf     # service guideline
+documents/<department_id>/_department/<document_id>.pdf      # department guideline
+```
+
+- The same PDF always gets the same key, so running the upload again prints `SKIPPED`
+  and never creates a duplicate.
+- A revised PDF has different content, so it is stored under a new key; the old version
+  is kept.
+- Files that are not real PDFs, or are larger than 50 MB, are not uploaded.
+- Object metadata holds only the IDs and the URL-encoded file name (S3 metadata must be
+  ASCII, so Sinhala and Tamil names are encoded).
+
+### Use in code
+
+```python
+from app.storage.config import load_storage_settings
+from app.storage.object_storage import create_document_store
+
+store = create_document_store(load_storage_settings())
+store.check_bucket()
+stored = store.upload_document("C:/Users/me/Downloads/guide.pdf", source)
+pdf_path = store.download_document(stored.object_key, "downloads")
+```
+
+`DocumentStore` is the only code that uses boto3, so the object store can be replaced by
+changing `app/storage/object_storage.py` alone.
+
+| Error | Meaning |
+| --- | --- |
+| `StorageConfigError` | A storage setting is missing or invalid |
+| `StorageConnectionError` | SeaweedFS is not running or not reachable |
+| `StorageAuthError` | SeaweedFS rejected the access key or secret key |
+| `BucketNotFoundError` | The bucket has not been created |
+| `DocumentNotFoundError` | No document is stored under the key |
+
 ## Processing documents
 
-Place the PDFs in `data/input/`, then run from the `rag` folder:
+Upload the PDFs first (see [Upload documents](#upload-documents)), then run from the
+`rag` folder:
 
 ```powershell
 python scripts/process_documents.py --department-id IRD --service-id TIN_REGISTRATION --document-type service_guideline
 ```
+
+The script processes every PDF stored for that department and service. The PDFs are
+downloaded to a temporary folder that is deleted afterwards, and each download is
+checked against the SHA-256 in its key. Every chunk gets an `object_key` metadata value,
+so each vector stored later in ChromaDB points back to its original PDF.
 
 | Option | Purpose |
 | --- | --- |
@@ -175,7 +356,7 @@ python scripts/process_documents.py --department-id IRD --service-id TIN_REGISTR
 | `--service-id` | Service the documents belong to (required for `service_guideline`) |
 | `--title` | Document title, e.g. `"Obtaining a Taxpayer Identification Number (TIN)"`. Each chunk is embedded with the title in front, so chunks that never repeat the topic are still found; the saved text is unchanged. |
 | `--document-type` | `service_guideline` or `department_guideline` (required) |
-| `--input-dir`, `--output-dir` | Default `data/input` and `data/output` |
+| `--output-dir` | Default `data/output` |
 | `--env-file` | Settings file, default `rag/.env` |
 | `--skip-embeddings` | Only extract and chunk |
 
@@ -187,7 +368,8 @@ Output in `data/output/`:
 | `chunks/` | `<document_id>.chunks.json`, chunks with `chunk_id` and metadata |
 | `embeddings/` | `<document_id>.embeddings.json`, model, dimension, and one record per chunk |
 
-Exit codes: `0` success, `1` some PDFs or chunks failed, `2` invalid options or settings.
+Exit codes: `0` success, `1` some PDFs or chunks failed, `2` invalid options, settings,
+or storage.
 
 Failures do not lose finished work. A failed batch is reported and the other batches are
 saved. Running the script again embeds only the chunks that are new, changed, or failed
@@ -210,10 +392,16 @@ they are skipped, and pytest shows the reason. The other tests run offline.
 - Retries after server errors (5xx) and rate limits (429) cannot be triggered on demand,
   so they are not covered by tests.
 
+The SeaweedFS tests in `tests/integration/test_seaweedfs.py` use the **real SeaweedFS
+container** with the storage settings in `rag/.env`. They create a separate
+`govai-knowledge-test` bucket and delete it afterwards, so the real bucket is never
+touched. Without the settings or a running container they are skipped.
+
 | What | Command |
 | --- | --- |
 | All tests | `pytest` |
 | Embedding unit tests | `pytest tests/unit -k embedding` |
+| SeaweedFS tests | `pytest tests/integration/test_seaweedfs.py tests/unit/test_object_storage.py tests/unit/test_storage_config.py` |
 | One file | `pytest tests/unit/test_embedding_service.py` |
 | Show skipped tests and why | `pytest -rs` |
 

@@ -1,16 +1,17 @@
-"""Extract, chunk, and embed every PDF in an input folder.
+"""Extract, chunk, and embed the PDFs stored in SeaweedFS for one department and service.
 
-Usage (from the rag folder):
+Upload the PDFs first with scripts/upload_documents.py. Then run (from the rag folder):
 
     python scripts/process_documents.py --department-id IRD --service-id TIN_REGISTRATION \
         --document-type service_guideline
 
-Exit codes: 0 everything succeeded, 1 some PDFs or chunks failed, 2 invalid input or settings.
+Exit codes: 0 everything succeeded, 1 some PDFs or chunks failed, 2 invalid input, settings, or storage.
 """
 
 import argparse
 import logging
 import sys
+import tempfile
 from pathlib import Path
 
 # Running "python scripts/process_documents.py" puts only scripts/ on the path, so add rag/
@@ -27,13 +28,16 @@ from app.embeddings.embedding_service import (
     load_settings,
 )
 from app.processing.pdf_extractor import DocumentSource, DocumentType
-from app.processing.pipeline import process_documents
+from app.processing.pipeline import FailedDocument, process_documents
+from app.storage.config import load_storage_settings
+from app.storage.exceptions import StorageError
+from app.storage.object_storage import create_document_store
 
 EXIT_OK = 0
 EXIT_FAILURES = 1
 EXIT_INVALID_INPUT = 2
 
-DEFAULT_INPUT_DIR = RAG_ROOT / "data" / "input"
+# Generated files stay local until the embeddings are stored in ChromaDB (GA-75)
 DEFAULT_OUTPUT_DIR = RAG_ROOT / "data" / "output"
 DEFAULT_ENV_FILE = RAG_ROOT / ".env"
 
@@ -58,33 +62,53 @@ def main(argv=None):
         print(f"Invalid document source: {format_validation_error(error)}", file=sys.stderr)
         return EXIT_INVALID_INPUT
 
-    # Find the PDFs to process
-    input_dir = Path(args.input_dir)
-    if not input_dir.is_dir():
-        print(f"Input folder not found: {input_dir}", file=sys.stderr)
+    try:
+        # Connect to SeaweedFS and check the bucket before any work
+        store = create_document_store(load_storage_settings(env_file=args.env_file))
+        store.check_bucket()
+
+        # Find the stored PDFs for this department and service
+        object_keys = store.list_documents(source)
+
+    except StorageError as error:
+        print(f"Object storage unavailable: {error}", file=sys.stderr)
         return EXIT_INVALID_INPUT
 
-    pdf_paths = find_pdfs(input_dir)
-    if not pdf_paths:
-        print(f"No PDF files found in {input_dir}")
+    if not object_keys:
+        print("No stored PDF files found for this department and service")
         return EXIT_OK
 
-    # Check the embedding settings before any work, so a missing key fails fast
-    embedder = None
-    if not args.skip_embeddings:
-        try:
-            embedder = create_embedder(load_settings(env_file=args.env_file))
-        except EmbeddingConfigError as error:
-            print(f"Invalid embedding settings: {error}", file=sys.stderr)
-            return EXIT_INVALID_INPUT
+    # Check the embedding settings before downloading, so a missing key fails fast
+    try:
+        embedder = load_embedder(args)
+    except EmbeddingConfigError as error:
+        print(f"Invalid embedding settings: {error}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
 
-    # Run extraction, chunking, and embedding
-    items = []
-    for pdf_path in pdf_paths:
-        items.append((pdf_path, source))
-    report = process_documents(items, args.output_dir, embedder=embedder)
+    # The temporary folder is deleted afterwards, so no government PDFs stay on disk
+    download_failures = []
+    with tempfile.TemporaryDirectory() as download_dir:
+        items = []
+        for object_key in object_keys:
 
-    # Print a summary and report failures through the exit code
+            # Download the PDF; one failed download should not stop the batch
+            try:
+                pdf_path = store.download_document(object_key, download_dir)
+            except StorageError as error:
+                download_failures.append(
+                    FailedDocument(source_file=object_key, error_type=type(error).__name__, message=str(error))
+                )
+                continue
+
+            # Record where the original is stored, so every chunk points back to it
+            document_source = source.model_copy(update={"object_key": object_key})
+            items.append((pdf_path, document_source))
+
+        # Run extraction, chunking, and embedding
+        report = process_documents(items, args.output_dir, embedder=embedder)
+
+    # Print a summary, then report failures through the exit code
+    report.failed.extend(download_failures)
     print_summary(report, embedder)
     if report.failed or report.failed_chunk_count:
         return EXIT_FAILURES
@@ -96,7 +120,7 @@ def main(argv=None):
 
 def parse_arguments(argv):
 
-    parser = argparse.ArgumentParser(description="Extract, chunk, and embed PDF documents.")
+    parser = argparse.ArgumentParser(description="Extract, chunk, and embed the PDFs stored in SeaweedFS.")
     parser.add_argument("--department-id", required=True, help="Department that owns the documents")
     parser.add_argument("--service-id", default=None, help="Service ID, required for service guidelines")
     parser.add_argument("--title", default=None, help="Document title, added to every chunk's embedding for context")
@@ -105,23 +129,23 @@ def parse_arguments(argv):
         required=True,
         choices=[document_type.value for document_type in DocumentType],
     )
-    parser.add_argument("--input-dir", default=DEFAULT_INPUT_DIR, help="Folder with the PDFs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Folder for generated files")
-    parser.add_argument("--env-file", default=DEFAULT_ENV_FILE, help="File with the embedding settings")
+    parser.add_argument("--env-file", default=DEFAULT_ENV_FILE, help="File with the embedding and storage settings")
     parser.add_argument("--skip-embeddings", action="store_true", help="Only extract and chunk")
 
     return parser.parse_args(argv)
 
 
-def find_pdfs(input_dir):
+def load_embedder(args):
+    """Create the NVIDIA embedder, or return None when embeddings are skipped."""
 
-    # Match the extension case-insensitively, e.g. guide.PDF
-    pdf_paths = []
-    for path in sorted(input_dir.iterdir()):
-        if path.is_file() and path.suffix.lower() == ".pdf":
-            pdf_paths.append(path)
+    if args.skip_embeddings:
+        return None
 
-    return pdf_paths
+    # Raises EmbeddingConfigError when the settings are missing or invalid
+    embedder = create_embedder(load_settings(env_file=args.env_file))
+
+    return embedder
 
 
 def print_summary(report, embedder):

@@ -59,6 +59,26 @@ services:
     networks:
       - govai-network
 
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs:latest
+    container_name: govai-seaweedfs-admin
+    restart: unless-stopped
+    environment:
+      SEAWEEDFS_ADMIN_PASSWORD: ${SEAWEEDFS_ADMIN_PASSWORD:?Set SEAWEEDFS_ADMIN_PASSWORD in .env}
+    # Web admin UI (23646): cluster overview, buckets, file browser, volumes, maintenance.
+    # Login is "admin" with the password from .env; it finds the filer through the master.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - exec weed admin -port=23646 -port.legacy=0 -master=seaweedfs:9333 -dataDir=/data -adminPassword="$$SEAWEEDFS_ADMIN_PASSWORD"
+    ports:
+      - "127.0.0.1:23646:23646" # Admin UI
+    volumes:
+      - seaweedfs_admin_data:/data
+    depends_on:
+      - seaweedfs
+    networks:
+      - govai-network
+
   chromadb:
     image: chromadb/chroma:latest
     container_name: govai-chromadb
@@ -124,6 +144,7 @@ volumes:
   postgres_data:
   redis_data:
   seaweedfs_data:
+  seaweedfs_admin_data:
   chroma_data:
   pgadmin_data:
   redisinsight_data:

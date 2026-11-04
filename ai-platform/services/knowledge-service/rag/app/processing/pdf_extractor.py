@@ -57,12 +57,14 @@ class DocumentType(str, Enum):
 
 
 class DocumentSource(BaseModel):
-    """Who owns the document. Supplied by the caller, never read from the PDF."""
+    """Who owns the document, and where its original is stored. Supplied by the caller, never read from the PDF."""
 
     department_id: str = Field(min_length=1)
     service_id: str | None = Field(default=None, min_length=1)
     document_type: DocumentType
     title: str | None = Field(default=None, min_length=1)
+    # SeaweedFS key of the original PDF; set when the PDF was read from object storage
+    object_key: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def check_service_matches_type(self):
@@ -166,6 +168,8 @@ def to_langchain_documents(document):
         metadata["service_id"] = document.source.service_id
     if document.source.title is not None:
         metadata["document_title"] = document.source.title
+    if document.source.object_key is not None:
+        metadata["object_key"] = document.source.object_key
 
     # Create one LangChain Document per page that has text
     langchain_documents = []

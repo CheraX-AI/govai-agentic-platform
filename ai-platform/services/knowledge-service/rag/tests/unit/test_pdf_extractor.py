@@ -101,3 +101,43 @@ def test_no_title_means_no_title_metadata():
     pages = to_langchain_documents(document)
 
     assert "document_title" not in pages[0].metadata
+
+
+def test_object_key_is_added_to_page_metadata():
+
+    # A PDF read from SeaweedFS keeps a reference to its stored original
+    object_key = "documents/IRD/TIN_REGISTRATION/doc001.pdf"
+    source = DocumentSource(
+        department_id="IRD",
+        service_id="TIN_REGISTRATION",
+        document_type=DocumentType.SERVICE_GUIDELINE,
+        object_key=object_key,
+    )
+    document = ExtractedDocument(
+        document_id="doc001",
+        source_file="tin_guide.pdf",
+        source=source,
+        total_pages=1,
+        pages=[ExtractedPage(page_number=1, text="TIN steps.", char_count=10, has_text=True)],
+    )
+
+    pages = to_langchain_documents(document)
+
+    assert pages[0].metadata["object_key"] == object_key
+
+
+def test_local_pdf_has_no_object_key_metadata():
+
+    # ChromaDB cannot store None, so a PDF read from a folder has no object_key
+    source = DocumentSource(department_id="IRD", document_type=DocumentType.DEPARTMENT_GUIDELINE)
+    document = ExtractedDocument(
+        document_id="doc001",
+        source_file="guide.pdf",
+        source=source,
+        total_pages=1,
+        pages=[ExtractedPage(page_number=1, text="IRD guide.", char_count=10, has_text=True)],
+    )
+
+    pages = to_langchain_documents(document)
+
+    assert "object_key" not in pages[0].metadata

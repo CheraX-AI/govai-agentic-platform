@@ -126,6 +126,21 @@ def make_env(**overrides):
     return values
 
 
+def storage_env_values(settings, **overrides):
+    """The storage settings in .env format, with some values replaced by overrides."""
+
+    values = {
+        "OBJECT_STORAGE_ENDPOINT": settings.endpoint,
+        "OBJECT_STORAGE_BUCKET": settings.bucket,
+        "OBJECT_STORAGE_REGION": settings.region,
+        "OBJECT_STORAGE_ACCESS_KEY": settings.access_key.get_secret_value(),
+        "OBJECT_STORAGE_SECRET_KEY": settings.secret_key.get_secret_value(),
+    }
+    values.update(overrides)
+
+    return values
+
+
 def write_env_file(path, values):
 
     # Write the values in .env format
