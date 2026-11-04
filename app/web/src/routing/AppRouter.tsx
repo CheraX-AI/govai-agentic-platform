@@ -1,3 +1,5 @@
+import ApplicationRoutes from './ApplicationRoutes'
+import '../styles/chat.css'
 import LoginPage from '../pages/LoginPage'
 import { useEffect, useState } from 'react'
 import HomePage from '../pages/HomePage'
@@ -45,7 +47,7 @@ export default function AppRouter() {
   if (route.path === '#/register') return <RegistrationPage />
   if (route.path === '#/forgot-password') return <ForgotPasswordPage onPhoneRecovery={() => { setRecovery('phone'); location.hash = '#/verify-code'; setHash('#/verify-code') }} />
   if (route.path === '#/check-email') return <ResetEmailConfirmationPage />
-  if (route.path === '#/app/home' || route.path === '#/app/recent') return <ProtectedRoute destination={route.path}><ApplicationPageLayout page={route.path === '#/app/recent' ? 'recent' : 'home'} protectedDemo onDemoLogout={() => void logout()}>{route.path === '#/app/recent' ? <RecentPage protectedDemo /> : <HomePage />}</ApplicationPageLayout></ProtectedRoute>
+  if (route.path === '#/app/home' || route.path === '#/app/recent' || route.path === '#/app/chat') return <ProtectedRoute destination={route.path}><ApplicationRoutes key={auth.state.status === 'authenticated' ? auth.state.session.createdAt : 'checking'} path={route.path} onLogout={() => void logout()} /></ProtectedRoute>
   if (['#/preview/home', '#/preview/recent', '#/home', '#/recent'].includes(route.path)) {
     if (!import.meta.env.DEV) return <UnavailablePage developmentOnly />
     return <ApplicationPageLayout page={route.path.endsWith('/recent') ? 'recent' : 'home'}>{route.path.endsWith('/recent') ? <RecentPage /> : <HomePage />}</ApplicationPageLayout>

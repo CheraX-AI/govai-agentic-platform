@@ -218,6 +218,8 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
     await send('Page.reload')
     await delay(400)
+    for(let attempt=0;attempt<50&& !await evaluate('!!document.querySelector("button[type=submit]") && !document.querySelector("button[type=submit]").disabled');attempt++)await delay(100)
+    assert.ok(await evaluate('!!document.querySelector("button[type=submit]") && !document.querySelector("button[type=submit]").disabled'),'login ready after refresh')
     for (const state of ['initial', 'expanded', 'errors', 'errors+expanded']) {
       if (state === 'expanded') {
         await evaluate('document.querySelector("details summary").click()')

@@ -59,7 +59,7 @@ try {
 
 
   const production=process.argv[2]==='production',origin=production?'http://127.0.0.1:4173':'http://127.0.0.1:5173',storageKey='govai.dev.mock-session.v1'
-  const go=async(hash)=>{await send('Page.navigate',{url:'about:blank'});await delay(100);await send('Page.navigate',{url:origin+'/'+hash});await delay(500)}
+  const go=async(hash)=>{await send('Page.navigate',{url:'about:blank'});await delay(100);await send('Page.navigate',{url:origin+'/'+hash});await delay(500);const ready='!!document.querySelector("h1") && !document.querySelector("vite-error-overlay") && (document.querySelector("h1").textContent!=="Checking session..." || !!window.restoreCallbacks?.length) && (!document.querySelector("#phone") || !document.querySelector("button[type=submit]").disabled)';for(let i=0;i<50&&!await evaluate(ready);i++)await delay(100);assert.ok(await evaluate(ready),'route ready '+hash)}
   const fill=async(id,value)=>evaluate('(()=>{const i=document.getElementById('+JSON.stringify(id)+');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(i,'+JSON.stringify(value)+');i.dispatchEvent(new Event("input",{bubbles:true}))})()')
   const key=async(key,code)=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key,code:key,windowsVirtualKeyCode:code,...(key==='Enter'?{text:'\r'}:{})});await send('Input.dispatchKeyEvent',{type:'keyUp',key,code:key,windowsVirtualKeyCode:code})}
   const seed=async()=>evaluate('(()=>{const now=new Date().getTime();sessionStorage.setItem('+JSON.stringify(storageKey)+',JSON.stringify({version:1,kind:"demo",userId:"synthetic-harshan",createdAt:now,expiresAt:now+900000}))})()')

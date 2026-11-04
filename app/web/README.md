@@ -1,5 +1,25 @@
 # GovAI website authentication previews
 
+## GA-21 frontend conversation (mock service)
+
+Work is on GA-21-web-ai-chat-interface, based on GA-19 commit 90ccd7b. GA-19 remains an unmerged dependency: an eventual GA-21 PR should initially compare against GA-19. No backend/AI integration is claimed.
+
+Open http://127.0.0.1:5173/#/app/chat. Anonymous access redirects to Login with an allowlisted return destination; successful development-only mock login returns to Chat. Production cannot create/restore mock authentication. Home's composer and optional suggestions feed the same conversation as Chat; questions and follow-ups are unrestricted free text, not a menu-driven flow.
+
+The attached desktop conversation image is the approved reference for message/composer/source presentation. Existing logo, fonts, header/sidebar/account shell are retained. Replies and example.com source references are labelled synthetic fixtures, never government advice or evidence. Narrow website layouts are proposed adaptations; the separate mobile application is untouched.
+
+- ChatPage.tsx owns page composition; components/chat owns ChatMessage, SourceReferences, ConversationView and ChatComposer. Change chat presentation in styles/chat.css; global fonts and shared shell remain in existing files.
+- routing/ApplicationRoutes.tsx owns the stable protected application family and its conversation hook, keyed to the mock session. Home/Recent/Chat navigation preserves messages; logout, expiry, public-route departure, reload or New chat clears them and cancels pending work. No transcript persistence/history is implemented.
+- chat/useConversation.ts owns draft/messages/pending/error/retry state and synchronous duplicate prevention. Retry reuses the failed citizen turn without appending it again. Late/aborted results cannot update the current conversation.
+- chat/types.ts defines the replaceable service contract: the full ordered user/assistant context is supplied for every request and retry. services/mockChatService.ts currently returns delayed fixtures with controllable success/error. GA-61 replaces this service with the agreed context-aware API, transport and real error handling; GA-54 owns real authentication.
+- Composer: Send/Enter, Shift+Enter newline, IME composition safe, blank rejection. One line is 62px outside, buttons 44px or larger; textarea grows automatically to 160px then scrolls internally, with no manual resize handle. Drafts remain editable while waiting; Send is disabled.
+- Conversation header expands to show assistant/demo details or collapses to only top-right New chat/expand-icon controls. Title/status/description/divider are hidden; the labelled disclosure preserves keyboard focus, the visible-message reading anchor and draft. Simulated replies stays visible beside the composer. Chat logout is available in the existing account menu, without a duplicate page control.
+- Scroll follows near the bottom(within 80px) or an explicit own submission. Otherwise older-message reading position remains and a keyboard-accessible Latest message action is shown. Scrolling is immediate and does not require motion animation.
+- Text renders as React text with preserved paragraph breaks; no raw HTML/Markdown injection. Source URL validation allows HTTP/HTTPS only and rejects credentials/unsafe schemes; new-tab links use noopener noreferrer.
+
+Checks: npm.cmd run build; npm.cmd run lint; node scripts/check-chat.mjs; node scripts/check-chat-browser.mjs (development server 5173); add production for built preview 4173. Tests/evidence use existing isolated Edge/CDP tooling; generated screenshots and profiles remain ignored in node_modules/.tmp. Real AI understanding, official guidance, real sessions, broader engines/devices and screen-reader output remain unverified.
+
+
 ## GA-53 shared authentication and routing - 1 November 2026
 
 Current routing/session behaviour below supersedes earlier GA-52 checkpoint descriptions of the single demo boolean. All authentication is still explicitly simulated; no backend/Keycloak connection or real authorization exists.
