@@ -2,7 +2,7 @@
 
 Express has been retired. The Go/Gin foundation lives in services/auth-service.
 See [the service guide](services/auth-service/README.md) for setup and tests.
-Other service directories remain placeholders.
+The [core service](services/core-service/README.md) now provides the GA-65 HTTPS bearer-protected chat API foundation on local port 5002; real Knowledge Agent integration is pending. Other service directories remain placeholders.
 
 Reusable JWT/Gin authorization is in [pkg/authn](pkg/authn/README.md). Run its tests
 separately from the auth-service module; the service uses a local module replace.
