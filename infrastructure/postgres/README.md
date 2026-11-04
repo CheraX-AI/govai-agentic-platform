@@ -15,8 +15,5 @@ not move or merge database contents, change ports, or rename Docker projects,
 networks or volumes. Private environment files, TLS material and local backups
 moved with their setups and remain ignored. Never regenerate existing credentials.
 
-Existing containers retain old bind-mount source paths until explicitly recreated
-with the relocated Compose files and original project names. Use a controlled
-restart/recreation before relying on the new mounts; do not use `down -v` or delete
-volumes. No container restart or live data migration was performed for this move.
+Local containers were recreated from the relocated paths on 2026-11-04 with the original project/volume names. Mount paths and health checks were verified. Other developers must use their own reviewed local startup; do not use `down -v` or delete volumes. No database-content migration was performed during the folder move.
 Historical files inside ignored `.local/` backups intentionally retain old paths.

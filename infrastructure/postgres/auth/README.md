@@ -3,7 +3,7 @@
 This setup belongs only to the Go authentication service. It creates a new
 `govai_auth` database in an isolated Docker Compose project, with a named volume
 and loopback port **55432**. It does not connect to, migrate or replace the root
-Compose PostgreSQL or Keycloak's current dev-file database.
+Compose PostgreSQL or Keycloak's separate PostgreSQL database.
 
 Run these commands in **PowerShell**, with Docker Desktop running.
 
