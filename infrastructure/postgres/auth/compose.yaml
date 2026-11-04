@@ -1,0 +1,22 @@
+name: govai-auth-db
+services:
+  postgres:
+    image: postgres:16.14
+    environment:
+      POSTGRES_USER: govai_auth_owner
+      POSTGRES_DB: govai_auth
+      POSTGRES_PASSWORD: ${AUTH_DB_OWNER_PASSWORD:?Run setup.ps1 first}
+      AUTH_DB_APP_PASSWORD: ${AUTH_DB_APP_PASSWORD:?Run setup.ps1 first}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+      - ./init-app.sh:/docker-entrypoint-initdb.d/010-app.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U govai_auth_owner -d govai_auth"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+volumes:
+  auth_postgres_data:

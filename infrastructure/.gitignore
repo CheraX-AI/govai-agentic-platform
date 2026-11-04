@@ -1,0 +1,14 @@
+# Private local infrastructure state; examples remain shareable.
+.env
+.env.*
+!.env.example
+.local/
+.cache/
+tls/
+certs/
+*.key
+*.p12
+*.pfx
+*.backup
+*.dump
+*.log

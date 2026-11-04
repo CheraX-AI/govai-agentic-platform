@@ -69,3 +69,32 @@ func TestCORSConfig(t *testing.T) {
 		t.Fatalf("config = %+v, %v", cfg, err)
 	}
 }
+
+func TestOIDCConfiguration(t *testing.T) {
+	t.Setenv("OIDC_ISSUER_URL", "")
+	t.Setenv("OIDC_CHECK_TIMEOUT", "5s")
+	cfg, err := Load()
+	if err != nil || cfg.OIDCIssuerURL != "" || cfg.OIDCCheckTimeout.String() != "5s" {
+		t.Fatalf("optional config: %v", err)
+	}
+	for _, issuer := range []string{"http://localhost:8180/realms/GovAI", "https://id.example.test/realms/GovAI", "http://127.0.0.1:8180/realms/GovAI"} {
+		t.Setenv("OIDC_ISSUER_URL", issuer)
+		cfg, err := Load()
+		if err != nil || cfg.OIDCIssuerURL != issuer {
+			t.Fatalf("issuer config: %v", err)
+		}
+	}
+	for _, issuer := range []string{"http://id.example.test", "https://user:secret@example.test", "https://example.test?secret=1", "relative"} {
+		t.Setenv("OIDC_ISSUER_URL", issuer)
+		if _, err := Load(); err == nil {
+			t.Fatal("invalid issuer accepted")
+		}
+	}
+	t.Setenv("OIDC_ISSUER_URL", "")
+	for _, timeout := range []string{"", "oops", "0s", "-1s", "31s"} {
+		t.Setenv("OIDC_CHECK_TIMEOUT", timeout)
+		if _, err := Load(); err == nil {
+			t.Fatal("invalid timeout accepted")
+		}
+	}
+}
