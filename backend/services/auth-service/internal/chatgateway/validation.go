@@ -95,14 +95,26 @@ func validSurrogates(body []byte) bool {
 // Encode preserves agent-provided answers/citations, while bounding the public
 // shape. It does not establish citation truth, source authority or RAG quality.
 func Encode(reply Reply) ([]byte, error) {
-	if !utf8.ValidString(reply.Answer) || strings.TrimSpace(reply.Answer) == "" || len(reply.Answer) > 32<<10 || len(reply.Sources) > 20 {
+	if !utf8.ValidString(reply.Answer) || strings.TrimSpace(reply.Answer) == "" || len(reply.Answer) > 32<<10 || len(reply.Sources) > MaxSources {
 		return nil, ErrResponse
 	}
 	if reply.Sources == nil {
 		reply.Sources = []Source{}
 	}
+	numbers := map[int]bool{}
 	for _, source := range reply.Sources {
-		if !utf8.ValidString(source.Title) || !utf8.ValidString(source.URL) || strings.TrimSpace(source.Title) == "" || len(source.Title) > 512 || len(source.URL) > 2048 || strings.ContainsAny(source.URL, "\r\n\t ") {
+		if source.Number < 1 || source.Number > MaxSourceNumber || numbers[source.Number] || source.Page < 0 || source.Page > MaxSourcePage {
+			return nil, ErrResponse
+		}
+		numbers[source.Number] = true
+		if !utf8.ValidString(source.Title) || strings.TrimSpace(source.Title) == "" || len(source.Title) > 512 {
+			return nil, ErrResponse
+		}
+		// URL is optional; when present it must be a plain HTTPS link.
+		if source.URL == "" {
+			continue
+		}
+		if !utf8.ValidString(source.URL) || len(source.URL) > 2048 || strings.ContainsAny(source.URL, "\r\n\t ") {
 			return nil, ErrResponse
 		}
 		u, err := url.Parse(source.URL)

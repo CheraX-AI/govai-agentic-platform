@@ -50,10 +50,10 @@ func TestWebChatEndpoint(t *testing.T) {
 					io.WriteString(w, `{"answer":"x","answer":"y"}`)
 					return
 				case "unsafe source":
-					io.WriteString(w, `{"answer":"x","sources":[{"title":"x","url":"javascript:bad"}]}`)
+					io.WriteString(w, `{"answer":"x","sources":[{"number":1,"title":"x","url":"javascript:bad"}]}`)
 					return
 				}
-				io.WriteString(w, `{"answer":"Synthetic answer","sources":[{"title":"Reference","url":"https://example.test/guide"}]}`)
+				io.WriteString(w, `{"answer":"Synthetic answer [1]","sources":[{"number":1,"title":"Reference","page":3},{"number":2,"title":"Guide","url":"https://example.test/guide"}]}`)
 			}))
 			defer upstream.Close()
 			roots := x509.NewCertPool()
@@ -158,7 +158,7 @@ func TestWebChatEndpoint(t *testing.T) {
 			if strings.Contains(w.Body.String(), "synthetic-access") {
 				t.Fatal("token exposed")
 			}
-			if mode == "success" && !strings.Contains(w.Body.String(), "https://example.test/guide") {
+			if mode == "success" && (!strings.Contains(w.Body.String(), `{"number":1,"title":"Reference","page":3}`) || !strings.Contains(w.Body.String(), `{"number":2,"title":"Guide","url":"https://example.test/guide"}`)) {
 				t.Fatal("source lost")
 			}
 			if mode != "disabled" && w.Header().Get("Cache-Control") != "no-store" {

@@ -59,6 +59,26 @@ func strictString(raw json.RawMessage) (string, error) {
 	}
 	return value, nil
 }
+// strictPositiveInt accepts a plain JSON integer 1..max: no sign, fraction,
+// exponent or leading zero, so the upstream cannot smuggle odd number forms.
+func strictPositiveInt(raw json.RawMessage, max int) (int, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || len(raw) > 6 || raw[0] == '0' {
+		return 0, ErrResponse
+	}
+	value := 0
+	for _, b := range raw {
+		if b < '0' || b > '9' {
+			return 0, ErrResponse
+		}
+		value = value*10 + int(b-'0')
+	}
+	if value > max {
+		return 0, ErrResponse
+	}
+	return value, nil
+}
+func isNull(raw json.RawMessage) bool { return bytes.Equal(bytes.TrimSpace(raw), []byte("null")) }
 func DecodeReply(body []byte) (Reply, error) {
 	if len(body) > MaxResponseBytes || !utf8.Valid(body) || !json.Valid(body) || !validSurrogates(body) {
 		return Reply{}, ErrResponse
@@ -78,23 +98,38 @@ func DecodeReply(body []byte) (Reply, error) {
 			return Reply{}, ErrResponse
 		}
 		var sources []json.RawMessage
-		if json.Unmarshal(raw, &sources) != nil || len(sources) > 20 {
+		if json.Unmarshal(raw, &sources) != nil || len(sources) > MaxSources {
 			return Reply{}, ErrResponse
 		}
 		for _, rawSource := range sources {
-			values, err := fields(rawSource, "title", "url")
-			if err != nil || len(values) != 2 {
+			// number and title are required; page and url are optional
+			values, err := fields(rawSource, "number", "title", "page", "url")
+			if err != nil {
 				return Reply{}, ErrResponse
 			}
-			title, err := strictString(values["title"])
-			if err != nil {
+			rawNumber, hasNumber := values["number"]
+			rawTitle, hasTitle := values["title"]
+			if !hasNumber || !hasTitle {
+				return Reply{}, ErrResponse
+			}
+			var source Source
+			if source.Number, err = strictPositiveInt(rawNumber, MaxSourceNumber); err != nil {
 				return Reply{}, err
 			}
-			location, err := strictString(values["url"])
-			if err != nil {
+			if source.Title, err = strictString(rawTitle); err != nil {
 				return Reply{}, err
 			}
-			reply.Sources = append(reply.Sources, Source{Title: title, URL: location})
+			if rawPage, ok := values["page"]; ok && !isNull(rawPage) {
+				if source.Page, err = strictPositiveInt(rawPage, MaxSourcePage); err != nil {
+					return Reply{}, err
+				}
+			}
+			if rawURL, ok := values["url"]; ok && !isNull(rawURL) {
+				if source.URL, err = strictString(rawURL); err != nil || source.URL == "" {
+					return Reply{}, ErrResponse
+				}
+			}
+			reply.Sources = append(reply.Sources, source)
 		}
 	}
 	if _, err := Encode(reply); err != nil {
