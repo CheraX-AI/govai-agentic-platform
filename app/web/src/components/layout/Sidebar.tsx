@@ -1,13 +1,14 @@
 import { Icon } from '../Icon'
 import { NavigationItem } from './NavigationItem'
 
-export type LayoutPreview = 'home' | 'recent'
+export type LayoutPreview = 'home' | 'recent' | 'chat'
 
-export function Sidebar({ page, protectedDemo = false }: { page: LayoutPreview; protectedDemo?: boolean }) {
+export function Sidebar({ page, protectedDemo = false, onNewChat }: { page: LayoutPreview; protectedDemo?: boolean; onNewChat?: () => void }) {
   const prefix = protectedDemo ? '#/app' : '#/preview'
   return <nav className="application-sidebar" aria-label="Application preview">
-    <NavigationItem label="New chat" icon="new-chat" href={`${prefix}/home`} newChat active={page === 'home'} />
+    <NavigationItem label="New chat" icon="new-chat" href={protectedDemo ? '#/app/chat' : `${prefix}/home`} onActivate={onNewChat} newChat active={page === 'home'} />
     <div className="primary-navigation">
+      {protectedDemo && <NavigationItem label="Current conversation" icon="message" href="#/app/chat" active={page === 'chat'} />}
       <NavigationItem label="Recent chats" icon={page === 'recent' ? 'recent-active' : 'recent'} href={`${prefix}/recent`} active={page === 'recent'} />
       <NavigationItem label="My requests" icon="requests" />
       <NavigationItem label="Services" icon="services" />
