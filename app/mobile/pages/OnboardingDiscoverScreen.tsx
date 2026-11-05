@@ -1,18 +1,18 @@
 import { StatusBar } from 'expo-status-bar';
-import { OnboardingProgress } from './components/OnboardingProgress';
+import { OnboardingProgress } from '../components/OnboardingProgress';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { layout, typography } from './layout';
+import { layout, typography } from '../layout';
 
 export const discoverAssets = {
-  identity: require('./assets/figma/onboarding-discover/identity.png'),
-  vehicles: require('./assets/figma/onboarding-discover/vehicles.png'),
-  certificates: require('./assets/figma/onboarding-discover/certificates.png'),
-  passports: require('./assets/figma/onboarding-discover/passports.png'),
-  hero: require('./assets/figma/onboarding-discover/hero.jpg'),
-  back: require('./assets/figma/onboarding-meet/back.png'),
-  next: require('./assets/figma/onboarding-meet/next.png'),
+  identity: require('../assets/figma/onboarding-discover/identity.png'),
+  vehicles: require('../assets/figma/onboarding-discover/vehicles.png'),
+  certificates: require('../assets/figma/onboarding-discover/certificates.png'),
+  passports: require('../assets/figma/onboarding-discover/passports.png'),
+  hero: require('../assets/figma/onboarding-discover/hero.jpg'),
+  back: require('../assets/figma/onboarding-meet/back.png'),
+  next: require('../assets/figma/onboarding-meet/next.png'),
 };
 
 export function OnboardingDiscoverScreen({ onBack, onNext, onLogin }: { onBack: () => void; onNext: () => void; onLogin: () => void }) {

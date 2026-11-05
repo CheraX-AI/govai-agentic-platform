@@ -1,13 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
-import { OnboardingProgress } from './components/OnboardingProgress';
+import { OnboardingProgress } from '../components/OnboardingProgress';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Screen } from './components/Screen';
-import { layout, typography } from './layout';
+import { Screen } from '../components/Screen';
+import { layout, typography } from '../layout';
 
 export const onboardingAssets = {
-  hero: require('./assets/figma/onboarding-meet/hero.png'),
-  back: require('./assets/figma/onboarding-meet/back.png'),
-  next: require('./assets/figma/onboarding-meet/next.png'),
+  hero: require('../assets/figma/onboarding-meet/hero.png'),
+  back: require('../assets/figma/onboarding-meet/back.png'),
+  next: require('../assets/figma/onboarding-meet/next.png'),
 };
 
 export function OnboardingMeetScreen({ onBack, onNext, onLogin }: { onBack: () => void; onNext: () => void; onLogin: () => void }) {

@@ -1,13 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Screen } from './components/Screen';
-import { layout, typography } from './layout';
+import { Screen } from '../components/Screen';
+import { layout, typography } from '../layout';
 
 export const welcomeAssets = {
-  hero: require('./assets/figma/welcome/hero.jpg'),
-  next: require('./assets/figma/welcome/next.png'),
-  globe: require('./assets/figma/welcome/globe.png'),
-  chevron: require('./assets/figma/welcome/chevron.png'),
+  hero: require('../assets/figma/welcome/hero.jpg'),
+  next: require('../assets/figma/welcome/next.png'),
+  globe: require('../assets/figma/welcome/globe.png'),
+  chevron: require('../assets/figma/welcome/chevron.png'),
 };
 
 export function WelcomeScreen({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: () => void }) {

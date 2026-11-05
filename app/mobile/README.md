@@ -1,5 +1,253 @@
 # GovAI mobile
 
+## Repository availability
+
+The frontend screens, navigation, original Figma assets and guarded development
+launchers are included in the repository. Authentication, account recovery and
+chat still contain explicitly labelled development-only simulations; they do not
+authenticate users, send recovery messages or contact an AI service. Real
+backend/API integration, verified identity data, secure sessions and production
+chat behavior are still required.
+
+Optional mock regression and served-bundle diagnostic scripts are kept only in
+the development maintainer's local checkout and are excluded from Git. A GitHub
+clone therefore should use the shared `npm.cmd run typecheck`,
+`npm.cmd run check:expo`, preview launchers and Android export commands documented
+below; it should not expect the historical local checker commands to exist.
+
+## Recovery demo launcher and live-bundle verification — November 4, 2026
+
+Use `npm.cmd run demo:connected-ui -- --port 8081` for the connected recovery
+demo. Reopen that server in Expo Go after changing launch modes; do not continue
+using an older loaded session. Plain `npm.cmd start` intentionally keeps recovery
+disconnected unless its environment is explicitly changed. The connected launcher
+sets EXPO_PUBLIC_CONNECTED_UI_DEMO=1, now clears Metro's cache on startup, and
+prints the selected mode. This does not enable recovery in normal or production
+mode and does not change any screen, validation rule, callback or route guard.
+
+The reported Phone-unavailable notice was reproduced from an actual normal-mode
+Android bundle (flag 0). An actual connected-launcher bundle (flag 1) passed Phone
+and Email submission-to-route tests: empty NIC and unchecked simulation remain
+on the form; valid Phone opens CheckPhoneDemoScreen; valid Email opens Check Email;
+Verify code remains disconnected; all return controls and keyboard-first Back
+preserve fresh forms and Login origin. There was no local Metro listener before
+inspection, so the exact bundle previously loaded on the phone could not be
+identified; wrong-mode or stale client state remains the likely explanation.
+
+A local-only served-bundle diagnostic previously verified the actual Expo
+environment injection and executed App and recovery-form factories with mocked
+React hooks/native controls. That optional diagnostic and its bundle captures
+are excluded from Git; its result did not establish physical-device rendering or
+an Expo Go device connection.
+
+## Check Phone connected demo — November 4, 2026
+
+Phone now opens the single new pages/CheckPhoneDemoScreen.tsx only after Continue
+passes the existing nonblank-NIC and simulated-checkbox checks, with both __DEV__
+and EXPO_PUBLIC_CONNECTED_UI_DEMO exactly enabled. Only the selected method is
+passed to navigation; the NIC is cleared and never used for a destination lookup.
+Typing does not navigate. Email retains Check Email. Normal disconnected Email
+and Phone submission notices are unchanged. This supersedes older statements
+that Phone is always unavailable.
+
+The screen uses original GovAI artwork and a composed, green-tinted Register
+phone / Chat Home message badge. No image bytes, dependencies, system bars or
+status-bar settings were changed. It displays “Demo preview — no SMS was sent”
+and the fixed masked sample +94 7••• ••12. The six visual slots represent one
+accessible native numeric field, not six separate screen-reader controls.
+They share a full-width target of at least 48dp height and hide their duplicate
+visual text from accessibility. Digits and other text retain system scaling.
+
+Manual numeric typing, native deletion/selection and pasted digits are supported.
+Spaces/hyphens in a paste are removed. Letters or more than six digits are
+rejected without truncating or replacing the prior value. An incomplete field
+shows a local error. Verify code has exactly that visible label; every complete
+six-digit sample produces “Verification is not connected. No code was verified.”
+There is no successful code, authentication result or onward navigation. Six
+digits are a proposed UI-only format; backend length, expiry and attempt rules
+remain unconfirmed. No OTP/resend timer, SMS read/send, token, storage or automatic
+clipboard access is added. Existing keyboard-settling timeouts only manage layout.
+Resend code is visibly/accessibly disabled and has no handler.
+
+Header Back and Use a different NIC clear the code and return to a fresh Forgot
+Password form. Android Back first dismisses an open keyboard and retains the
+draft, then returns to cleared Forgot Password; unmount clears the native field.
+Back to log in clears the code and opens fresh Login without changing loginOrigin.
+The standalone previews and their precedence remain unchanged. The Phone module,
+demo copy and exclusive message image are excluded from production exports;
+the shared Register phone image may legitimately remain in production.
+
+Validation: TypeScript, Expo compatibility and all eleven regression scripts
+passed. Phone checks execute local input/rejection, no-authentication, repeated
+exit cleanup, guard combinations and 18 mocked layout/keyboard cases; connected
+tests cover actual Phone controls, keyboard-first Back, both recovery methods
+and all six Login origins. The corrected browser harness covers six sizes with
+text scales 1/2/3 plus error, filled, notice and short-window cases (25 total).
+It measures a 497px card at 400 × 772 and 513px at 360 × 800, fitting normal
+state in their simulated safe-area viewports. Normal state at 320 × 568 has
+159px overflow and at 360 × 640 has 127px; scrolling remains available. Enlarged
+text/errors also scroll, with every control reachable and no horizontal overflow.
+Screenshots of empty/filled reference and narrow/enlarged cases were inspected.
+These are HTML and mocked-native measurements, not Android-device evidence.
+Physical Android fit, IME resize/overlay, native paste/selection/Back behavior,
+system font scaling and TalkBack acceptance remain pending.
+
+## Check Email reference update — November 4, 2026
+
+The existing Check Email screen now follows the supplied reference with the
+original GovAI logo/crop, ribbons, skyline, Back arrow, mail/check icon, info
+icon and white action arrow. The original blue mail PNG is tinted green through
+React Native styling; image files are unchanged. The width-safe logo slot is
+150 × 151.531dp at 400dp width. The centered white card has intrinsic height,
+16dp padding, a 64dp green-tinted badge, readable/scalable text, a blue help
+panel and a burgundy Back to log in button. Resend link is visibly unavailable,
+accessibly disabled and has no handler. The notice says “Demo preview — no email
+was sent.” The address remains the static sample@example.test, not an account
+lookup. No request, mailbox launch, timer or real recovery has been added.
+
+Email + nonblank NIC + the simulated checkbox + Continue opens this screen only
+in the existing guarded connected-development mode. Typing, invalid submissions,
+Phone and normal disconnected mode do not navigate to it. Back to log in opens
+a fresh Login without changing loginOrigin. Header Back, Use a different NIC
+and Android Back return to a fresh Forgot Password form. Both the standalone
+and connected wrappers retain their independent development flags and production
+exclusions. No duplicate screen, simulated phone chrome or home-indicator
+decoration was added; native system bars, safe areas and status-bar handling
+remain unchanged. The original logo's opaque white background is retained.
+
+TypeScript, Expo compatibility and all ten regression suites passed, including
+the actual login-button callback through the wrapper/presentation and all six
+Login return origins. Corrected constrained-browser simulations cover both modes
+at six sizes with text scales 1/2/3, plus two short-window cases (38 cases).
+With simulated 24dp top/bottom safe insets, the normal card measures 435px and
+fits at 400 × 772, 360 × 800 and 412 × 915. At 320 × 568 there is 97px of
+overflow; at 360 × 640 there is 65px. Scrolling remains available and every
+control is reachable with targets of at least 48dp. The normal reference and
+narrow/enlarged screenshots were visually inspected. These are HTML simulations,
+not native Android or TalkBack tests. Physical-device fit, keyboard/system-font
+behavior and screen-reader acceptance remain pending. This section supersedes
+older Check Email layout and disabled-mailbox-button notes below.
+
+## Recovery form spacing refinement — November 4, 2026
+
+The existing screen uses explicit spacing instead of one card-wide 6dp gap:
+badge to title group 8dp; heading to description 4dp; description to recovery
+group 10dp; radio group to NIC group 10dp; input to checkbox group 8dp; checkbox
+to simulation caption 4dp; caption to Continue 8dp; Continue to login target 6dp.
+Label/control gaps remain 4dp. Card padding remains 16dp horizontally and 12dp
+vertically, with no fixed height. Logo/header separation remains 8–12dp.
+
+The corrected, constrained browser simulation measures a 492px card at
+400 × 772 and 360 × 800, and 474px at 412 × 915. These normal-text cases fit
+without scrolling using the simulated 24dp top/bottom safe-area insets and
+existing Screen padding. At 320 × 568, normal content is 640px in a 488px
+viewport (152px overflow); at 360 × 640 it is 662px in 560px (102px overflow).
+Scrolling remains available. At 400 × 772, empty-submit errors require 35px
+of scrolling and the Phone notice requires 33px. No text or content was clipped
+or compressed. All 23 browser cases passed; these are HTML measurements, not
+native-device fit. Android fit, IME behavior, system font scaling and TalkBack
+remain pending device testing.
+
+The larger logo/crop, source image's opaque white background, wording, font
+sizes, 48dp targets, application logic and status-bar behavior are unchanged.
+This section supersedes the earlier uniform-gap spacing and card measurements.
+
+## Recovery form fit correction — November 4, 2026
+
+The existing screen now uses the subtitle “Enter your NIC number and choose a
+recovery method.” The yellow banner and sample-destination line are removed.
+The Demo check tag, simulated/no-security-verification caption, exact Continue
+label, validation, Email demo guards, Phone unavailable/no-SMS notice and normal
+disconnected submission notice remain. Status-bar behavior is unchanged.
+
+The original logo crop is retained in a width-safe slot: 150 × 151.531 dp at
+400dp width, 130 × 131.327 dp at 360dp, and 90 × 90.919 dp at 320dp. Card growth
+and keyboard transitions no longer shrink the logo. Card padding is 12dp
+vertically, section gaps 6dp and the decorative badge 40dp. Text sizes and font
+scaling are unchanged; interactive targets remain at least 48dp. There is no
+fixed card height or content clipping; overflow scrolling remains enabled with
+its indicator hidden.
+
+Corrected browser simulation measurements (24dp top/bottom safe-area insets,
+plus the existing Screen padding; normal text, keyboard closed):
+
+| Viewport | Available content height | Intrinsic card height | Scrolling |
+| --- | ---: | ---: | --- |
+| 400 × 772 | 692px | 474px | No |
+| 360 × 800 | 720px | 474px | No |
+| 412 × 915 | 835px | 456px | No |
+| 360 × 640 | 560px | 474px | Yes |
+| 320 × 568 | 488px | 492px | Yes |
+
+The earlier HTML harness allowed the scroll container to expand; its scroll/fit
+results must not be used as evidence. The corrected harness explicitly bounds
+the scroll viewport, asserts its safe-area position/height and checks every
+control can be revealed. All 18 viewport/text-scale cases and five additional
+error/Phone/short-window cases passed. Reference/narrow screenshots were inspected.
+These are measured HTML simulations, not native Android measurements. Actual
+phone fit, Android IME resize/overlay behavior, system font scaling, TalkBack and
+safe/system bars remain pending device testing. This section supersedes the
+older always-visible-banner, sample-destination and shrinking-logo notes below.
+
+## Recovery method form — November 4, 2026
+
+The existing Forgot Password screen now follows the supplied recovery-method
+reference using the original GovAI logo, ribbons, skyline, vision text, lock and
+NIC/info icons. Device chrome and the reference's generated branding are not app
+assets. The action is labelled exactly **Continue**; Back to log in returns to Login.
+
+Email is selected initially. Email/Phone are mutually exclusive, the NIC starts
+empty and requires only nonblank input, and the simulated checkbox starts
+unchecked and is required. It performs no security verification. The always-visible
+notice states that recovery is disconnected, no email/SMS is sent, and the
+checkbox is not real CAPTCHA. The masked destination is static sample copy,
+not a lookup from the NIC. Changing methods preserves NIC/checkbox state and
+clears stale submission messages. Leaving resets the form.
+
+Normal/disconnected submissions remain on the form. Only Email may invoke the
+existing Check Email callback, behind both the development guard and the exact
+connected-demo flag. Phone stays on the form with an unavailable/no-SMS notice;
+there is no Phone destination, SMS integration or new navigation route. Standalone
+preview launchers and production exclusions are unchanged. These notes supersede
+the older single-method Forgot Password description below.
+
+Validation: TypeScript, Expo compatibility, all ten regression scripts and both
+Android exports passed. All eight production-exclusion suites passed against
+exports with the six demo/preview flags off and on. The form checks cover radio
+selection, required NIC/checkbox, Phone staying on the form, Email demo guards,
+repeated events, cleanup, navigation and 36 synthetic keyboard cases.
+Headless Chrome rendered an HTML simulation of the actual component tree at six
+viewport sizes with text scales 1/2/3. All 18 cases loaded original images, had
+no horizontal overflow and allowed scrolling every input/action into view with
+48-dp targets. Reference and narrow/enlarged screenshots were visually inspected.
+This simulation is not native React Native rendering. Physical Android IME
+resize/overlay behavior, system font scaling, TalkBack and safe/system bars still
+need device testing. Only the reviewed Forgot Password hash changed in each
+optional local snapshot; all other expectations and assertions were preserved.
+
+## Project organization
+
+Screen components live directly in `pages/`; reusable UI stays in `components/`.
+`assets/` holds artwork, fonts, licenses and provenance. Development launchers,
+validation and generation scripts live in `scripts/`. Shared `layout.ts` and
+`chatDemo.ts`, entry points and configuration remain at the app root.
+
+Historical screen filenames in earlier validation records now resolve under
+`pages/`. Optional source audits reverse only the exact approved import-path
+substitutions before comparing original hashes; other content changes still fail.
+The mapping is retained by an optional local historical audit. For moved screens only,
+the audit reverses `'../components/` to `'./components/`, `'../layout'` to
+`'./layout'`, and `'../assets/` to `'./assets/`. Historical snapshot files,
+hashes and pre-existing exclusions are retained.
+
+Organization validation (November 4, 2026): TypeScript, Expo compatibility, all
+ten regression scripts, and both Android exports passed. All eight artifact
+exclusion suites passed against exports with all six demo/preview flags off and
+on. Source-byte comparisons confirmed only approved module-path edits in app
+code; all 177 existing asset files and package/lockfile/ignore/instruction bytes
+were preserved. Negative audit fixtures rejected unexpected source changes.
+These checks include mocked native APIs, not physical Android or TalkBack testing.
+
 ## Official website reference - October 28, 2026
 
 The approved NIC sample reference is now a link to the fixed homepage
@@ -47,7 +295,7 @@ The mock content stays unverified and the status-bar issue remains deferred.
 
 Implements conversation frame 97:26 inside the existing guarded Chat Home owner.
 Both explicit development entry modes support it; normal Login remains disconnected
-and all chat code/assets remain excluded from production. App.tsx and LoginScreen.tsx
+and all chat code/assets remain excluded from production. App.tsx and pages/LoginScreen.tsx
 are unchanged by this task. This section supersedes older statements that landing
 suggestions, Send and drawer New chat are disabled. Other destinations stay disabled.
 
@@ -108,17 +356,15 @@ Android top-status-bar issue is still deferred. Text scales/wraps; controls have
 minimum 48dp targets and images explicit dimensions. Source/crop/hash details are
 in assets/figma/chat-conversation/README.md.
 
-Repeat checks: `npm.cmd run typecheck`, `node scripts/check-chat-conversation.cjs`,
-`node scripts/check-chat-home-menu.cjs`, `node scripts/check-connected-ui-demo.cjs`
-and existing registration/recovery/confirmation checks. Conversation coverage uses
+Shared repeatable checks are `npm.cmd run typecheck`, `npm.cmd run check:expo`
+and `npm.cmd run export:android`. Optional local regression coverage uses
 mocked native APIs for both modes, prompt/typed/blank/follow-up input, responding,
 recoverable error/Retry, duplicates, cancellation and stale results, drafts,
 Back/New chat/Logout, scroll retention/Jump, disabled services/source and 15 synthetic
-viewport/text cases. Asset hashes and reused PNG equality are checked. Optional
-`node scripts/check-chat-home-preview.cjs --conversation-visual` creates browser
-approximations; these do not prove Android rendering. Android/Hermes exports with
-all flags enabled/disabled are checked with `--export dist/conversation-production-1`
-and `--export dist/conversation-production-0` on conversation and existing guard suites.
+viewport/text cases. Asset hashes and reused PNG equality were checked locally.
+Optional local browser approximations did not prove Android rendering.
+Android/Hermes exports with all flags enabled and disabled were also inspected
+locally for guard behavior.
 
 Launcher verification uses `npm.cmd run preview:chat-home:dev -- --port 8098` on a
 free port; /status and Android development bundle must return HTTP 200 and contain
@@ -258,17 +504,16 @@ Assets/provenance: `assets/figma/chat-home-menu/README.md` and `sha256.json`.
 `scripts/rasterize-chat-home-menu-icons.ps1` reproduces native PNG icons from the
 original SVGs using existing Chrome/System.Drawing; no runtime dependency added.
 
-Checks: `npm.cmd run typecheck`, `node scripts/check-chat-home-menu.cjs`,
-`node scripts/check-chat-home-preview.cjs`, and all existing registration,
-recovery, confirmation and connected-demo regression checks. The menu checker
+Shared checks are `npm.cmd run typecheck`, `npm.cmd run check:expo` and Android
+export. Optional local registration, recovery, confirmation, connected-demo and
+menu regression coverage
 covers both entry modes, retained input identity/draft, keyboard dismissal,
 X/outside/Back, background isolation, focus restoration, repeat cycles, reduced
 motion, nine disabled destinations, asset hashes and 18 synthetic layouts.
-Optional `--menu-visual` on the Chat Home checker creates browser approximations
+Optional local tooling creates browser approximations
 at 400x772, 320x568, 400x772 with 2x text and 600x960; these are not native renders.
-Production Android/Hermes exports with all preview/demo flags on and off are
-checked with `--export dist/menu-production-on` and `--export dist/menu-production-off`
-on the menu, Chat Home, connected-demo and existing preview checkers.
+Production Android/Hermes exports with all preview/demo flags on and off were
+inspected locally for menu, Chat Home, connected-demo and preview exclusions.
 
 Actual launcher verification: `npm.cmd run preview:chat-home:dev -- --port 8098`
 started Metro; /status and an Android development bundle returned HTTP 200,
@@ -285,6 +530,42 @@ existing Chat Back to fresh Login/Welcome and credential/draft cleanup on exit.
 No physical-device, emulator or native accessibility/rendering verification was
 performed for this menu. The unresolved Android status-bar issue remains pending.
 
+## GA-55 Login Figma alignment - November 4, 2026
+
+Login is aligned to the live Figma `Display` frame 54:15 (400 x 772) and
+`LoginForm` frame 58:3. The Digital ID button, its OR divider, exclusive runtime
+asset registration and exclusive styles were removed because that option is not
+present in the inspected frame. The original fingerprint PNG/SVG remain unchanged
+as provenance assets and are not bundled through Login.
+
+The original 941 x 1672 GovAI logo file and its documented 154.17% x 271.32%
+crop at -30.13% left / -63.6% top remain unchanged. Removing the unused section
+and using section-specific form spacing lets the existing responsive height
+budget reach the full Figma 196 x 198 slot at the 400 x 772 reference viewport
+when safe-area-adjusted space permits. Short windows retain the proportional
+112-dp floor and natural scrolling; text is not scaled down. Fields, Back,
+password visibility, Forgot Password and Sign up retain at least 48-dp targets.
+
+Identifier/password validation, password reveal, disconnected notices, connected
+development-demo Login -> Chat Home, all Welcome/onboarding origins, keyboard-first
+Android Back, cleanup and production guards are unchanged. The visible Back action,
+honest disconnected/demo notice and accessible target sizes remain intentional
+adaptations where they differ from the static Figma frame.
+
+A local-only regression check rejects Digital ID/OR runtime UI, checks two
+retained inputs and 48-dp controls, and synthetically verifies the
+196 x 198 reference logo slot, unchanged crop geometry and proportional short-
+window floor. These measurements use mocked React Native layout and are not
+physical Android rendering.
+
+Automated validation on November 4 passed TypeScript, Expo dependency
+compatibility, connected-demo, Forgot Password, Register and Chat Home checks.
+Android/Hermes production exports were built with the connected-demo flag both
+off and on; both produced the same `index-f90f64ad9c8c67b0b4829737cb4d67db.hbc`
+bundle name. Production-exclusion checks passed against both outputs, including
+absence of Digital ID copy and the retained fingerprint PNG. No emulator or
+physical Android rendering, keyboard, font-scale or TalkBack test was performed.
+
 ## Greeting and Login demo - October 28, 2026
 
 This section supersedes older statements below that Login never opens Chat Home
@@ -293,7 +574,7 @@ disconnected. The eventual production destination requires backend-confirmed Log
 no production authentication route, persistent session, credential storage or API
 was added here.
 
-ChatHomePreviewScreen.tsx now contains separately guarded standalone/demo wrappers.
+pages/ChatHomePreviewScreen.tsx now contains separately guarded standalone/demo wrappers.
 The shared presentation is components/ChatHomeContent.tsx. Its optional
 `authenticatedDisplayName` is reserved for a future backend-authenticated adapter.
 Without a nonblank trusted name, both visual/accessibility greeting text is "Hello".
@@ -355,13 +636,12 @@ paths, so the final .hbc files are not byte-identical.
 Both actual launch commands above started and returned Android development bundles
 containing shared Chat Home and the unverified-credentials notice, with
 no hardcoded sample greeting. Verification servers were stopped afterward.
-Optional historical source audits now exempt the specifically approved LoginScreen.tsx
+Optional historical source audits now exempt the specifically approved pages/LoginScreen.tsx
 changes, which have dedicated behavior checks. Other comparisons
 remain active; cached snapshot bytes were not rewritten.
 
-Repeat: `node scripts/check-chat-home-preview.cjs`,
-`node scripts/check-connected-ui-demo.cjs`, the existing other checker commands,
-and their --export checks against dist/login-chat-production-on / -off.
+Those mock regressions and production-exclusion diagnostics remain optional
+local-only evidence and are not commands available in a GitHub clone.
 
 
 ## GA-22 Chat Home landing preview - October 28, 2026
@@ -408,9 +688,9 @@ of Figma's 9px. Text scaling/wrapping remains enabled. Wide content is bounded a
 480dp. The original avatar crop and explicit image dimensions are documented in
 [asset provenance](assets/figma/chat-home/README.md); assets and font are local.
 
-Files: ChatHomePreviewScreen.tsx; guarded entry in App.tsx; one package.json launch
-script; scripts/preview-chat-home.cjs, check-chat-home-preview.cjs and
-rasterize-chat-home-icons.ps1; assets/figma/chat-home and this documentation.
+Files: pages/ChatHomePreviewScreen.tsx; guarded entry in App.tsx; one package.json launch
+script; scripts/preview-chat-home.cjs and rasterize-chat-home-icons.ps1;
+assets/figma/chat-home and this documentation. Optional mock checks are local-only.
 AGENTS.md's local-only context now names GA-22 and retains every safeguard; its
 existing .git/info/exclude entry remains, and the file is not tracked.
 
@@ -419,11 +699,7 @@ Validation performed:
 ```powershell
 npm.cmd run typecheck
 npm.cmd run check:expo
-node scripts/check-chat-home-preview.cjs
-# Existing seven scripts/check-*.cjs suites also pass.
-# After generating the Android export with every preview/demo flag set to 1:
-node scripts/check-chat-home-preview.cjs --export dist/chat-home-production
-# Existing five export-aware checkers also inspect that same fresh output.
+npm.cmd run export:android
 ```
 
 TypeScript, Expo dependency compatibility, the new checker and all seven existing
@@ -440,8 +716,8 @@ Android development bundle returned successfully with ChatHomePreviewScreen,
 Fraunces_700Bold and the disconnected notice present. That verification server
 was stopped afterward. Existing dependencies were checked, not installed.
 
-Optional `node scripts/check-chat-home-preview.cjs --visual` generates local HTML
-approximations from the actual component tree under .cache/chat-home-review.
+Optional local tooling generated HTML approximations from the actual component
+tree under .cache/chat-home-review.
 Browser renders inspected at 400x772, 320x568, 600x960 and enlarged text verify
 original asset placement/crop, readable wrapping and accessible overflow direction.
 These renders translate mocked React Native primitives to HTML: they are not native
@@ -501,18 +777,12 @@ shared layout helpers, English-only behavior, and form keyboard helpers remain.
 The approved demo changes only confirmation labels, hides Account Created Exit,
 and enables its Continue action with a caption identifying Login as its destination.
 
-Repeat checks:
+Shared repeat checks:
 
 ```powershell
 npm.cmd run typecheck
 npm.cmd run check:expo
-node scripts/check-register.cjs
-node scripts/check-connected-ui-demo.cjs
-node scripts/check-forgot-password.cjs
-node scripts/check-account-created-preview.cjs
-node scripts/check-email-preview.cjs
-node scripts/check-reset-password-preview.cjs
-node scripts/check-password-updated-preview.cjs
+npm.cmd run export:android
 ```
 
 The Register harness defines __DEV__ explicitly. Its direct command runs the
@@ -523,8 +793,8 @@ covers both modes with the dedicated flag absent, 0, 1 and true.
 The Reset Password and Password Updated checkers retain their optional task-time
 snapshot assertions. On October 28, 2026, exactly four reviewed expectations in
 each existing local snapshot were updated for the approved connected-demo work:
-AccountCreatedPreviewScreen.tsx and CheckEmailPreviewScreen.tsx now delegate to
-shared guarded presentations; RegisterScreen.tsx and ForgotPasswordScreen.tsx
+pages/AccountCreatedPreviewScreen.tsx and pages/CheckEmailPreviewScreen.tsx now delegate to
+shared guarded presentations; pages/RegisterScreen.tsx and pages/ForgotPasswordScreen.tsx
 add validated development-demo callbacks and cleanup. No other snapshot values
 were changed; existing App.tsx/package.json exemptions were not expanded.
 Snapshots remain ignored local cache files and are excluded from commits.
@@ -543,11 +813,11 @@ restored byte-for-byte afterward. This simulates missing local evidence in the
 existing installed checkout; it is not a separate clean dependency installation.
 
 A fresh checkout needs only the tracked source/assets, package.json and lockfile;
-run npm.cmd ci to install dependencies, then the direct commands above.
-Export checks additionally require generating the Android export being inspected.
+run `npm.cmd ci` to install dependencies, then use the shared npm commands above.
+Optional mock regression and historical audit scripts are not distributed.
 
-Run the commands above directly: no filesystem overrides, hidden snapshots,
-skipped assertions, or generated whole-snapshot replacements are needed.
+Local historical results below are retained for context, but their checker and
+snapshot commands are not available in a GitHub clone.
 
 Validation on October 28, 2026: all seven direct checkers, TypeScript and Expo
 compatibility passed without skips. The Register command passed in both modes.
@@ -557,17 +827,9 @@ keyboard-first Back, both confirmation destinations, fresh recovery forms,
 standalone priority, 36 synthetic confirmation layouts, and launcher arguments.
 Mocks are not native rendering or accessibility verification.
 
-Production-exclusion validation was rerun against fresh Android/Hermes exports
-in dist/review-demo-off (flag absent) and dist/review-demo-on (flag=1):
-
-```powershell
-node scripts/check-connected-ui-demo.cjs --export dist/review-demo-off
-node scripts/check-connected-ui-demo.cjs --export dist/review-demo-on
-node scripts/check-account-created-preview.cjs --export dist/review-demo-on
-node scripts/check-email-preview.cjs --export dist/review-demo-on
-node scripts/check-reset-password-preview.cjs --export dist/review-demo-on
-node scripts/check-password-updated-preview.cjs --export dist/review-demo-on
-```
+Production-exclusion validation was previously run locally against fresh
+Android/Hermes flag-off and flag-on exports. The optional diagnostic commands are
+not included in the repository.
 
 All five export-aware checkers passed against both fresh outputs with snapshots
 active. Android/Hermes production exports were checked with the dedicated demo flag
@@ -901,8 +1163,10 @@ password only, focuses the first invalid field, and exposes inline live errors.
 Nonempty input only produces a no-request-sent notice, never authentication,
 tokens, sessions, success routing or an invalid-credentials claim. No unconfirmed
 National ID/email format rules. Password starts hidden and has an accessible
-visibility toggle. Digital ID, Forgot Password and Sign up remain disabled with
-accessibility disabled states. No social auth/dependencies/backend changes.
+visibility toggle. The original version rendered Digital ID, Forgot Password and
+Sign up as unavailable. Later approved work connected the local navigation links,
+and GA-55 removed Digital ID to match Figma 54:15. No social authentication,
+dependencies or backend changes were introduced.
 
 Read-only backend review found health routes only, no authentication endpoints.
 The backend entry point also uses require despite package type=module; noted,
@@ -931,7 +1195,7 @@ with TalkBack. With Android keyboard open, reach both fields, errors, visibility
 control and submit; test Next/Done, drag dismissal, gesture/three-button modes,
 cutouts, short/wide windows and largest fonts. Verify no success screen/network
 request. Android Back may dismiss the keyboard before normal navigation. Compare
-artwork/form with Figma 54:14. Previous physical-device checks remain pending;
+artwork/form with the superseding Figma 54:15 alignment above. Previous physical-device checks remain pending;
 no emulator or phone keyboard/TalkBack/screenshot testing was performed.
 
 Android production export passed including Hermes compilation and 35 unique
@@ -967,7 +1231,7 @@ Screen/layout helpers, bundled Inter/Yaldevi/Noto Sans Tamil fonts and exactly v
 
 The decorative header compacts before readable form text. Content is bounded to 480dp, safe areas are owned once by Screen, all interactive targets/fields are at least 48dp, labels/errors wrap, and one overflow ScrollView contains the header/card with its indicator hidden and overscroll disabled. No text scaling caps or fixed card clipping. Keyboard overlap adds only the part not already handled by a resized viewport. Form/vision measurements are intrinsic and guarded, avoiding header/card measurement feedback.
 
-Validation: node scripts/check-register.cjs and TypeScript passed. Automated tests cover required fields, arbitrary identifiers without invented format rejection, Unicode names, raw/mismatched passwords, both visibility toggles, optional agreement, disabled Terms, notices, explicit exit and detached-ref unmount clearing; 18 synthetic layout/convergence cases and 36 resize/overlay keyboard cases across 320x568, 360x640, 360x800, 412x915, 600x960 and reference 400x772 with font scales 1/2/3; all six Login origins and Register Back routes; 12 original asset hashes. Existing file hashes and exact Login-only wiring changes were checked. PNG icons were visually inspected as assets, not rendered app UI.
+Validation: TypeScript and optional local mock regression checks passed. The local tests covered required fields, arbitrary identifiers without invented format rejection, Unicode names, raw/mismatched passwords, both visibility toggles, optional agreement, disabled Terms, notices, explicit exit and detached-ref unmount clearing; 18 synthetic layout/convergence cases and 36 resize/overlay keyboard cases across 320x568, 360x640, 360x800, 412x915, 600x960 and reference 400x772 with font scales 1/2/3; all six Login origins and Register Back routes; 12 original asset hashes. Existing file hashes and exact Login-only wiring changes were checked. PNG icons were visually inspected as assets, not rendered app UI. The optional mock checker is not included in Git.
 
 Android production export passed with Hermes and 43 bundled assets. It emitted only the environment warning that FORCE_COLOR overrides NO_COLOR. No emulator or physical-device rendering was performed.
 
@@ -979,11 +1243,9 @@ Run `npm.cmd run preview:account-created:dev` to start Expo Go with a process-lo
 
 All content is explicitly labelled as a sample: no account has been created. Rathishan is static Figma copy, not user data. Continue is disabled because its destination is unimplemented. Exit preview and Android Back return to Welcome. Register validation, submission, navigation and credential cleanup remain unchanged. The preview sends no requests and persists no data.
 
-Validation commands:
-- npm.cmd run typecheck
-- node scripts/check-account-created-preview.cjs
-- node -e "global.__DEV__=false;require('./scripts/check-register.cjs')"
-- After production export: node scripts/check-account-created-preview.cjs --export
+Shared validation commands are `npm.cmd run typecheck`, `npm.cmd run check:expo`
+and `npm.cmd run export:android`. Optional guard/navigation/layout regressions were
+run locally and are not included in Git.
 
 Guard/navigation and layout checks use mocked React/native measurements, not native rendering. Synthetic windows: 320x568, 360x640, 360x800, 412x915, 600x960, and reference 400x772; font scales 1, 2 and 3. Repeated intrinsic measurements converge in these mocks.
 
@@ -1000,7 +1262,7 @@ The NIC starts empty and is checked only for nonblank input. No format, length, 
 
 Three new original icons are preserved under assets/figma/forgot-password with provenance; verified shared backgrounds/logo/Back are reused. Fonts, responsive text, hidden-indicator overflow, safe-area ownership and 48-dp targets follow existing conventions. Decorative space reduces first; keyboard resizing does not replace the closed-screen baseline.
 
-Validation: node scripts/check-forgot-password.cjs (includes existing Register/navigation regressions), node scripts/check-account-created-preview.cjs, npm.cmd run typecheck, and npm.cmd run export:android. The optional --export preview check requires a generated dist/android export. No EAS configuration or native APK build is involved. Synthetic measurements are not device rendering. Pending phone checks: actual wrapping/crops, enlarged text, keyboard resize/overlay/focus/error reachability, Back/Log in cleanup, TalkBack announcements and safe/system bars at narrow/short/tall/wide windows.
+Validation: shared TypeScript and Android export commands passed; optional local Forgot Password, Register/navigation and Account Created mock regressions also passed. Those local scripts are excluded from Git. No EAS configuration or native APK build is involved. Synthetic measurements are not device rendering. Pending phone checks: actual wrapping/crops, enlarged text, keyboard resize/overlay/focus/error reachability, Back/Log in cleanup, TalkBack announcements and safe/system bars at narrow/short/tall/wide windows.
 
 
 ## Check Email development-only preview
@@ -1011,7 +1273,11 @@ The App entry and direct screen mount require __DEV__ plus the Check Email flag.
 
 The compact notice reads Preview - No email sent. The footer keeps Use a different NIC with no visible Exit preview control; Back has an in-bounds 48-dp target. The intrinsic card uses reduced padding/gaps, and the burgundy disabled email button retains its unavailable caption. The address is always sample@example.test. No reset link exists or expires, Open email app and Resend are visibly/accessibly disabled with no handlers, and no network, mailbox, timer, token or resend logic is implemented. Back, Android Back and Use a different NIC close the preview and open fresh Forgot Password; The static resend row reads Didn't get it? Resend, with an adjacent unavailable caption and accessibility disabled state. The normal Forgot Password Log in flow preserves Login origin; standalone preview begins with Welcome as its original destination.
 
-Run node scripts/check-email-preview.cjs, node scripts/check-forgot-password.cjs, node scripts/check-account-created-preview.cjs and npm.cmd run typecheck. After Android export, add --export to both preview check scripts to inspect production bundle/assets. Tests cover flag combinations, direct mount, disabled actions, routes, launcher port/environment/status, and 18 synthetic logical-window/font-scale cases. They do not prove native rendering.
+Run `npm.cmd run typecheck`, `npm.cmd run check:expo` and
+`npm.cmd run export:android`. Optional local preview/recovery regressions previously
+covered flag combinations, direct mount, disabled actions, routes, launcher
+port/environment/status and synthetic logical-window/font-scale cases; they are
+excluded from Git and do not prove native rendering.
 
 Pending phone checks: actual wrapping at default/enlarged text, safe areas/system bars, logo/background crops, compact notice/overflow/measurement stability, TalkBack disabled-control announcements and Back/Login cleanup. No EAS setup or APK build is involved.
 
@@ -1070,24 +1336,17 @@ adjustment runs only when a field/error group is outside the visible region.
 Inputs, errors and the action stay in normal scroll flow; no entry-time forced
 scroll or typography shrink is used.
 
-Repeat checks from app/mobile:
+Shared repeat checks from app/mobile:
 
-    node scripts/check-reset-password-preview.cjs
-    node scripts/check-forgot-password.cjs
-    node scripts/check-email-preview.cjs
-    node scripts/check-account-created-preview.cjs
     npm.cmd run typecheck
+    npm.cmd run check:expo
     npm.cmd run export:android
-    node scripts/check-reset-password-preview.cjs --export dist/android
-    node scripts/check-email-preview.cjs --export
-    node scripts/check-account-created-preview.cjs --export
 
 For the flag-on production check, use a dedicated PowerShell shell or preserve
 and restore any existing variable:
 
     $env:EXPO_PUBLIC_RESET_PASSWORD_PREVIEW = '1'
     node scripts/expo.cjs export --platform android --output-dir dist/reset-preview-flag-on
-    node scripts/check-reset-password-preview.cjs --export dist/reset-preview-flag-on
     Remove-Item Env:EXPO_PUBLIC_RESET_PASSWORD_PREVIEW
 
 Actual coverage: TypeScript and all existing form/navigation/preview checks
@@ -1158,26 +1417,17 @@ The 150x151.531 logo crop retains existing ratios. Decorative header space yield
 before text, wide content is bounded, Screen owns safe areas and natural overflow
 scrolling has both indicators hidden. Native Android owns system chrome.
 
-Repeat checks:
+Shared repeat checks:
 
     npm.cmd run typecheck
-    node scripts/check-password-updated-preview.cjs
-    node scripts/check-reset-password-preview.cjs
-    node scripts/check-forgot-password.cjs
-    node scripts/check-email-preview.cjs
-    node scripts/check-account-created-preview.cjs
+    npm.cmd run check:expo
     npm.cmd run export:android
-    node scripts/check-password-updated-preview.cjs --export dist/android
-    node scripts/check-reset-password-preview.cjs --export dist/android
-    node scripts/check-email-preview.cjs --export
-    node scripts/check-account-created-preview.cjs --export
 
 For a flag-on production check, use a dedicated PowerShell shell or preserve
 and restore the previous variable value:
 
     $env:EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW = '1'
     node scripts/expo.cjs export --platform android --output-dir dist/password-updated-flag-on
-    node scripts/check-password-updated-preview.cjs --export dist/password-updated-flag-on
     Remove-Item Env:EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW
 
 Actual checks: TypeScript and all existing form/navigation/preview regression

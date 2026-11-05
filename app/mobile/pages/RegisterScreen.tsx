@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { Screen } from './components/Screen';
-import { layout, typography } from './layout';
+import { Screen } from '../components/Screen';
+import { layout, typography } from '../layout';
 import { loginAssets } from './LoginScreen';
 
 export const registerAssets = {
-  back: require('./assets/figma/register/back.png'),
-  user: require('./assets/figma/register/user.png'),
-  identity: require('./assets/figma/register/identity.png'),
-  mail: require('./assets/figma/register/mail.png'),
-  phone: require('./assets/figma/register/phone.png'),
-  lock: require('./assets/figma/register/lock.png'),
-  eyeOff: require('./assets/figma/register/eye-off.png'),
-  next: require('./assets/figma/register/next.png'),
+  back: require('../assets/figma/register/back.png'),
+  user: require('../assets/figma/register/user.png'),
+  identity: require('../assets/figma/register/identity.png'),
+  mail: require('../assets/figma/register/mail.png'),
+  phone: require('../assets/figma/register/phone.png'),
+  lock: require('../assets/figma/register/lock.png'),
+  eyeOff: require('../assets/figma/register/eye-off.png'),
+  next: require('../assets/figma/register/next.png'),
 };
 
 const fields = [

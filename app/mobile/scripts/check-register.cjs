@@ -26,7 +26,7 @@ const crypto = require('node:crypto');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const source = read('RegisterScreen.tsx');
+const source = read('pages/RegisterScreen.tsx');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|console)\b/.test(source), 'No requests, storage or logging');
 assert(!/allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines/.test(source), 'No text scaling/truncation restrictions');
 const names = ['fullName','nic','email','phone','password','confirmPassword'];
@@ -75,7 +75,7 @@ function environment(width=360,height=800,fontScale=1){const env={dimensions:{wi
     addListener(name,fn){env.listeners[name]=fn;return{remove(){delete env.listeners[name];}};}};return env;
 }
 function registerFixture(width=360,height=800,fontScale=1) {
-  const rt=runtime(),env=environment(width,height,fontScale),component=loader(rt,env)('RegisterScreen.tsx');
+  const rt=runtime(),env=environment(width,height,fontScale),component=loader(rt,env)('pages/RegisterScreen.tsx');
   let tree,exits=0,viewportHeight=height-80;const controls={},clears=[],focuses=[],scrolls=[];
   const fields=()=>nodes(tree,'TextInput');
   function draw(){tree=rt.render(()=>component.RegisterScreen({onLogin(){exits++;}}));
@@ -142,7 +142,7 @@ for(const[width,height]of[[320,568],[360,640],[360,800],[412,915],[600,960],[400
 
 // Execute actual Startup route callbacks with screen renderers replaced by names.
 const nav=runtime(),env=environment(),overrides={};
-for(const[file,component,assets]of[['WelcomeScreen','WelcomeScreen','welcomeAssets'],['LoginScreen','LoginScreen','loginAssets'],['RegisterScreen','RegisterScreen','registerAssets'],['ForgotPasswordScreen','ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','OnboardingPayScreen','payAssets']])overrides['./'+file]={[component]:component,[assets]:{hero:1}};
+for(const[file,component,assets]of[['WelcomeScreen','WelcomeScreen','welcomeAssets'],['LoginScreen','LoginScreen','loginAssets'],['RegisterScreen','RegisterScreen','registerAssets'],['ForgotPasswordScreen','ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','OnboardingPayScreen','payAssets']])overrides['./pages/'+file]={[component]:component,[assets]:{hero:1}};
 const app=loader(nav,env,overrides)('App.tsx');const draw=()=>{const t=nav.render(()=>app.Startup());nav.effects();return t;};
 let tree=draw();nodes(tree,'Image').forEach(n=>n.props.onLoad?.());tree=draw();
 for(const origin of['WelcomeScreen','OnboardingMeetScreen','OnboardingDiscoverScreen','OnboardingAskScreen','OnboardingTrackScreen','OnboardingPayScreen']){

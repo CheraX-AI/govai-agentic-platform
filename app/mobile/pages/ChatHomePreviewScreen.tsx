@@ -1,4 +1,4 @@
-import { ChatHomeContent } from './components/ChatHomeContent';
+import { ChatHomeContent } from '../components/ChatHomeContent';
 
 export function ChatHomePreviewScreen({ onExit }: { onExit: () => void }) {
   if (!__DEV__ || process.env.EXPO_PUBLIC_CHAT_HOME_PREVIEW !== '1') return null;

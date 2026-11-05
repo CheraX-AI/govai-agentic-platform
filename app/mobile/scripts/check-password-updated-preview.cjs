@@ -1,3 +1,4 @@
+const { historicalHash } = require('./historical-paths.cjs');
 // Mocked React/native behavior and artifact inspection; no device rendering claim.
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict'), vm = require('node:vm'), crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
@@ -6,18 +7,18 @@ const { runtime, environment, loader, nodes } = require('./check-register.cjs');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
 const flat = style => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
-const source = read('PasswordUpdatedPreviewScreen.tsx');
+const source = read('pages/PasswordUpdatedPreviewScreen.tsx');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|Linking|console|setTimeout|setInterval)\b/.test(source));
 assert(!/allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines/.test(source));
-for (const file of ['ResetPasswordPreviewScreen.tsx','ForgotPasswordScreen.tsx','CheckEmailPreviewScreen.tsx']) assert(!/PASSWORD_UPDATED_PREVIEW|PasswordUpdatedPreview/.test(read(file)), 'no false success entry: ' + file);
+for (const file of ['pages/ResetPasswordPreviewScreen.tsx','pages/ForgotPasswordScreen.tsx','pages/CheckEmailPreviewScreen.tsx']) assert(!/PASSWORD_UPDATED_PREVIEW|PasswordUpdatedPreview/.test(read(file)), 'no false success entry: ' + file);
 const keys = ['EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW','EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW','EXPO_PUBLIC_CHECK_EMAIL_PREVIEW','EXPO_PUBLIC_RESET_PASSWORD_PREVIEW'];
 const saved = keys.map(k => process.env[k]), savedDev = global.__DEV__;
 function flags(dev, ...values) { global.__DEV__ = dev; keys.forEach((k,i) => values[i] === undefined ? delete process.env[k] : process.env[k] = values[i]); }
 function appFixture() {
   const rt = runtime(), env = environment(), overrides = {}; let imports = 0;
-  for (const [file, asset] of [['WelcomeScreen','welcomeAssets'],['LoginScreen','loginAssets'],['RegisterScreen','registerAssets'],['ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','payAssets']]) overrides['./'+file] = { [file]: file, [asset]: { hero: 1 } };
-  for (const file of ['AccountCreatedPreviewScreen','CheckEmailPreviewScreen','ResetPasswordPreviewScreen']) overrides['./'+file] = { [file]: file };
-  overrides['./PasswordUpdatedPreviewScreen'] = { get PasswordUpdatedPreviewScreen() { imports++; return 'PasswordUpdatedPreviewScreen'; } };
+  for (const [file, asset] of [['WelcomeScreen','welcomeAssets'],['LoginScreen','loginAssets'],['RegisterScreen','registerAssets'],['ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','payAssets']]) overrides['./pages/'+file] = { [file]: file, [asset]: { hero: 1 } };
+  for (const file of ['AccountCreatedPreviewScreen','CheckEmailPreviewScreen','ResetPasswordPreviewScreen']) overrides['./pages/'+file] = { [file]: file };
+  overrides['./pages/PasswordUpdatedPreviewScreen'] = { get PasswordUpdatedPreviewScreen() { imports++; return 'PasswordUpdatedPreviewScreen'; } };
   const { Startup } = loader(rt, env, overrides)('App.tsx');
   const draw = () => { const t = rt.render(() => Startup()); rt.effects(); return t; };
   let tree = draw(); assert.notEqual(tree.type, 'PasswordUpdatedPreviewScreen', 'resource readiness gate');
@@ -36,7 +37,7 @@ for (const dev of [false,true]) for (const own of [undefined,'0','1','true']) fo
   } else if (dev && account === '1') { f.tree.props.onExit(); assert.equal(f.draw().type, 'WelcomeScreen'); }
   else if (dev && email === '1') { f.tree.props.onBack(); assert.equal(f.draw().type, 'ForgotPasswordScreen'); }
   else if (dev && reset === '1') { f.tree.props.onExit(); assert.equal(f.draw().type, 'WelcomeScreen'); }
-  const rt = runtime(), env = environment(), { PasswordUpdatedPreviewScreen } = loader(rt, env)('PasswordUpdatedPreviewScreen.tsx');
+  const rt = runtime(), env = environment(), { PasswordUpdatedPreviewScreen } = loader(rt, env)('pages/PasswordUpdatedPreviewScreen.tsx');
   assert.equal(PasswordUpdatedPreviewScreen({ onLogin() {} }) === null, !(dev && own === '1'), 'direct guard');
   f.rt.unmount(); guards++;
 }
@@ -47,7 +48,7 @@ flags(true,'1','0','0','0');
 let layouts = 0;
 for (const [width,height] of [[320,568],[360,640],[360,800],[412,915],[600,960],[400,772]]) for (const fontScale of [1,2,3]) {
   const rt = runtime(), env = environment(width,height,fontScale);
-  const { PasswordUpdatedPreviewScreen } = loader(rt, env)('PasswordUpdatedPreviewScreen.tsx');
+  const { PasswordUpdatedPreviewScreen } = loader(rt, env)('pages/PasswordUpdatedPreviewScreen.tsx');
   let logins = 0; const onLogin = () => logins++, wrapper = PasswordUpdatedPreviewScreen({ onLogin });
   let tree; const draw = () => { tree = rt.render(() => wrapper.type(wrapper.props)); rt.effects(); }; draw();
   function measure() {
@@ -94,7 +95,7 @@ const snapshot=path.join(root,'.cache/password-updated-before.json');
 // Approved Login changes are behavior-tested separately.
 // Optional task-time audit evidence, not a required test fixture.
 if(fs.existsSync(snapshot)) {
-  for(const [f,h]of Object.entries(JSON.parse(fs.readFileSync(snapshot,'utf8'))))if(!['App.tsx','package.json','LoginScreen.tsx'].includes(f))assert.equal(hash(f),h,'existing source unchanged: '+f);
+  for(const [f,h]of Object.entries(JSON.parse(fs.readFileSync(snapshot,'utf8'))))if(!['App.tsx','package.json','LoginScreen.tsx'].includes(f))assert.equal(historicalHash(root, f),h,'existing source unchanged: '+f);
   console.log('PASS optional local historical source audit: password-updated-before.json');
 } else {
   console.log('INFO optional local historical audit unavailable: password-updated-before.json is absent. Required behavior and requested export checks still run.');

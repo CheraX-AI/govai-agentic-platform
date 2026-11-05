@@ -1,3 +1,4 @@
+const { historicalHash } = require('./historical-paths.cjs');
 // Component logic and artifact checks; mocks do not prove native rendering.
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict'), vm = require('node:vm'), crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
@@ -5,11 +6,11 @@ global.__DEV__ = false;
 const { runtime, environment, loader, nodes } = require('./check-register.cjs');
 const flat = style => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const source = read('ResetPasswordPreviewScreen.tsx');
+const source = read('pages/ResetPasswordPreviewScreen.tsx');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|Linking|console)\b/.test(source));
 assert(!/\.trim\(|maxLength|allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines/.test(source));
-assert(!/RESET_PASSWORD_PREVIEW|ResetPasswordPreview/.test(read('ForgotPasswordScreen.tsx')));
-assert(!/RESET_PASSWORD_PREVIEW|ResetPasswordPreview/.test(read('CheckEmailPreviewScreen.tsx')));
+assert(!/RESET_PASSWORD_PREVIEW|ResetPasswordPreview/.test(read('pages/ForgotPasswordScreen.tsx')));
+assert(!/RESET_PASSWORD_PREVIEW|ResetPasswordPreview/.test(read('pages/CheckEmailPreviewScreen.tsx')));
 const flagKeys = ['EXPO_PUBLIC_RESET_PASSWORD_PREVIEW', 'EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW', 'EXPO_PUBLIC_CHECK_EMAIL_PREVIEW'];
 const previous = flagKeys.map(k => process.env[k]), previousDev = global.__DEV__;
 function flags(dev, reset, account = '0', email = '0') {
@@ -18,10 +19,10 @@ function flags(dev, reset, account = '0', email = '0') {
 }
 function appFixture() {
   const rt = runtime(), env = environment(), overrides = {}; let imports = 0;
-  for (const [file, asset] of [['WelcomeScreen','welcomeAssets'],['LoginScreen','loginAssets'],['RegisterScreen','registerAssets'],['ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','payAssets']]) overrides['./' + file] = { [file]: file, [asset]: { hero: 1 } };
-  overrides['./AccountCreatedPreviewScreen'] = { AccountCreatedPreviewScreen: 'AccountCreatedPreviewScreen' };
-  overrides['./CheckEmailPreviewScreen'] = { CheckEmailPreviewScreen: 'CheckEmailPreviewScreen' };
-  overrides['./ResetPasswordPreviewScreen'] = { get ResetPasswordPreviewScreen() { imports++; return 'ResetPasswordPreviewScreen'; } };
+  for (const [file, asset] of [['WelcomeScreen','welcomeAssets'],['LoginScreen','loginAssets'],['RegisterScreen','registerAssets'],['ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','payAssets']]) overrides['./pages/' + file] = { [file]: file, [asset]: { hero: 1 } };
+  overrides['./pages/AccountCreatedPreviewScreen'] = { AccountCreatedPreviewScreen: 'AccountCreatedPreviewScreen' };
+  overrides['./pages/CheckEmailPreviewScreen'] = { CheckEmailPreviewScreen: 'CheckEmailPreviewScreen' };
+  overrides['./pages/ResetPasswordPreviewScreen'] = { get ResetPasswordPreviewScreen() { imports++; return 'ResetPasswordPreviewScreen'; } };
   const { Startup } = loader(rt, env, overrides)('App.tsx');
   const draw = () => { const tree = rt.render(() => Startup()); rt.effects(); return tree; };
   let tree = draw(); assert.notEqual(tree.type, 'ResetPasswordPreviewScreen');
@@ -35,14 +36,14 @@ for (const dev of [false, true]) for (const reset of [undefined, '0', '1', 'true
   assert.equal(f.tree.type, dev && account === '1' ? 'AccountCreatedPreviewScreen' : dev && email === '1' ? 'CheckEmailPreviewScreen' : enabled ? 'ResetPasswordPreviewScreen' : 'WelcomeScreen');
   assert.equal(f.imports, enabled ? 1 : 0);
   if (enabled) { f.tree.props.onExit(); assert.equal(f.draw().type, 'WelcomeScreen'); }
-  const rt = runtime(), env = environment(), { ResetPasswordPreviewScreen } = loader(rt, env)('ResetPasswordPreviewScreen.tsx');
+  const rt = runtime(), env = environment(), { ResetPasswordPreviewScreen } = loader(rt, env)('pages/ResetPasswordPreviewScreen.tsx');
   assert.equal(ResetPasswordPreviewScreen({ onExit() {} }) === null, !(dev && reset === '1'));
   f.rt.unmount(); rt.unmount(); guards++;
 }
 flags(true, '1');
 function fixture(width = 400, height = 772, fontScale = 1) {
   const rt = runtime(), env = environment(width, height, fontScale);
-  const { ResetPasswordPreviewScreen } = loader(rt, env)('ResetPasswordPreviewScreen.tsx');
+  const { ResetPasswordPreviewScreen } = loader(rt, env)('pages/ResetPasswordPreviewScreen.tsx');
   let exits = 0, tree, viewportHeight = height - 80;
   const onExit = () => { exits++; }, wrapper = ResetPasswordPreviewScreen({ onExit });
   const controls = [], clears = [], focuses = [], scrolls = [];
@@ -138,7 +139,7 @@ if (process.argv.includes('--export')) {
 // Optional task-time snapshot; normal checks must also work on a fresh checkout.
 if (fs.existsSync(path.join(root, '.cache/reset-preview-before.json'))) {
   const baseline = JSON.parse(read('.cache/reset-preview-before.json'));
-  for (const [file, hash] of Object.entries(baseline)) if (!['App.tsx','package.json','LoginScreen.tsx'].includes(file)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex'), hash, 'existing source preserved: ' + file);
+  for (const [file, hash] of Object.entries(baseline)) if (!['App.tsx','package.json','LoginScreen.tsx'].includes(file)) assert.equal(historicalHash(root, file), hash, 'existing source preserved: ' + file);
   console.log('PASS optional local historical source audit: reset-preview-before.json');
 } else {
   console.log('INFO optional local historical audit unavailable: reset-preview-before.json is absent. Required behavior and requested export checks still run.');

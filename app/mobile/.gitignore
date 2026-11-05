@@ -34,3 +34,18 @@ signing.properties
 .temp/
 tmp/
 temp/
+
+# Local-only mock regression and diagnostic scripts
+/scripts/check-account-created-preview.cjs
+/scripts/check-chat-conversation.cjs
+/scripts/check-chat-home-menu.cjs
+/scripts/check-chat-home-preview.cjs
+/scripts/check-connected-ui-demo.cjs
+/scripts/check-email-preview.cjs
+/scripts/check-forgot-password.cjs
+/scripts/check-password-updated-preview.cjs
+/scripts/check-phone-demo.cjs
+/scripts/check-register.cjs
+/scripts/check-reset-password-preview.cjs
+/scripts/verify-served-recovery.cjs
+/scripts/historical-paths.cjs

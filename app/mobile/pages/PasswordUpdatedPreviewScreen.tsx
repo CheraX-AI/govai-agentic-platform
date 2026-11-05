@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Screen } from './components/Screen';
-import { layout, typography } from './layout';
+import { Screen } from '../components/Screen';
+import { layout, typography } from '../layout';
 import { loginAssets } from './LoginScreen';
 import { registerAssets } from './RegisterScreen';
 
-const shieldCheck = require('./assets/figma/password-updated/shield-check.png');
+const shieldCheck = require('../assets/figma/password-updated/shield-check.png');
 
 export function PasswordUpdatedPreviewScreen({ onLogin }: { onLogin: () => void }) {
   if (!__DEV__ || process.env.EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW !== '1') return null;

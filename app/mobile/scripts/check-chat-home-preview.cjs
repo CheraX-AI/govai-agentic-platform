@@ -9,10 +9,10 @@ const keys = ['EXPO_PUBLIC_CHAT_HOME_PREVIEW','EXPO_PUBLIC_ACCOUNT_CREATED_PREVI
 const saved = keys.map(k => process.env[k]), savedDev = global.__DEV__;
 const flat = s => Object.assign({}, ...[s].flat(Infinity).filter(Boolean));
 const read = f => fs.readFileSync(path.join(root,f),'utf8');
-const source = read('ChatHomePreviewScreen.tsx') + read('components/ChatHomeContent.tsx');
+const source = read('pages/ChatHomePreviewScreen.tsx') + read('components/ChatHomeContent.tsx');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|Linking)\b/.test(source));
 assert(!/allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines|maxLength/.test(source));
-assert(!/CHAT_HOME_PREVIEW/.test(read('LoginScreen.tsx')),'Login cannot open standalone preview');
+assert(!/CHAT_HOME_PREVIEW/.test(read('pages/LoginScreen.tsx')),'Login cannot open standalone preview');
 assert(!/Rathishan/.test(source),'no invented display name');
 function flags(dev, value) { global.__DEV__=dev;keys.forEach(k=>process.env[k]='0');if(value===undefined)delete process.env[keys[0]];else process.env[keys[0]]=value; }
 function expand(t) {
@@ -33,7 +33,7 @@ function fixture(width=400,height=772,fontScale=1,{fontError=false,assetError=fa
   for(const name of ['back','new-chat','avatar','status','id-card','arrow','globe','profile-bell'])overrides[`./assets/figma/chat-conversation/${name}.png`]='file:///'+path.join(root,'assets/figma/chat-conversation',name+'.png').replaceAll('\\','/');
   overrides['expo-font']={useFonts:()=>fontError?[false,Error('font')]:[true,null]};
   const load=loader(rt,env,overrides);
-  const component=sourceOnly ? ()=>load('components/OfficialSourceReference.tsx').OfficialSourceReference({icon:1}) : mode==='shared' ? props=>load('components/ChatHomeContent.tsx').ChatHomeContent({...props,mode:'standalone',authenticatedDisplayName:displayName}) : load('ChatHomePreviewScreen.tsx')[mode==='demo'?'ChatHomeDemoScreen':'ChatHomePreviewScreen'];
+  const component=sourceOnly ? ()=>load('components/OfficialSourceReference.tsx').OfficialSourceReference({icon:1}) : mode==='shared' ? props=>load('components/ChatHomeContent.tsx').ChatHomeContent({...props,mode:'standalone',authenticatedDisplayName:displayName}) : load('pages/ChatHomePreviewScreen.tsx')[mode==='demo'?'ChatHomeDemoScreen':'ChatHomePreviewScreen'];
   const controls=new Map();
   let tree, exits=0, clears=0, viewportHeight=height-48, composerY=height-150;
   const scrolls=[];
@@ -58,8 +58,8 @@ function fixture(width=400,height=772,fontScale=1,{fontError=false,assetError=fa
 }
 function app() {
   const rt=runtime(),env=environment(),overrides={};
-  for(const [name,asset] of [['WelcomeScreen','welcomeAssets'],['LoginScreen','loginAssets'],['RegisterScreen','registerAssets'],['ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','payAssets']])overrides['./'+name]={[name]:name,[asset]:{hero:1}};
-  for(const name of ['AccountCreatedPreviewScreen','CheckEmailPreviewScreen','ResetPasswordPreviewScreen','PasswordUpdatedPreviewScreen','ChatHomePreviewScreen'])overrides['./'+name]={[name]:name};
+  for(const [name,asset] of [['WelcomeScreen','welcomeAssets'],['LoginScreen','loginAssets'],['RegisterScreen','registerAssets'],['ForgotPasswordScreen','forgotPasswordAssets'],['OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','payAssets']])overrides['./pages/'+name]={[name]:name,[asset]:{hero:1}};
+  for(const name of ['AccountCreatedPreviewScreen','CheckEmailPreviewScreen','ResetPasswordPreviewScreen','PasswordUpdatedPreviewScreen','ChatHomePreviewScreen'])overrides['./pages/'+name]={[name]:name};
   const {Startup}=loader(rt,env,overrides)('App.tsx');
   const draw=()=>{const t=rt.render(()=>Startup());rt.effects();return t;};
   let tree=draw();assert.notEqual(tree.type,'ChatHomePreviewScreen');nodes(tree,'Image').forEach(n=>n.props.onLoad?.());tree=draw();

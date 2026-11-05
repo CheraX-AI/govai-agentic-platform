@@ -2,7 +2,7 @@
 
 Figma: https://www.figma.com/design/IuwQ09eZ1P5ctrc1vkVgEz/GovAI?node-id=398-1962
 
-Inspected/downloaded October 26, 2026. Original Register SVGs are retained unchanged. No temporary Figma URL is used at runtime. `scripts/check-register.cjs` records their SHA-256 hashes and verifies all source assets and reused backgrounds.
+Inspected/downloaded October 26, 2026. Original Register SVGs are retained unchanged. No temporary Figma URL is used at runtime. SHA-256 hashes and reused backgrounds were verified by an optional local mock regression script; that script is excluded from Git.
 
 | Original export | Local file | Native slot |
 | --- | --- | --- |

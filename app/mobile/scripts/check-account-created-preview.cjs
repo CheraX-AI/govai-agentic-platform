@@ -24,7 +24,7 @@ function loader(rt,env,overrides={}){const cache={};return function load(file){i
  const native=new Proxy({StyleSheet:{create:s=>s,absoluteFill:{}},useWindowDimensions:()=>env.dimensions,
  Keyboard:{isVisible:()=>false,dismiss(){}},BackHandler:{addEventListener:(_name,fn)=>{env.back=fn;return{remove(){env.back=undefined;}};}}},{get:(o,k)=>o[k]??k});
  new Function('require','module','exports','__DEV__','process',output)(name=>{
-  if(name in overrides){if(name==='./AccountCreatedPreviewScreen')env.previewImports++;return overrides[name];}
+  if(name in overrides){if(name==='./pages/AccountCreatedPreviewScreen')env.previewImports++;return overrides[name];}
   if(name==='react')return rt.react;if(name==='react/jsx-runtime')return{jsx,jsxs:jsx};if(name==='react-native')return native;
   if(name==='expo-font')return{useFonts:()=>[true,null]};if(name==='expo-status-bar')return{StatusBar:'StatusBar'};
   if(name.startsWith('@expo-google-fonts/'))return{};
@@ -34,15 +34,15 @@ function loader(rt,env,overrides={}){const cache={};return function load(file){i
   throw Error('Unexpected dependency '+name);
  },module,module.exports,env.dev,{env:{EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW:env.flag}});return cache[file]=module.exports;
 };}
-const previewSource=read('AccountCreatedPreviewScreen.tsx') + read('components/AccountCreatedContent.tsx');
+const previewSource=read('pages/AccountCreatedPreviewScreen.tsx') + read('components/AccountCreatedContent.tsx');
 assert(!/\b(fetch|XMLHttpRequest|axios|AsyncStorage|SecureStore|localStorage|console)\b/.test(previewSource));
 assert(!/allowFontScaling=\{false\}|maxFontSizeMultiplier|numberOfLines/.test(previewSource));
-assert(!/AccountCreated|ACCOUNT_CREATED_PREVIEW/.test(read('RegisterScreen.tsx')),'Register has no preview entry');
+assert(!/AccountCreated|ACCOUNT_CREATED_PREVIEW/.test(read('pages/RegisterScreen.tsx')),'Register has no preview entry');
 const overrides={};for(const[file,name,assets]of[
  ['WelcomeScreen','WelcomeScreen','welcomeAssets'],['LoginScreen','LoginScreen','loginAssets'],['RegisterScreen','RegisterScreen','registerAssets'],
  ['OnboardingMeetScreen','OnboardingMeetScreen','onboardingAssets'],['OnboardingDiscoverScreen','OnboardingDiscoverScreen','discoverAssets'],['OnboardingAskScreen','OnboardingAskScreen','askAssets'],['OnboardingTrackScreen','OnboardingTrackScreen','trackAssets'],['OnboardingPayScreen','OnboardingPayScreen','payAssets'],
-])overrides['./'+file]={[name]:name,[assets]:{hero:1}};
-overrides['./AccountCreatedPreviewScreen']={AccountCreatedPreviewScreen:'AccountCreatedPreviewScreen'};
+])overrides['./pages/'+file]={[name]:name,[assets]:{hero:1}};
+overrides['./pages/AccountCreatedPreviewScreen']={AccountCreatedPreviewScreen:'AccountCreatedPreviewScreen'};
 let guardCases=0;
 for(const dev of[false,true])for(const flag of[undefined,'0','1','true']){
  const rt=runtime(),env={dev,flag,dimensions:{width:400,height:772,fontScale:1},previewImports:0};
@@ -51,7 +51,7 @@ for(const dev of[false,true])for(const flag of[undefined,'0','1','true']){
  const enabled=dev&&flag==='1';assert.equal(tree.type,enabled?'AccountCreatedPreviewScreen':'WelcomeScreen');assert.equal(env.previewImports,enabled?1:0,'no production preview require');
  if(enabled){assert(env.back());tree=draw();assert.equal(tree.type,'WelcomeScreen','Android Back exits to Welcome');}
  tree.props.onLogin();tree=draw();tree.props.onSignUp();tree=draw();assert.equal(tree.type,'RegisterScreen','normal navigation preserved');tree.props.onLogin();tree=draw();assert.equal(tree.type,'LoginScreen','Register return never opens preview');rt.unmount();
- const direct=runtime(),component=loader(direct,env,overrides)('AccountCreatedPreviewScreen.tsx');
+ const direct=runtime(),component=loader(direct,env,overrides)('pages/AccountCreatedPreviewScreen.tsx');
  const directTree=direct.render(()=>presentation(component.AccountCreatedPreviewScreen({onExit(){}})));assert.equal(directTree===null,!enabled,'direct-mount defence');guardCases++;
 }
 // Separate on-screen exit test, since Back already closed the first instance.
@@ -62,7 +62,7 @@ for(const dev of[false,true])for(const flag of[undefined,'0','1','true']){
 let layouts=0;
 for(const[width,height]of[[320,568],[360,640],[360,800],[412,915],[600,960],[400,772]])for(const fontScale of[1,2,3]){
  const rt=runtime(),env={dev:true,flag:'1',dimensions:{width,height,fontScale},previewImports:0};
- const{AccountCreatedPreviewScreen}=loader(rt,env,overrides)('AccountCreatedPreviewScreen.tsx');let exits=0;const draw=()=>rt.render(()=>presentation(AccountCreatedPreviewScreen({onExit(){exits++;}})));let tree=draw();
+ const{AccountCreatedPreviewScreen}=loader(rt,env,overrides)('pages/AccountCreatedPreviewScreen.tsx');let exits=0;const draw=()=>rt.render(()=>presentation(AccountCreatedPreviewScreen({onExit(){exits++;}})));let tree=draw();
  function measure(){
   nodes(tree,'View').find(n=>n.props.onLayout&&flat(n.props.style).flex===1).props.onLayout({nativeEvent:{layout:{width:Math.min(480,width-32),height:height-80}}});
   nodes(tree,'View').find(n=>n.props.onLayout&&flat(n.props.style).borderColor==='#f5a915').props.onLayout({nativeEvent:{layout:{height:72*fontScale*fontScale}}});
