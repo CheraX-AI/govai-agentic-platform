@@ -1,15 +1,14 @@
 import { Brand } from '../Brand'
 import { Icon } from '../Icon'
-import { demoUser } from '../../data/demoUser'
 import { useEffect, useRef, useState } from 'react'
 
-export function ApplicationHeader({ onOpenMenu, onDemoLogout }: { onOpenMenu: () => void; onDemoLogout?: () => void }) {
+export function ApplicationHeader({ onOpenMenu, onLogout }: { onOpenMenu: () => void; onLogout: () => void }) {
   const [accountOpen, setAccountOpen] = useState(false)
   const account = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!accountOpen) return
-    account.current?.querySelector<HTMLElement>('.account-actions button:not(:disabled), .account-actions a')?.focus()
+    account.current?.querySelector<HTMLElement>('.account-actions button:not(:disabled)')?.focus()
     function dismiss(event: PointerEvent) {
       if (!account.current?.contains(event.target as Node)) setAccountOpen(false)
     }
@@ -28,11 +27,10 @@ export function ApplicationHeader({ onOpenMenu, onDemoLogout }: { onOpenMenu: ()
       <button className="notification-preview" disabled aria-label="Notifications unavailable"><Icon collection="shell" name="notifications" /></button>
       <span className="brand-divider" />
       <div className="account-disclosure" ref={account} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAccountOpen(false) }}>
-        <button ref={trigger} type="button" className="synthetic-user" aria-label={onDemoLogout ? 'Signed-in account actions' : `${onDemoLogout ? 'GovAI user' : demoUser.displayName} demo account actions; no real signed-in account`} aria-expanded={accountOpen} aria-controls="account-actions" onClick={() => setAccountOpen(previous => !previous)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setAccountOpen(true) } }}><span className="user-avatar">{onDemoLogout ? 'G' : demoUser.initials}</span><span><strong>{onDemoLogout ? 'GovAI user' : demoUser.displayName}</strong><small>{onDemoLogout ? 'Signed in' : 'Preview user'}</small></span><Icon collection="shell" name="user-chevron" /></button>
-        {accountOpen && <div id="account-actions" className="account-actions" role="region" aria-label="Demo account actions">
-          <p>{onDemoLogout ? 'Signed in securely.' : 'Static preview - no session required.'}</p>
-          <button type="button" disabled={!onDemoLogout} onClick={() => { setAccountOpen(false); onDemoLogout?.() }}>Log out</button>
-          {!onDemoLogout && <a href="#/login">Go to login</a>}
+        <button ref={trigger} type="button" className="account-button" aria-label="Signed-in account actions" aria-expanded={accountOpen} aria-controls="account-actions" onClick={() => setAccountOpen(previous => !previous)} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setAccountOpen(true) } }}><span className="user-avatar">G</span><span><strong>GovAI user</strong><small>Signed in</small></span><Icon collection="shell" name="user-chevron" /></button>
+        {accountOpen && <div id="account-actions" className="account-actions" role="region" aria-label="Account actions">
+          <p>Signed in securely.</p>
+          <button type="button" onClick={() => { setAccountOpen(false); onLogout() }}>Log out</button>
         </div>}
       </div>
     </div>

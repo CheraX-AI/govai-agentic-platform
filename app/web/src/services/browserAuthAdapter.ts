@@ -59,5 +59,4 @@ export const browserAuthAdapter: AuthenticationAdapter = {
     try { await request('logout', 'POST', undefined, await csrfToken()) }
     catch (error) { if (error instanceof WebAuthError && (error.status === 401 || error.code === 'provider_revocation_pending')) return; throw error }
   }),
-  async createMockSession() { throw new Error('Demo authentication is disabled.') },
 }

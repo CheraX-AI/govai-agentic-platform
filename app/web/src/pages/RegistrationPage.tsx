@@ -81,8 +81,8 @@ export default function RegistrationPage() {
     </div>
     <Button type="submit" pending={pending}>{pending ? 'Creating account...' : 'Create account'}{!pending && <Icon name="login-arrow-right" />}</Button>
     {status === 'pending' && <StatusMessage kind="pending">Submitting your registration...</StatusMessage>}
-    {status === 'success' && <><StatusMessage kind="success">Request received. If registration can proceed, check your email for the next step. Verify your email before logging in.</StatusMessage>{import.meta.env.DEV && <p className="create-account"><a href="http://localhost:8025" target="_blank" rel="noopener noreferrer">Open verification inbox (local Mailpit)</a></p>}<a className="primary-button registration-login-action" href="#/login">Go to login</a></>}
+    {status === 'success' && <><StatusMessage kind="success">Request received. If registration can proceed, check your email for the next step. Verify your email before logging in.</StatusMessage>{import.meta.env.DEV && <p className="create-account"><a href="http://localhost:8025" target="_blank" rel="noopener noreferrer">Open verification inbox (local Mailpit)</a></p>}<a className="primary-button registration-login-action" href="/login">Go to login</a></>}
     {status === 'error' && <StatusMessage kind="error">{failure}</StatusMessage>}
-    <p className="create-account">Already have an account? <a href="#/login">Back to login</a></p>
+    <p className="create-account">Already have an account? <a href="/login">Back to login</a></p>
   </AuthLayout>
 }

@@ -48,6 +48,7 @@ export async function resetPassword(token: string, password: string, confirmatio
 export function takeResetLink(target: Pick<Location, 'pathname' | 'hash'> = location, historyPort: Pick<History, 'replaceState'> = history): { token: string | null } | null {
   if (!target.hash.startsWith('#token=')) return null
   const token = target.hash.slice(7)
-  historyPort.replaceState(null, '', target.pathname + '#/reset-password')
+  // Drop the token from the address bar and history as soon as it is read
+  historyPort.replaceState(null, '', target.pathname)
   return { token: target.pathname === '/reset-password' && /^[A-Za-z0-9_-]{43}$/.test(token) ? token : null }
 }

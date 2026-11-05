@@ -1,4 +1,7 @@
-export type ChatReply = { answer: string; sources: { title: string; url: string }[] }
+// A document cited in the answer: number matches the [n] marker in the answer text.
+// page and url are optional (the documents have no public address yet).
+export type ChatSource = { number: number; title: string; page?: number; url?: string }
+export type ChatReply = { answer: string; sources: ChatSource[] }
 export class ChatError extends Error {
  status: number
  constructor(status: number, message: string) { super(message); this.status = status }
@@ -26,11 +29,21 @@ export async function sendChat(message: string, signal: AbortSignal): Promise<Ch
  }
  const reply = await response.json().catch(()=>null)
  if(typeof reply?.answer !== 'string' || !reply.answer.trim() || new TextEncoder().encode(reply.answer).length > 32768 || !Array.isArray(reply.sources) || reply.sources.length > 20) throw new ChatError(502,'Unable to retrieve a valid answer.')
+ const numbers = new Set<number>()
+ const sources: ChatSource[] = []
  for(const source of reply.sources) {
-  if(typeof source?.title !== 'string' || !source.title.trim() || source.title.length>512 || typeof source.url !== 'string' || source.url.length>2048 || /[\s]/.test(source.url)) throw new ChatError(502,'Unable to retrieve valid sources.')
-  let url: URL
-  try {url=new URL(source.url)} catch {throw new ChatError(502,'Unable to retrieve valid sources.')}
-  if(url.protocol!=='https:'||url.username||url.password)throw new ChatError(502,'Unable to retrieve valid sources.')
+  const invalid = () => new ChatError(502,'Unable to retrieve valid sources.')
+  if(!source || typeof source !== 'object' || !Number.isInteger(source.number) || source.number<1 || source.number>100 || numbers.has(source.number)) throw invalid()
+  if(typeof source.title !== 'string' || !source.title.trim() || source.title.length>512) throw invalid()
+  if(source.page !== undefined && (!Number.isInteger(source.page) || source.page<1 || source.page>100000)) throw invalid()
+  if(source.url !== undefined) {
+   if(typeof source.url !== 'string' || source.url.length>2048 || /[\s]/.test(source.url)) throw invalid()
+   let url: URL
+   try {url=new URL(source.url)} catch {throw invalid()}
+   if(url.protocol!=='https:'||url.username||url.password) throw invalid()
+  }
+  numbers.add(source.number)
+  sources.push({number:source.number,title:source.title,...(source.page!==undefined?{page:source.page}:{}),...(source.url!==undefined?{url:source.url}:{})})
  }
- return {answer:reply.answer,sources:reply.sources.map((s: {title: string;url: string})=>({title:s.title,url:s.url}))}
+ return {answer:reply.answer,sources}
 }

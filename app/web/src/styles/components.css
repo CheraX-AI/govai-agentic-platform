@@ -9,10 +9,11 @@
 .input-group { display: flex; flex-direction: column; gap: 6px; }
 .input-group > label { font-size: 13px; font-weight: 500; }
 .input-shell { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 2px 14px; min-height: 46px; box-shadow: 0 1px 4px #0000000a; }
-.input-shell:focus-within { border-color: #2166b1; }
+.input-shell:focus-within { border-color: #2166b1; box-shadow: 0 0 0 3px #2166b133; }
 .input-shell.invalid { border-color: var(--brand); }
 .input-shell input { width: 100%; min-width: 0; padding: 12px 0; border: 0; background: transparent; color: inherit; font-size: 14px; }
-.input-shell input:focus-visible { outline-offset: 0; }
+/* The whole field box shows focus (above), so the input inside needs no second ring */
+.input-shell input:focus-visible { outline: none; }
 .icon-button { display: flex; align-items: center; justify-content: center; min-width: 36px; min-height: 40px; border: 0; background: transparent; border-radius: 8px; }
 .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.5; }
 .checkbox-label input { accent-color: var(--brand); width: 22px; height: 22px; flex-shrink: 0; margin: 0; }

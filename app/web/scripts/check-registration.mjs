@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { validateRegistration } from '../src/validation/registrationValidation.ts'
-import { submitMockRegistration } from '../src/services/mockRegistrationService.ts'
 
 const valid = { fullName: 'හර්ෂන් தமிழ் 漢字', nic: ' 123456789x ', phone: '+94 77 123 4567', email: ' demo@example.com ', password: 'abcdef1😀', confirmation: 'abcdef1😀', terms: true }
 const check = value => validateRegistration({ ...valid, password: value, confirmation: value }).password
@@ -12,9 +11,7 @@ for (const [key,value] of [['nic','bad'],['phone','07123'],['email','123456789V'
 assert.ok(validateRegistration({...valid,password:' abcdef1!',confirmation:'abcdef1!'}).confirmation)
 assert.equal(valid.password,'abcdef1😀')
 globalThis.window = { setTimeout }
-assert.equal(await submitMockRegistration('success'),'success')
-assert.equal(await submitMockRegistration('error'),'error')
-console.log('PASS: required fields/consent, Unicode names/code-point boundaries, backend password length bounds, exact matching, reused NIC/phone/email rules, no truncation, mock outcomes')
+console.log('PASS: required fields/consent, Unicode names/code-point boundaries, backend password length bounds, exact matching, reused NIC/phone/email rules, no truncation')
 
 const { registerCitizen } = await import('../src/services/registrationApi.ts')
 const payload = { full_name: 'Synthetic Test', nic: '123456789V', mobile_number: '+447911123456', email: 'test@example.test', password: 'abcdefgh' }
