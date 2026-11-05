@@ -164,6 +164,15 @@ func run() error {
 		defer closeWeb()
 		slog.Info("web session routes enabled with HTTPS")
 	}
+	chatCfg, err := config.LoadWebChat(webCfg.Enabled)
+	if err != nil {
+		return err
+	}
+	closeChat, err := application.WebChat(chatCfg, webHandler)
+	if err != nil {
+		return err
+	}
+	defer closeChat()
 	var recoveryHandler *handler.RecoveryHandler
 	if recoveryCfg.Enabled {
 		var closeRecovery func()

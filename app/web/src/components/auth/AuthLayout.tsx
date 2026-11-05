@@ -4,6 +4,7 @@ import { Icon } from '../Icon'
 import '../../styles/login.css'
 
 type AuthLayoutProps = {
+  banner?: string
   headingId: string
   wide?: boolean
   formProps: ComponentPropsWithRef<'form'>
@@ -12,12 +13,12 @@ type AuthLayoutProps = {
 }
 
 // Shared authentication chrome; each page retains its own form state and handlers.
-export function AuthLayout({ headingId, wide = false, formProps, footerControls, children }: AuthLayoutProps) {
+export function AuthLayout({ banner = 'Demo - backend unavailable. Use sample details only.', headingId, wide = false, formProps, footerControls, children }: AuthLayoutProps) {
   return <main className={wide ? 'login-layout auth-layout-wide' : 'login-layout'}>
     <section className="form-panel" aria-labelledby={headingId}>
       <header className="top-bar"><Brand /><span className="language"><Icon name="globe" />English</span></header>
       <div className={wide ? 'login-content auth-content-wide' : 'login-content'}>
-        <div className="demo-banner">Demo - backend unavailable. Use sample details only.</div>
+        <div className="demo-banner">{banner}</div>
         <form {...formProps} className="login-card">{children}</form>
       </div>
       <footer><span>University project preview · English only</span>{footerControls}</footer>

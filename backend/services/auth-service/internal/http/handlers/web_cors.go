@@ -6,6 +6,9 @@ import (
 )
 
 func (h *WebSessionHandler) isPath(path string) bool {
+	if path == "/api/v1/web/chat" {
+		return h.chat != nil
+	}
 	switch path {
 	case "/api/v1/web/login", "/api/v1/web/session", "/api/v1/web/csrf", "/api/v1/web/refresh", "/api/v1/web/logout":
 		return true

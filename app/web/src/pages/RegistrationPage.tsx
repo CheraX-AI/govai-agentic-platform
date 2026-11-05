@@ -9,8 +9,8 @@ import { Icon } from '../components/Icon'
 import { StatusMessage } from '../components/StatusMessage'
 import { validateRegistration } from '../validation/registrationValidation'
 import type { RegistrationValues } from '../validation/registrationValidation'
-import { submitMockRegistration } from '../services/mockRegistrationService'
-import type { MockOutcome } from '../services/mockLoginService'
+import { registerCitizen } from '../services/registrationApi'
+import { normalizeRegistrationPhone } from '../validation/registrationValidation'
 import '../styles/registration.css'
 
 const emptyValues: RegistrationValues = { fullName: '', nic: '', phone: '', email: '', password: '', confirmation: '', terms: false }
@@ -19,8 +19,9 @@ type Field = keyof RegistrationValues
 export default function RegistrationPage() {
   const [values, setValues] = useState(emptyValues)
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
-  const [status, setStatus] = useState<'idle' | 'pending' | MockOutcome>('idle')
-  const [outcome, setOutcome] = useState<MockOutcome>('success')
+  const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
+  const [failure, setFailure] = useState('')
+  const operation = useRef<string | null>(null)
   const form = useRef<HTMLFormElement>(null)
   const submitting = useRef(false)
   const mounted = useRef(false)
@@ -29,6 +30,7 @@ export default function RegistrationPage() {
   const pending = status === 'pending'
   const error = (field: Field) => touched[field] ? errors[field] : undefined
   function change<K extends Field>(field: K, value: RegistrationValues[K]) {
+    operation.current = null
     setValues(previous => ({ ...previous, [field]: value }))
     setStatus('idle')
   }
@@ -44,10 +46,11 @@ export default function RegistrationPage() {
     submitting.current = true
     setStatus('pending')
     try {
-      const result = await submitMockRegistration(outcome)
-      if (mounted.current) setStatus(result)
-    } catch {
-      if (mounted.current) setStatus('error')
+      operation.current ??= crypto.randomUUID()
+      await registerCitizen({ full_name: values.fullName.trim(), nic: values.nic.trim().toUpperCase(), mobile_number: normalizeRegistrationPhone(values.phone)!, email: values.email.trim(), password: values.password }, operation.current)
+      if (mounted.current) setStatus('success')
+    } catch (error) {
+      if (mounted.current) { setFailure(error instanceof Error ? error.message : 'Registration is temporarily unavailable.'); setStatus('error') }
     } finally {
       if (mounted.current) {
         setValues(previous => ({ ...previous, password: '', confirmation: '' }))
@@ -58,12 +61,8 @@ export default function RegistrationPage() {
   }
 
   return <AuthLayout headingId="registration-heading" wide formProps={{ ref: form, onSubmit: submit, noValidate: true }}
-    footerControls={<details className="demo-options registration-demo-details"><summary>Demo information and controls</summary>
-      <p>This is a local interface demonstration. No account is created, no SMS or email is sent, and no session is established.</p>
-      <p>The demo password policy counts Unicode code points and requires an ASCII digit plus a Unicode punctuation or symbol character. Whitespace is not a symbol. Passwords are not trimmed or truncated. This policy must be aligned with the real authentication system.</p>
-      <p>Legal content is unavailable. The required demo-only checkbox records no legal agreement.</p>
-      <label htmlFor="register-outcome">Simulated result</label><select id="register-outcome" value={outcome} disabled={pending} onChange={event => { setOutcome(event.target.value === 'error' ? 'error' : 'success'); setStatus('idle') }}><option value="success">Success</option><option value="error">Error</option></select>
-    </details>}>
+    banner="University prototype. Use test details only."
+    footerControls={<p>Registration uses the GovAI backend. Email verification is required. Login integration remains pending.</p>}>
     <div className="heading"><h1 id="registration-heading">Create your account</h1><p>Enter the details exactly as they appear on your NIC.</p></div>
     <InputField id="register-fullName" label="Full name (as on NIC)" icon="register-user" autoComplete="name" required value={values.fullName} disabled={pending} error={error('fullName')} onChange={event => change('fullName', event.target.value)} onBlur={() => blur('fullName')} />
     <div className="registration-row">
@@ -75,15 +74,15 @@ export default function RegistrationPage() {
       <PasswordField id="register-password" autoComplete="new-password" aria-describedby="registration-password-policy" required value={values.password} disabled={pending} error={error('password')} onChange={event => change('password', event.target.value)} onBlur={() => blur('password')} />
       <PasswordField id="register-confirmation" label="Confirm password" autoComplete="new-password" required value={values.confirmation} disabled={pending} error={error('confirmation')} onChange={event => change('confirmation', event.target.value)} onBlur={() => blur('confirmation')} />
     </div>
-    <p id="registration-password-policy" className="registration-policy"><img src="/assets/figma/login/register-info.svg" alt="" />8+ code points, 0-9, and punctuation/symbol (not whitespace).</p>
+    <p id="registration-password-policy" className="registration-policy"><img src="/assets/figma/login/register-info.svg" alt="" />At least 8 characters. Passwords must match exactly.</p>
     <div><Checkbox id="register-terms" required checked={values.terms} disabled={pending} aria-invalid={error('terms') ? true : undefined} aria-describedby={error('terms') ? 'registration-legal register-terms-error' : 'registration-legal'} onChange={event => change('terms', event.target.checked)}>I agree (demo only).</Checkbox>
       <p id="registration-legal" className="registration-legal">Terms of use and Privacy notice unavailable.</p>
       {error('terms') && <p id="register-terms-error" className="field-error">{error('terms')}</p>}
     </div>
-    <Button type="submit" pending={pending}>{pending ? 'Simulating registration...' : 'Create account'}{!pending && <Icon name="login-arrow-right" />}</Button>
-    {status === 'pending' && <StatusMessage kind="pending">Simulating registration only...</StatusMessage>}
-    {status === 'success' && <><StatusMessage kind="success">Demo registration successful. No account was created.</StatusMessage><a className="primary-button registration-login-action" href="#/login">Go to login</a></>}
-    {status === 'error' && <StatusMessage kind="error">Demo registration failed. Please try again. No account was created.</StatusMessage>}
+    <Button type="submit" pending={pending}>{pending ? 'Creating account...' : 'Create account'}{!pending && <Icon name="login-arrow-right" />}</Button>
+    {status === 'pending' && <StatusMessage kind="pending">Submitting your registration...</StatusMessage>}
+    {status === 'success' && <><StatusMessage kind="success">Request received. If registration can proceed, check your email for the next step. Verify your email before logging in.</StatusMessage>{import.meta.env.DEV && <p className="create-account"><a href="http://localhost:8025" target="_blank" rel="noopener noreferrer">Open verification inbox (local Mailpit)</a></p>}<a className="primary-button registration-login-action" href="#/login">Go to login</a></>}
+    {status === 'error' && <StatusMessage kind="error">{failure}</StatusMessage>}
     <p className="create-account">Already have an account? <a href="#/login">Back to login</a></p>
   </AuthLayout>
 }
