@@ -3,13 +3,16 @@ import { conversationAssets, type ChatMessage as Message } from '../chatDemo';
 import { layout } from '../layout';
 import { OfficialSourceReference } from './OfficialSourceReference';
 export function CitizenMessage({ message }: { message: Message }) {
-  return <View style={styles.citizen}><View style={styles.bubble}><Text style={styles.citizenText}>{message.text}</Text></View><Text style={styles.caption}>Local demo</Text></View>;
+  return <View style={styles.citizen}><View style={styles.bubble}><Text style={styles.citizenText}>{message.text}</Text></View><Text style={styles.caption}>{message.live ? 'You' : 'Local demo'}</Text></View>;
 }
 export function AiResponse({ message }: { message: Message }) {
   return <View style={styles.answer}>
     <View style={styles.from}><View style={styles.avatar}><Image source={conversationAssets.avatar} accessible={false} resizeMode="stretch" style={styles.avatarImage} /></View>
-      <Text style={styles.name}>GovAI</Text><Text style={styles.caption}>Local demo · Mock response</Text></View>
+      <Text style={styles.name}>GovAI</Text><Text style={styles.caption}>{message.live ? 'AI response' : 'Local demo \u00b7 Mock response'}</Text></View>
     <Text style={styles.body}>{message.text}</Text>
+    {message.sources?.map(source => <Text key={source.number} style={styles.caption} selectable>
+      {`[${source.number}] ${source.title}${source.page ? ` - Page ${source.page}` : ''}${source.url ? `\n${source.url}` : ''}`}
+    </Text>)}
     {message.nicSample && <>
       <View>{[1,2,3,4,5].map(number => <View key={number} style={styles.step}>
         <View style={styles.rail}><View style={styles.number}><Text style={styles.numberText}>{number}</Text></View>{number < 5 && <View style={styles.line} />}</View>

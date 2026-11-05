@@ -1,4 +1,5 @@
-export type ChatMessage = { id: number; role: 'citizen' | 'ai'; text: string; nicSample?: boolean };
+import type { ChatSource } from './services/chatApi';
+export type ChatMessage = { id: number; role: 'citizen' | 'ai'; text: string; nicSample?: boolean; live?: boolean; sources?: ChatSource[] };
 export type LocalThread = { id: number; title: string; messages: ChatMessage[] };
 export const conversationAssets = {
   back: require('./assets/figma/chat-conversation/back.png'),

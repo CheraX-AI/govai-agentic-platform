@@ -17,15 +17,19 @@ export const loginAssets = {
 type Viewport = { width: number; height: number };
 const sameViewport = (a: Viewport, b: Viewport) => Math.abs(a.width - b.width) < 0.5 && Math.abs(a.height - b.height) < 0.5;
 
-export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidated }: { onBack: () => void; onSignUp: () => void; onForgotPassword: () => void; onDemoValidated?: () => void }) {
+export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidated, onAuthenticate, sessionNotice }: { onBack: () => void; onSignUp: () => void; onForgotPassword: () => void; onDemoValidated?: () => void; onAuthenticate?: (identifier: string, password: string) => Promise<void>; sessionNotice?: string }) {
   const transitioning = useRef(false);
   const demo = __DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1' && !!onDemoValidated;
-  const initialNotice = demo ? 'UI demo only. Credentials are not verified; valid fields open Chat Home.' : 'Sign-in is not connected yet.';
+  const initialNotice = onAuthenticate ? 'Log in securely with your email or NIC.' : demo ? 'UI demo only. Credentials are not verified; valid fields open Chat Home.' : 'Sign-in is not connected yet.';
   // Credentials stay only in this mounted form, never in app navigation/state storage.
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [pending, setPending] = useState(false);
+  const loginAttempt = useRef(false);
+  const loginMounted = useRef(false);
+  useEffect(() => { loginMounted.current = true; return () => { loginMounted.current = false; }; }, []);
   const [notice, setNotice] = useState(initialNotice);
   const [keyboardOverlap, setKeyboardOverlap] = useState(0);
   const [closedViewport, setClosedViewport] = useState({ width: 0, height: 0 });
@@ -56,7 +60,7 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidate
   const logoHeight = Math.min(198, Math.max(112, closedViewport.height - headerHeight - formHeight - 35));
   const logoWidth = logoHeight * 196 / 198;
   const identifierError = submitted && !identifier.trim();
-  const passwordError = submitted && !password.trim();
+  const passwordError = submitted && !password;
 
   function clearTransitionTimeout() {
     if (transitionTimeout.current !== null) clearTimeout(transitionTimeout.current);
@@ -177,12 +181,14 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidate
   useEffect(() => { scheduleVisibilityCheck(); }, [identifierError, passwordError]);
 
   function leave() {
+    if (loginAttempt.current) return;
     transitioning.current = true;
     identifierInput.current?.clear(); passwordInput.current?.clear();
     setIdentifier(''); setPassword(''); setVisible(false);
     Keyboard.dismiss(); onBack();
   }
   function openForgotPassword() {
+    if (loginAttempt.current) return;
     transitioning.current = true;
     identifierInput.current?.clear(); passwordInput.current?.clear();
     setIdentifier(''); setPassword(''); setVisible(false); setSubmitted(false);
@@ -220,11 +226,18 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidate
       scheduleViewportCheck();
     }
   }
-  function submit() {
-    if (transitioning.current) return;
+  async function submit() {
+    if (transitioning.current || loginAttempt.current) return;
     setSubmitted(true);
     if (!identifier.trim()) { identifierInput.current?.focus(); return; }
-    if (!password.trim()) { passwordInput.current?.focus(); return; }
+    if (!password) { passwordInput.current?.focus(); return; }
+    if (onAuthenticate) {
+      loginAttempt.current = true; setPending(true); setNotice('Signing in securely...');
+      try { await onAuthenticate(identifier.trim(), password); }
+      catch (error) { if (loginMounted.current) setNotice(error instanceof Error ? error.message : 'Unable to sign in.'); }
+      finally { loginAttempt.current = false; if (loginMounted.current) { passwordInput.current?.clear(); setPassword(''); setVisible(false); setPending(false); } }
+      return;
+    }
     if (__DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1' && onDemoValidated) {
       transitioning.current = true;
       identifierInput.current?.clear(); passwordInput.current?.clear();
@@ -274,11 +287,11 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidate
             <Text accessibilityRole="header" style={[typography.heading, styles.heading]}>{"Welcome Back"}</Text>
             <Text style={[typography.body, styles.subtitle]}>{"Log in to continue to GovAI"}</Text>
             </View>
-            <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
+            <Text accessibilityLiveRegion="polite" style={styles.notice}>{sessionNotice || notice}</Text>
             <View ref={identifierGroup} onLayout={scheduleVisibilityCheck} style={styles.identifierGroup}>
               <View style={[styles.field, identifierError && styles.invalid]}>
                 <Image source={loginAssets.user} accessible={false} style={styles.fieldIcon} />
-                <TextInput ref={identifierInput} value={identifier} onChangeText={setIdentifier} placeholder={"Email or National ID"}
+                <TextInput ref={identifierInput} editable={!pending} value={identifier} onChangeText={setIdentifier} placeholder={"Email or National ID"}
                   placeholderTextColor="#9ca3af" accessibilityLabel={identifierError ? "Email or National ID. Required." : "Email or National ID"}
                   autoCapitalize="none" autoCorrect={false} spellCheck={false} autoComplete="off" importantForAutofill="no"
                   returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => passwordInput.current?.focus()}
@@ -289,7 +302,7 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidate
             <View ref={passwordGroup} onLayout={scheduleVisibilityCheck}>
               <View style={[styles.field, passwordError && styles.invalid]}>
                 <Image source={loginAssets.lock} accessible={false} style={styles.fieldIcon} />
-                <TextInput ref={passwordInput} value={password} onChangeText={setPassword} placeholder={"Password"}
+                <TextInput ref={passwordInput} editable={!pending} value={password} onChangeText={setPassword} placeholder={"Password"}
                   placeholderTextColor="#9ca3af" accessibilityLabel={passwordError ? "Password. Required." : "Password"}
                   secureTextEntry={!visible} autoCapitalize="none" autoCorrect={false} spellCheck={false}
                   autoComplete="off" importantForAutofill="no" returnKeyType="done" onSubmitEditing={submit}
@@ -304,12 +317,12 @@ export function LoginScreen({ onBack, onSignUp, onForgotPassword, onDemoValidate
             <Pressable onPress={openForgotPassword} accessibilityRole="link" accessibilityLabel="Forgot Password?" style={styles.forgot}>
               <Text style={styles.link}>{"Forgot Password?"}</Text>
             </Pressable>
-            <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel={demo ? "Log In. Open Chat Home in UI demo only; credentials are not verified." : "Log In. Sign-in is not connected; checks required fields only."} style={styles.primary}>
-              <Text style={[typography.action, styles.primaryText]}>{"Log In →"}</Text>
+            <Pressable onPress={submit} disabled={pending} accessibilityState={{ busy: pending, disabled: pending }} accessibilityRole="button" accessibilityLabel={onAuthenticate ? "Log in securely" : demo ? "Log In. Open Chat Home in UI demo only; credentials are not verified." : "Log In. Sign-in is not connected; checks required fields only."} style={styles.primary}>
+              <Text style={[typography.action, styles.primaryText]}>{pending ? "Signing in..." : "Log In →"}</Text>
             </Pressable>
             <View style={styles.signup}>
               <Text style={styles.subtitle}>{"Don’t have an account?"}</Text>
-              <Pressable onPress={() => { transitioning.current = true; identifierInput.current?.clear(); passwordInput.current?.clear(); setIdentifier(''); setPassword(''); setVisible(false); Keyboard.dismiss(); onSignUp(); }} accessibilityRole="link" accessibilityLabel="Sign up" style={styles.signupLink}>
+              <Pressable disabled={pending} onPress={() => { transitioning.current = true; identifierInput.current?.clear(); passwordInput.current?.clear(); setIdentifier(''); setPassword(''); setVisible(false); Keyboard.dismiss(); onSignUp(); }} accessibilityRole="link" accessibilityLabel="Sign up" style={styles.signupLink}>
                 <Text style={styles.link}>{"Sign up"}</Text>
               </Pressable>
             </View>

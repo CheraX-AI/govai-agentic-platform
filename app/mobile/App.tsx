@@ -1,3 +1,8 @@
+import { parseResetLink, type RecoveryReceipt } from './services/recoveryApi';
+import { ResetPasswordForm } from './pages/ResetPasswordPreviewScreen';
+import { CheckEmailContent } from './components/CheckEmailContent';
+import { useNativeSession } from './auth/useNativeSession';
+import { ChatHomeContent } from './components/ChatHomeContent';
 import { useFonts } from 'expo-font';
 import { useEffect, useRef, useState } from 'react';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
@@ -16,7 +21,7 @@ import { OnboardingDiscoverScreen, discoverAssets } from './pages/OnboardingDisc
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { StatusBar } from 'expo-status-bar';
-import { BackHandler, Image, Keyboard, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Linking, BackHandler, Image, Keyboard, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const assets = {
@@ -112,6 +117,23 @@ function Startup() {
   }
   const loginVisit = navigation.current.loginVisit;
   const connectedDemo = __DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1';
+  const nativeAuth = useNativeSession(!connectedDemo);
+  const [recoveryReceipt, setRecoveryReceipt] = useState<RecoveryReceipt | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [resetVisit, setResetVisit] = useState(0);
+  useEffect(() => {
+    if (connectedDemo) return;
+    let active = true, eventReceived = false;
+    const accept = (url: string) => { const token = parseResetLink(url, process.env.EXPO_PUBLIC_PASSWORD_RESET_URL); if (active && token) { setResetToken(token); setResetVisit(value => value + 1); setRecoveryReceipt(null); } };
+    const subscription = Linking.addEventListener('url', event => { eventReceived = true; accept(event.url); });
+    void Linking.getInitialURL().then(url => { if (url && !eventReceived) accept(url); }).catch(() => undefined);
+    return () => { active = false; subscription.remove(); };
+  }, [connectedDemo]);
+  useEffect(() => {
+    if (!recoveryReceipt || resetToken) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => { setRecoveryReceipt(null); setScreen('forgot'); return true; });
+    return () => subscription.remove();
+  }, [recoveryReceipt, resetToken]);
   const [loginOrigin, setLoginOrigin] = useState<OriginScreen>('welcome');
   const [accountPreviewOpen, setAccountPreviewOpen] = useState(() =>
     __DEV__ && process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW === '1');
@@ -157,10 +179,12 @@ function Startup() {
       });
       return () => subscription.remove();
     }
-    if (connectedDemo && screen === 'demo-chat') return; // Chat content owns keyboard-first Back.
+    if (resetToken || recoveryReceipt) return;
+    if (nativeAuth.status === 'authenticated' || (connectedDemo && screen === 'demo-chat')) return; // Chat content owns keyboard-first Back.
     if (__DEV__ && chatHomePreviewOpen) return; // Chat preview owns keyboard-first Back and draft clearing.
     if (screen === 'welcome') return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (nativeAuth.status === 'signing-in') return true;
       if (Keyboard.isVisible()) { Keyboard.dismiss(); return true; }
       if (connectedDemo && screen === 'demo-account') { setScreen('login'); return true; }
       if (connectedDemo && (screen === 'demo-email' || screen === 'demo-phone')) { setScreen('forgot'); return true; }
@@ -172,7 +196,7 @@ function Startup() {
       return true;
     });
     return () => subscription.remove();
-  }, [screen, loginOrigin, connectedDemo, accountPreviewOpen, checkEmailPreviewOpen, resetPasswordPreviewOpen, passwordUpdatedPreviewOpen, chatHomePreviewOpen]);
+  }, [resetToken, recoveryReceipt, nativeAuth.status, screen, loginOrigin, connectedDemo, accountPreviewOpen, checkEmailPreviewOpen, resetPasswordPreviewOpen, passwordUpdatedPreviewOpen, chatHomePreviewOpen]);
   const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
     Yaldevi_400Regular: require('./assets/figma/onboarding-ask/fonts/Yaldevi.ttf'),
     NotoSansTamil_400Regular: require('./assets/figma/onboarding-ask/fonts/NotoSansTamil.ttf'),
@@ -181,6 +205,12 @@ function Startup() {
   const [assetError, setAssetError] = useState(false);
   const ready = fontsLoaded && loadedAssets.size === startupAssets.length && !assetError;
   // Replacement, not a pushed route: Android Back cannot revisit loading.
+  if (ready && resetToken) return <ResetPasswordForm key={resetVisit} token={resetToken} onComplete={nativeAuth.logout} onExit={() => { setResetToken(null); setScreen('login'); }} />;
+  if (ready && recoveryReceipt) return <CheckEmailContent mode="live" receipt={recoveryReceipt}
+    onBack={() => { setRecoveryReceipt(null); setScreen('forgot'); }} onDifferentNic={() => { setRecoveryReceipt(null); setScreen('forgot'); }}
+    onLogin={() => { setRecoveryReceipt(null); setScreen('login'); }} />;
+  if (ready && nativeAuth.status === 'checking') return <LoadingScreen fontsLoaded={fontsLoaded} />;
+  if (ready && nativeAuth.status === 'authenticated') return <ChatHomeContent onSendChat={nativeAuth.chat} mode="authenticated" onExit={() => { setScreen('login'); void nativeAuth.logout(); }} />;
   if (__DEV__) {
     if (ready && accountPreviewOpen && process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW === '1') {
       // Keep require inside a standalone development branch so Metro excludes
@@ -239,8 +269,8 @@ function Startup() {
     }
   }
   if (ready && screen === 'register') return <RegisterScreen onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? () => setScreen(current => current === 'register' ? 'demo-account' : current) : undefined} />;
-  if (ready && screen === 'forgot') return <ForgotPasswordScreen onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? (method: 'email' | 'phone' = 'email') => setScreen(current => current === 'forgot' ? (method === 'phone' ? 'demo-phone' : 'demo-email') : current) : undefined} />;
-  if (ready && screen === 'login') return <LoginScreen onDemoValidated={connectedDemo ? () => {
+  if (ready && screen === 'forgot') return <ForgotPasswordScreen onRecoveryRequested={!connectedDemo ? setRecoveryReceipt : undefined} onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? (method: 'email' | 'phone' = 'email') => setScreen(current => current === 'forgot' ? (method === 'phone' ? 'demo-phone' : 'demo-email') : current) : undefined} />;
+  if (ready && screen === 'login') return <LoginScreen onAuthenticate={!connectedDemo ? nativeAuth.login : undefined} sessionNotice={nativeAuth.error || undefined} onDemoValidated={connectedDemo ? () => {
     if (navigation.current.screen !== 'login' || navigation.current.loginVisit !== loginVisit) return;
     navigation.current.screen = 'demo-chat'; setScreen('demo-chat');
   } : undefined} onBack={() => setScreen(loginOrigin)} onSignUp={() => setScreen('register')} onForgotPassword={() => setScreen('forgot')} />;

@@ -20,10 +20,10 @@ const groups = [
   { label: 'Today', titles: ['Passport application process', 'Renew a driving licence', 'Birth certificate requirements'] },
   { label: 'Yesterday', titles: ['Register a vehicle', 'Land ownership records'] },
 ];
-type Props = { onClose: () => void; onCloseLayout: () => void; closeRef: RefObject<View | null>; onLogout?: () => void; onNewChat?: () => void };
+type Props = { authenticated?: boolean; onClose: () => void; onCloseLayout: () => void; closeRef: RefObject<View | null>; onLogout?: () => void; onNewChat?: () => void };
 
 // Presentation only: the parent owns visibility, Back, focus and the retained draft.
-export function ChatHomeMenu({ onClose, onCloseLayout, closeRef, onLogout, onNewChat }: Props) {
+export function ChatHomeMenu({ authenticated = false, onClose, onCloseLayout, closeRef, onLogout, onNewChat }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
@@ -91,11 +91,11 @@ export function ChatHomeMenu({ onClose, onCloseLayout, closeRef, onLogout, onNew
         </Pressable>
         <Pressable onPress={onLogout} disabled={!onLogout} accessibilityRole="button"
           accessibilityLabel="Logout" accessibilityState={{ disabled: !onLogout }}
-          accessibilityHint={onLogout ? 'UI demo only. Returns to Login.' : 'Unavailable: no login occurred in this preview.'}
+          accessibilityHint={authenticated ? 'Ends your secure session and returns to Login.' : onLogout ? 'UI demo only. Returns to Login.' : 'Unavailable: no login occurred in this preview.'}
           style={styles.logout}>
           <Text style={styles.logoutText}>Logout</Text>
         </Pressable>
-        <Text style={styles.sampleNotice}>{onLogout ? 'UI demo only · Returns to Login.' : 'Unavailable: no login occurred in this preview.'}</Text>
+        <Text style={styles.sampleNotice}>{authenticated ? 'Ends your secure session.' : onLogout ? 'UI demo only · Returns to Login.' : 'Unavailable: no login occurred in this preview.'}</Text>
         </View>
       </ScrollView>
     </View>
