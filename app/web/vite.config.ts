@@ -17,5 +17,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     https: hasCert ? { cert: readFileSync(certFile), key: readFileSync(keyFile) } : undefined,
+    // Docker on Windows does not pass file-change events into containers, so the
+    // dev container polls for changes (VITE_WATCH_POLLING=true in docker-compose.yml)
+    watch: process.env.VITE_WATCH_POLLING === 'true' ? { usePolling: true, interval: 300 } : undefined,
   },
 })
