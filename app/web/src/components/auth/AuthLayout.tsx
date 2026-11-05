@@ -21,13 +21,13 @@ export function AuthLayout({ banner = 'Demo - backend unavailable. Use sample de
         <div className="demo-banner">{banner}</div>
         <form {...formProps} className="login-card">{children}</form>
       </div>
-      <footer><span>University project preview · English only</span>{footerControls}</footer>
+      <footer><span>University project · English only</span>{footerControls}</footer>
     </section>
     <aside className="photo-panel" aria-label="Government services introduction">
       <img className="login-photo" src="/assets/figma/login/auth-coast.jpg" alt="" />
       <div className="photo-scrim" />
-      <div className="slide-caption"><h2>Government services,<br />closer to you</h2><p>Guidance for Sri Lanka’s government services.</p><p className="slide-note">Photo preview · additional slides unavailable</p></div>
-      <div className="help-badge"><img src="/assets/figma/login/govai-emblem.png" alt="" width="40" height="40" /><span>Ask GovAI<small>Help unavailable in this demo</small></span></div>
+      <div className="slide-caption"><h2>Government services,<br />closer to you</h2><p>Guidance for Sri Lanka’s government services.</p><p className="slide-note">Additional slides unavailable</p></div>
+      <div className="help-badge"><img src="/assets/figma/login/govai-emblem.png" alt="" width="40" height="40" /><span>Ask GovAI<small>Help is unavailable.</small></span></div>
     </aside>
   </main>
 }

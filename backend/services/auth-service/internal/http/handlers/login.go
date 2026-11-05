@@ -4,29 +4,35 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/gin-gonic/gin"
 	"io"
 	"mime"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/gin-gonic/gin"
 )
 
 type LoginService interface {
 	Login(context.Context, login.Request) (login.Access, error)
 }
+
 type LoginHandler struct {
 	service LoginService
 	limiter RegistrationLimiter
 }
 
+// NewLoginHandler validates dependencies and request limits.
 func NewLoginHandler(service LoginService, limiter RegistrationLimiter) (*LoginHandler, error) {
 	if service == nil || limiter == nil {
 		return nil, login.ErrUnavailable
 	}
+
 	return &LoginHandler{service, limiter}, nil
 }
+
+// Handle validates native login input and returns provider tokens.
 func (h *LoginHandler) Handle(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
@@ -35,20 +41,27 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 	}
 	unavailable := func() { fail(503, "login_unavailable", "Login is temporarily unavailable.") }
 	denied := func() {
-		fail(401, "login_failed", "Unable to sign in. Check your details and complete any required account actions.")
+		fail(
+			401,
+			"login_failed",
+			"Unable to sign in. Check your details and complete any required account actions.",
+		)
 	}
 	if c.Request.TLS == nil {
 		fail(426, "https_required", "HTTPS required.")
 		return
 	}
+
 	if c.GetHeader("Origin") != "" {
 		fail(403, "browser_login_disabled", "Browser login is not enabled on this endpoint.")
 		return
 	}
+
 	if len(c.Request.Header.Values("Cookie")) != 0 {
 		fail(403, "browser_login_disabled", "Browser login is not enabled on this endpoint.")
 		return
 	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	c.Request = c.Request.WithContext(ctx)
@@ -58,12 +71,14 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		unavailable()
 		return
 	}
+
 	defer controller.SetReadDeadline(time.Time{})
 	ip, ok := registrationSource(c.Request.RemoteAddr)
 	if !ok {
 		unavailable()
 		return
 	}
+
 	limited := func(retry time.Duration) {
 		c.Header("Retry-After", retrySeconds(retry))
 		fail(429, "rate_limited", "Too many login attempts.")
@@ -75,12 +90,15 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		} else {
 			unavailable()
 		}
+
 		return
 	}
+
 	if permit == nil {
 		unavailable()
 		return
 	}
+
 	defer permit.Release()
 	media, params, e := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	for key := range params {
@@ -89,24 +107,34 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 			return
 		}
 	}
-	if e != nil || media != "application/json" || (params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8")) || len(params) > 1 || c.GetHeader("Content-Encoding") != "" {
+
+	if e != nil ||
+		media != "application/json" ||
+		(params["charset"] != "" &&
+			!strings.EqualFold(params["charset"], "utf-8")) ||
+		len(params) > 1 ||
+		c.GetHeader("Content-Encoding") != "" {
 		fail(415, "unsupported_media_type", "Use UTF-8 JSON.")
 		return
 	}
+
 	if c.Request.ContentLength > login.MaxRequestBytes {
 		fail(413, "too_large", "Request body is too large.")
 		return
 	}
+
 	if c.Request.Body == nil {
 		fail(400, "invalid_request", "Invalid login request.")
 		return
 	}
+
 	defer c.Request.Body.Close()
 	body, e := io.ReadAll(io.LimitReader(c.Request.Body, login.MaxRequestBytes+1))
 	if e != nil || ctx.Err() != nil {
 		unavailable()
 		return
 	}
+
 	request, e := login.Parse(bytes.NewReader(body))
 	if e != nil {
 		if errors.Is(e, login.ErrTooLarge) {
@@ -114,8 +142,10 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		} else {
 			fail(400, "invalid_request", "Invalid login request.")
 		}
+
 		return
 	}
+
 	retry, e = permit.CheckEmail(ctx, request.LimitKey())
 	if e != nil {
 		if errors.Is(e, ErrRegistrationLimited) {
@@ -123,8 +153,10 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		} else {
 			unavailable()
 		}
+
 		return
 	}
+
 	access, e := h.service.Login(ctx, request)
 	if e != nil {
 		if errors.Is(e, login.ErrFailed) {
@@ -132,8 +164,10 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 		} else {
 			unavailable()
 		}
+
 		return
 	}
+
 	if ctx.Err() != nil || access.Token == "" || access.ExpiresIn <= 0 {
 		unavailable()
 		return
@@ -145,8 +179,10 @@ func (h *LoginHandler) Handle(c *gin.Context) {
 			unavailable()
 			return
 		}
+
 		response["refresh_token"] = access.RefreshToken
 		response["refresh_expires_in"] = access.RefreshExpiresIn
 	}
+
 	c.JSON(http.StatusOK, response)
 }

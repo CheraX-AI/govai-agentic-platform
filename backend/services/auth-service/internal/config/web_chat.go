@@ -1,9 +1,10 @@
 package config
 
 import (
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
 	"os"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
 )
 
 type WebChat struct {
@@ -12,6 +13,7 @@ type WebChat struct {
 	Timeout          time.Duration
 }
 
+// LoadWebChat validates the browser-to-core chat connection.
 func LoadWebChat(webEnabled bool) (WebChat, error) {
 	c := WebChat{}
 	switch os.Getenv("WEB_CHAT_ENABLED") {
@@ -22,19 +24,23 @@ func LoadWebChat(webEnabled bool) (WebChat, error) {
 	default:
 		return c, chatgateway.ErrUnavailable
 	}
+
 	if !webEnabled {
 		return WebChat{}, chatgateway.ErrUnavailable
 	}
+
 	c.Endpoint = os.Getenv("WEB_CHAT_CORE_URL")
 	c.CAFile = os.Getenv("WEB_CHAT_CA_FILE")
 	value := os.Getenv("WEB_CHAT_TIMEOUT")
 	if value == "" {
 		value = "30s"
 	}
+
 	var err error
 	c.Timeout, err = time.ParseDuration(value)
 	if err != nil || c.Timeout < time.Second || c.Timeout > 30*time.Second {
 		return WebChat{}, chatgateway.ErrUnavailable
 	}
+
 	return c, nil
 }

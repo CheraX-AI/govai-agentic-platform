@@ -21,18 +21,33 @@ import (
 )
 
 func TestStrictLoginInput(t *testing.T) {
-	for _, body := range []string{`{}`, `null`, `[]`, `{"email":"a@example.test","password":null}`, `{"email":"a@example.test","password":"x","password":"y"}`, `{"email":"a@example.test","password":"x","client_id":"admin"}`, `{"email":"a@example.test","password":"\ud800"}`, `{"email":"a@example.test","password":"x"} {}`, `{"email":"not-email","password":"x"}`} {
+	for _, body := range []string{
+		`{}`,
+		`null`,
+		`[]`,
+		`{"email":"a@example.test","password":null}`,
+		`{"email":"a@example.test","password":"x","password":"y"}`,
+		`{"email":"a@example.test","password":"x","client_id":"admin"}`,
+		`{"email":"a@example.test","password":"\ud800"}`,
+		`{"email":"a@example.test","password":"x"} {}`,
+		`{"email":"not-email","password":"x"}`,
+	} {
 		if _, e := Parse(strings.NewReader(body)); e == nil {
 			t.Fatal("invalid body accepted")
 		}
 	}
-	request, e := Parse(strings.NewReader(`{"email":"Citizen@Example.Test","password":"  தமிழ்🔒  "}`))
+
+	request, e := Parse(
+		strings.NewReader(`{"email":"Citizen@Example.Test","password":"  தமிழ்🔒  "}`),
+	)
 	if e != nil || request.email != "citizen@example.test" || request.password != "  தமிழ்🔒  " {
 		t.Fatal("credential normalization corrupted data")
 	}
+
 	if strings.Contains(fmt.Sprintf("%+v", request), "தமிழ்") {
 		t.Fatal("request redaction failed")
 	}
+
 	if _, e = Parse(strings.NewReader(strings.Repeat(" ", MaxRequestBytes+1))); !errors.Is(e, ErrTooLarge) {
 		t.Fatal("size limit failed")
 	}
@@ -48,13 +63,33 @@ func signToken(t *testing.T, key *rsa.PrivateKey, kid string, claims map[string]
 	if e != nil {
 		t.Fatal("test signing failed")
 	}
+
 	return encoded + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
+
 func jwk(key *rsa.PrivateKey, kid string) map[string]string {
-	return map[string]string{"kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()), "e": "AQAB"}
+	return map[string]string{
+		"kty": "RSA",
+		"kid": kid,
+		"use": "sig",
+		"alg": "RS256",
+		"n":   base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
+		"e":   "AQAB",
+	}
 }
+
 func baseClaims(issuer string) map[string]any {
-	return map[string]any{"iss": issuer, "sub": "synthetic-subject", "aud": []string{"govai-api"}, "azp": "mobile-client", "typ": "Bearer", "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Minute).Unix(), "email_verified": true, "realm_access": map[string]any{"roles": []string{"citizen"}}}
+	return map[string]any{
+		"iss":            issuer,
+		"sub":            "synthetic-subject",
+		"aud":            []string{"govai-api"},
+		"azp":            "mobile-client",
+		"typ":            "Bearer",
+		"iat":            time.Now().Unix(),
+		"exp":            time.Now().Add(5 * time.Minute).Unix(),
+		"email_verified": true,
+		"realm_access":   map[string]any{"roles": []string{"citizen"}},
+	}
 }
 
 type profileDouble struct {
@@ -68,6 +103,7 @@ func (p *profileDouble) HasReadyProfile(_ context.Context, issuer, subject strin
 	if issuer == "" || subject != "synthetic-subject" {
 		return false, errors.New("ownership mismatch")
 	}
+
 	return p.ready, p.err
 }
 
@@ -76,6 +112,7 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+
 	var token string
 	var calls atomic.Int32
 	var keys atomic.Int32
@@ -84,11 +121,25 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 		switch r.URL.Path {
 		case "/realms/test/protocol/openid-connect/token":
 			calls.Add(1)
-			if r.ParseForm() != nil || r.Form.Get("username") != "citizen@example.test" || r.Form.Get("password") != " space 🔒 " || r.Form.Get("client_secret") != "server-only-secret" || r.Form.Get("grant_type") != "password" || r.Form.Get("scope") != "email" || r.Header.Get("Idempotency-Key") != "" {
+			if r.ParseForm() != nil ||
+				r.Form.Get("username") != "citizen@example.test" ||
+				r.Form.Get("password") != " space 🔒 " ||
+				r.Form.Get("client_secret") != "server-only-secret" ||
+				r.Form.Get("grant_type") != "password" ||
+				r.Form.Get("scope") != "email" ||
+				r.Header.Get("Idempotency-Key") != "" {
 				w.WriteHeader(400)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": token, "token_type": "Bearer", "expires_in": 300, "refresh_token": "never-return-refresh", "id_token": "never-return-id"})
+			_ = json.NewEncoder(w).Encode(
+				map[string]any{
+					"access_token":  token,
+					"token_type":    "Bearer",
+					"expires_in":    300,
+					"refresh_token": "never-return-refresh",
+					"id_token":      "never-return-id",
+				},
+			)
 		case "/realms/test/protocol/openid-connect/certs":
 			keys.Add(1)
 			_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{jwk(key, "key-one")}})
@@ -98,10 +149,19 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 	}))
 	defer server.Close()
 	issuer = server.URL + "/realms/test"
-	provider, e := NewKeycloak(KeycloakConfig{Issuer: issuer, ClientID: "mobile-client", ClientSecret: "server-only-secret", Audience: "govai-api"}, server.Client())
+	provider, e := NewKeycloak(
+		KeycloakConfig{
+			Issuer:       issuer,
+			ClientID:     "mobile-client",
+			ClientSecret: "server-only-secret",
+			Audience:     "govai-api",
+		},
+		server.Client(),
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
+
 	defer provider.Close()
 	request, _ := Parse(strings.NewReader(`{"email":"Citizen@Example.Test","password":" space 🔒 "}`))
 	profiles := &profileDouble{ready: true}
@@ -109,12 +169,18 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 	claims := baseClaims(issuer)
 	token = signToken(t, key, "key-one", claims)
 	access, e := service.Login(context.Background(), request)
-	if e != nil || access.Token != token || access.ExpiresIn <= 0 || access.ExpiresIn > 300 || profiles.calls != 1 {
+	if e != nil ||
+		access.Token != token ||
+		access.ExpiresIn <= 0 ||
+		access.ExpiresIn > 300 ||
+		profiles.calls != 1 {
 		t.Fatal("valid login failed")
 	}
+
 	if b, _ := json.Marshal(access); bytes.Contains(b, []byte(token)) {
 		t.Fatal("accidental token serialization")
 	}
+
 	for name, change := range map[string]func(map[string]any){
 		"expired":           func(c map[string]any) { c["exp"] = time.Now().Add(-time.Minute).Unix() },
 		"wrong issuer":      func(c map[string]any) { c["iss"] = "https://wrong.example.test" },
@@ -134,7 +200,11 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 			}
 		})
 	}
-	for _, change := range []func(map[string]any){func(c map[string]any) { c["email_verified"] = false }, func(c map[string]any) { c["realm_access"] = map[string]any{"roles": []string{"admin"}} }} {
+
+	for _, change := range []func(map[string]any){
+		func(c map[string]any) { c["email_verified"] = false },
+		func(c map[string]any) { c["realm_access"] = map[string]any{"roles": []string{"admin"}} },
+	} {
 		c := baseClaims(issuer)
 		change(c)
 		token = signToken(t, key, "key-one", c)
@@ -142,18 +212,22 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 			t.Fatal("citizen policy bypassed")
 		}
 	}
+
 	token = signToken(t, key, "key-one", baseClaims(issuer))
 	profiles.ready = false
 	if _, e = service.Login(context.Background(), request); !errors.Is(e, ErrFailed) {
 		t.Fatal("missing profile accepted")
 	}
+
 	profiles.err = errors.New("private SQL details")
 	if _, e = service.Login(context.Background(), request); !errors.Is(e, ErrUnavailable) {
 		t.Fatal("database outage not handled")
 	}
+
 	if keys.Load() != 1 {
 		t.Fatal("JWKS cache not reused")
 	}
+
 	if calls.Load() != 13 {
 		t.Fatal("credential call count indicates retry or missing test path")
 	}
@@ -166,8 +240,18 @@ func TestProviderErrorsNoRetryOrRedirect(t *testing.T) {
 		body   string
 		want   error
 	}{
-		{"invalid grant", 400, `{"error":"invalid_grant","error_description":"private reason"}`, ErrFailed},
-		{"invalid client", 401, `{"error":"invalid_client","error_description":"private secret"}`, ErrUnavailable},
+		{
+			"invalid grant",
+			400,
+			`{"error":"invalid_grant","error_description":"private reason"}`,
+			ErrFailed,
+		},
+		{
+			"invalid client",
+			401,
+			`{"error":"invalid_client","error_description":"private secret"}`,
+			ErrUnavailable,
+		},
 		{"malformed success", 200, `{"access_token":"not-jwt"}`, ErrUnavailable},
 		{"oversize", 200, strings.Repeat("x", (64<<10)+1), ErrUnavailable},
 		{"redirect", 302, ``, ErrUnavailable},
@@ -181,10 +265,19 @@ func TestProviderErrorsNoRetryOrRedirect(t *testing.T) {
 				_, _ = w.Write([]byte(test.body))
 			}))
 			defer server.Close()
-			p, e := NewKeycloak(KeycloakConfig{Issuer: server.URL + "/realms/test", ClientID: "mobile", ClientSecret: "secret", Audience: "govai-api"}, server.Client())
+			p, e := NewKeycloak(
+				KeycloakConfig{
+					Issuer:       server.URL + "/realms/test",
+					ClientID:     "mobile",
+					ClientSecret: "secret",
+					Audience:     "govai-api",
+				},
+				server.Client(),
+			)
 			if e != nil {
 				t.Fatal(e)
 			}
+
 			defer p.Close()
 			_, e = p.Password(context.Background(), Request{email: "citizen@example.test", password: "password"})
 			if !errors.Is(e, test.want) || calls.Load() != 1 {
@@ -193,27 +286,37 @@ func TestProviderErrorsNoRetryOrRedirect(t *testing.T) {
 		})
 	}
 }
+
 func TestLoginTLSAndCancellation(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) }))
 	defer server.Close()
-	cfg := KeycloakConfig{Issuer: server.URL + "/realms/test", ClientID: "mobile", ClientSecret: "secret", Audience: "govai-api"}
+	cfg := KeycloakConfig{
+		Issuer:       server.URL + "/realms/test",
+		ClientID:     "mobile",
+		ClientSecret: "secret",
+		Audience:     "govai-api",
+	}
 	p, e := NewKeycloak(cfg, http.DefaultClient)
 	if e != nil {
 		t.Fatal(e)
 	}
+
 	defer p.Close()
 	if _, e = p.Password(context.Background(), Request{email: "a@example.test", password: "p"}); !errors.Is(e, ErrUnavailable) {
 		t.Fatal("untrusted TLS accepted")
 	}
+
 	insecure := server.Client()
 	insecure.Transport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	if _, e = NewKeycloak(cfg, insecure); e == nil {
 		t.Fatal("TLS bypass accepted")
 	}
+
 	cfg.Issuer = strings.Replace(cfg.Issuer, "https://", "http://", 1)
 	if _, e = NewKeycloak(cfg, server.Client()); e == nil {
 		t.Fatal("HTTP configuration accepted")
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, e = p.Password(ctx, Request{email: "a@example.test", password: "p"}); !errors.Is(e, ErrUnavailable) {

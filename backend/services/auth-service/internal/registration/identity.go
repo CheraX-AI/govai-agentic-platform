@@ -30,15 +30,18 @@ func ParseNIC(input string) (NIC, error) {
 		default:
 			return NIC{}, ErrNICFormat
 		}
+
 		digits = 9
 	} else if digits != 12 {
 		return NIC{}, ErrNICFormat
 	}
+
 	for i := 0; i < digits; i++ {
 		if input[i] < '0' || input[i] > '9' {
 			return NIC{}, ErrNICFormat
 		}
 	}
+
 	return NIC{original: input}, nil
 }
 
@@ -51,16 +54,21 @@ func (n NIC) NormalizedNumber() string {
 		if last == 'v' || last == 'x' {
 			last -= 'a' - 'A'
 		}
+
 		return n.original[:9] + string(last)
 	}
+
 	return n.original
 }
 
 // RestrictedOriginal is for an access-restricted, encrypted profile adapter only.
 func (n NIC) RestrictedOriginal() string { return n.original }
-func (NIC) Format(s fmt.State, _ rune)   { _, _ = io.WriteString(s, "[REDACTED]") }
+
+func (NIC) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+
 func (NIC) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
-func (NIC) LogValue() slog.Value         { return slog.StringValue("[REDACTED]") }
+
+func (NIC) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
 
 // NICReservations is the database teammate's required persistence contract.
 // Reserve must atomically claim NIC.NormalizedNumber() in the GovAI citizen

@@ -24,6 +24,7 @@ func TestDecodeReplyAcceptsCoreSources(t *testing.T) {
 			if err != nil {
 				t.Fatalf("rejected: %v", err)
 			}
+
 			if _, err := Encode(reply); err != nil {
 				t.Fatalf("cannot re-encode: %v", err)
 			}
@@ -32,14 +33,20 @@ func TestDecodeReplyAcceptsCoreSources(t *testing.T) {
 }
 
 func TestDecodeReplyKeepsSourceFields(t *testing.T) {
-	reply, err := DecodeReply([]byte(`{"answer":"See [2]","sources":[{"number":2,"title":"TIN guide","page":7,"url":"https://example.test/tin"}]}`))
+	reply, err := DecodeReply(
+		[]byte(
+			`{"answer":"See [2]","sources":[{"number":2,"title":"TIN guide","page":7,"url":"https://example.test/tin"}]}`,
+		),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := Source{Number: 2, Title: "TIN guide", Page: 7, URL: "https://example.test/tin"}
 	if len(reply.Sources) != 1 || reply.Sources[0] != want {
 		t.Fatalf("got %+v", reply.Sources)
 	}
+
 	encoded, err := Encode(Reply{Answer: "See [1]", Sources: []Source{{Number: 1, Title: "TIN guide"}}})
 	if err != nil {
 		t.Fatal(err)

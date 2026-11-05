@@ -4,20 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
-	"github.com/gin-gonic/gin"
 	"mime"
 	"net/http"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
+	"github.com/gin-gonic/gin"
 )
 
 type ChatForwarder interface {
 	Ask(context.Context, string, []byte) (chatgateway.Payload, error)
 }
+
 type accessForwarder interface {
 	WithAccess(context.Context, string, string, func(context.Context, string) error) error
 }
+
 type webChat struct {
 	upstream ChatForwarder
 	access   accessForwarder
@@ -30,45 +33,59 @@ func (h *WebSessionHandler) EnableChat(upstream ChatForwarder) error {
 	if !ok || upstream == nil {
 		return chatgateway.ErrUnavailable
 	}
+
 	h.chat = &webChat{upstream, a, make(chan struct{}, 8)}
 	return nil
 }
+
+// Chat forwards a checked browser session request to core.
 func (h *WebSessionHandler) Chat(c *gin.Context) {
 	if h.chat == nil {
 		c.Status(404)
 		return
 	}
+
 	ctx, done, ok := h.begin(c, true)
 	if !ok {
 		return
 	}
+
 	defer done()
 	raw, ok := webCookie(c)
 	if !ok {
 		webFail(c, 401, "session_rejected")
 		return
 	}
+
 	tokens := c.Request.Header.Values("X-CSRF-Token")
 	if len(tokens) != 1 || !validWebSecret(tokens[0]) {
 		webFail(c, 403, "csrf_required")
 		return
 	}
+
 	media, params, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
-	if err != nil || media != "application/json" || len(c.Request.Header.Values("Content-Type")) != 1 || c.GetHeader("Content-Encoding") != "" {
+	if err != nil ||
+		media != "application/json" ||
+		len(c.Request.Header.Values("Content-Type")) != 1 ||
+		c.GetHeader("Content-Encoding") != "" {
 		errorResponse(c, 415, "unsupported_media_type", "Use UTF-8 JSON.")
 		return
 	}
+
 	for k, v := range params {
 		if k != "charset" || (v != "utf-8" && v != "UTF-8") {
 			errorResponse(c, 415, "unsupported_media_type", "Use UTF-8 JSON.")
 			return
 		}
 	}
+
 	controller := http.NewResponseController(c.Writer)
-	if err := controller.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	if err := controller.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil &&
+		!errors.Is(err, http.ErrNotSupported) {
 		webError(c, websession.ErrUnavailable)
 		return
 	}
+
 	defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
 	q, err := chatgateway.Parse(c.Request.Body)
 	if err != nil {
@@ -76,9 +93,11 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 		if errors.Is(err, chatgateway.ErrTooLarge) {
 			status = 413
 		}
+
 		errorResponse(c, status, "invalid_message", "Provide a nonempty question of at most 4000 characters.")
 		return
 	}
+
 	select {
 	case h.chat.slots <- struct{}{}:
 		defer func() { <-h.chat.slots }()
@@ -87,6 +106,7 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 		errorResponse(c, 503, "chat_busy", "Chat is busy. Try again later.")
 		return
 	}
+
 	body, _ := json.Marshal(map[string]string{"message": q.Text()})
 	var encoded []byte
 	err = h.chat.access.WithAccess(ctx, raw, tokens[0], func(ctx context.Context, access string) error {
@@ -94,10 +114,12 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 		if e != nil {
 			return e
 		}
+
 		reply, e := chatgateway.DecodeReply(payload.Bytes())
 		if e != nil {
 			return e
 		}
+
 		encoded, e = chatgateway.Encode(reply)
 		return e
 	})
@@ -112,11 +134,14 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 		default:
 			errorResponse(c, 503, "chat_unavailable", "Chat is temporarily unavailable.")
 		}
+
 		return
 	}
+
 	if ctx.Err() != nil {
 		errorResponse(c, 504, "chat_timeout", "Chat request timed out.")
 		return
 	}
+
 	c.Data(200, "application/json; charset=utf-8", encoded)
 }

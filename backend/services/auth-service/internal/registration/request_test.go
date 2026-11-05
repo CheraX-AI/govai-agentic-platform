@@ -12,24 +12,72 @@ import (
 )
 
 func requestFixture() map[string]any {
-	return map[string]any{"full_name": "Synthetic  Citizen", "nic": "123456789v", "mobile_number": "+94 77 123 4567", "email": "Citizen+Test@EXAMPLE.TEST", "password": " synthetic secret "}
+	return map[string]any{
+		"full_name":     "Synthetic  Citizen",
+		"nic":           "123456789v",
+		"mobile_number": "+94 77 123 4567",
+		"email":         "Citizen+Test@EXAMPLE.TEST",
+		"password":      " synthetic secret ",
+	}
 }
+
 func fixtureJSON(t *testing.T, fields map[string]any) string {
 	t.Helper()
 	b, err := json.Marshal(fields)
 	if err != nil {
 		t.Fatal("fixture encoding failed")
 	}
+
 	return string(b)
 }
 
 func TestRequestNormalizationAndPreservation(t *testing.T) {
 	for _, tc := range []struct{ name, fullName, phone, wantPhone, nic, wantNIC, password string }{
-		{"sinhala", "  නිමල්  පෙරේරා ", "+94 77 123 4567", "+94771234567", "123456789v", "123456789V", "  abc  "},
-		{"tamil", "அருள்  குமார்", "+44 7911 123456", "+447911123456", "123456789x", "123456789X", "\tsecret\n"},
-		{"combining", "Jose\u0301  O’Neil", "+1 (202) 555-0123", "+12025550123", "001234567890", "001234567890", "e\u0301🔐\\uD800"},
-		{"short_password", "A", "+94771234567", "+94771234567", "201234567890", "201234567890", "x"},
-		{"spaces_password", "A", "+94771234567", "+94771234567", "201234567890", "201234567890", "   "},
+		{
+			"sinhala",
+			"  නිමල්  පෙරේරා ",
+			"+94 77 123 4567",
+			"+94771234567",
+			"123456789v",
+			"123456789V",
+			"  abc  ",
+		},
+		{
+			"tamil",
+			"அருள்  குமார்",
+			"+44 7911 123456",
+			"+447911123456",
+			"123456789x",
+			"123456789X",
+			"\tsecret\n",
+		},
+		{
+			"combining",
+			"Jose\u0301  O’Neil",
+			"+1 (202) 555-0123",
+			"+12025550123",
+			"001234567890",
+			"001234567890",
+			"e\u0301🔐\\uD800",
+		},
+		{
+			"short_password",
+			"A",
+			"+94771234567",
+			"+94771234567",
+			"201234567890",
+			"201234567890",
+			"x",
+		},
+		{
+			"spaces_password",
+			"A",
+			"+94771234567",
+			"+94771234567",
+			"201234567890",
+			"201234567890",
+			"   ",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := requestFixture()
@@ -41,7 +89,13 @@ func TestRequestNormalizationAndPreservation(t *testing.T) {
 			if e != nil {
 				t.Fatalf("unexpected error: %s", e.Code)
 			}
-			if r.FullName != tc.fullName || r.MobileNumber != tc.wantPhone || r.NIC.NormalizedNumber() != tc.wantNIC || r.NIC.RestrictedOriginal() != tc.nic || r.Email != "citizen+test@example.test" || r.TransientPassword() != tc.password {
+
+			if r.FullName != tc.fullName ||
+				r.MobileNumber != tc.wantPhone ||
+				r.NIC.NormalizedNumber() != tc.wantNIC ||
+				r.NIC.RestrictedOriginal() != tc.nic ||
+				r.Email != "citizen+test@example.test" ||
+				r.TransientPassword() != tc.password {
 				t.Fatal("normalization/preservation mismatch")
 			}
 		})
@@ -56,15 +110,30 @@ func TestRequestFieldErrors(t *testing.T) {
 				value any
 				code  string
 			}{
-				{"empty", "", "required"}, {"null", nil, "invalid_type"}, {"number", 12, "invalid_type"}, {"bool", true, "invalid_type"}, {"array", []string{}, "invalid_type"}, {"object", map[string]string{}, "invalid_type"},
+				{"empty", "", "required"},
+				{"null", nil, "invalid_type"},
+				{"number", 12, "invalid_type"},
+				{"bool", true, "invalid_type"},
+				{"array", []string{}, "invalid_type"},
+				{"object", map[string]string{}, "invalid_type"},
 			} {
-				t.Run(tc.name, func(t *testing.T) { f := requestFixture(); f[field] = tc.value; assertFieldError(t, f, field, tc.code) })
+				t.Run(
+					tc.name,
+					func(t *testing.T) {
+
+						f := requestFixture()
+						f[field] = tc.value
+						assertFieldError(t, f, field, tc.code)
+					},
+				)
 			}
+
 			f := requestFixture()
 			delete(f, field)
 			assertFieldError(t, f, field, "required")
 		})
 	}
+
 	for _, tc := range []struct{ name, field, value, code string }{
 		{"blank_name", "full_name", " \u2003 ", "required"},
 		{"name_control", "full_name", "A\nB", "invalid_format"},
@@ -102,6 +171,7 @@ func assertFieldError(t *testing.T, f map[string]any, field, code string) {
 	if e == nil || e.Code != "validation_failed" || e.Fields[field] != code {
 		t.Fatal("incorrect safe field error")
 	}
+
 	if r.TransientPassword() != "" || r.FullName != "" {
 		t.Fatal("partial request escaped on error")
 	}
@@ -109,7 +179,22 @@ func assertFieldError(t *testing.T, f map[string]any, field, code string) {
 
 func TestRequestStrictJSON(t *testing.T) {
 	good := fixtureJSON(t, requestFixture())
-	for _, input := range []string{"", "null", "[]", "42", "{", good + " {}", good + " null", good + " secret", strings.TrimSuffix(good, "}") + `,"role":"admin"}`, strings.TrimSuffix(good, "}") + `,"email":"other@example.test"}`, strings.TrimSuffix(good, "}") + `,"em\u0061il":"other@example.test"}`, `{"password":"\uD800"}`, `{"full_name":"\uDC00"}`, "{\"full_name\":\"" + string([]byte{255}) + "\"}"} {
+	for _, input := range []string{
+		"",
+		"null",
+		"[]",
+		"42",
+		"{",
+		good + " {}",
+		good + " null",
+		good + " secret",
+		strings.TrimSuffix(good, "}") + `,"role":"admin"}`,
+		strings.TrimSuffix(good, "}") + `,"email":"other@example.test"}`,
+		strings.TrimSuffix(good, "}") + `,"em\u0061il":"other@example.test"}`,
+		`{"password":"\uD800"}`,
+		`{"full_name":"\uDC00"}`,
+		"{\"full_name\":\"" + string([]byte{255}) + "\"}",
+	} {
 		_, e := ParseRequest(strings.NewReader(input))
 		if e == nil || e.Code != "invalid_request" {
 			t.Fatal("invalid JSON accepted")
@@ -123,17 +208,21 @@ func TestRequestStrictJSON(t *testing.T) {
 	if e != nil || r.TransientPassword() != "🔐" {
 		t.Fatal("valid surrogate pair rejected")
 	}
+
 	_, e = ParseRequest(strings.NewReader(good + strings.Repeat(" ", MaxRequestBytes)))
 	if e == nil || e.Code != "too_large" {
 		t.Fatal("body cap ignored")
 	}
+
 	_, e = ParseRequest(strings.NewReader(good + strings.Repeat(" ", MaxRequestBytes-len(good))))
 	if e != nil {
 		t.Fatal("body boundary rejected")
 	}
+
 	if _, e = ParseRequest(nil); e == nil || e.Code != "invalid_request" {
 		t.Fatal("nil reader accepted")
 	}
+
 	if _, e = ParseRequest(failingReader{}); e == nil || e.Error() != "invalid_request" {
 		t.Fatal("reader error not sanitized")
 	}
@@ -153,14 +242,18 @@ func TestRequestLimitsAndRedaction(t *testing.T) {
 	if e != nil {
 		t.Fatal("field boundary rejected")
 	}
+
 	var logs bytes.Buffer
 	slog.New(slog.NewJSONHandler(&logs, nil)).Info("test", "request", r)
 	b, _ := json.Marshal(r)
 	for _, value := range []string{fmt.Sprintf("%v %+v %#v", r, r, r), string(b), logs.String()} {
-		if !strings.Contains(value, "[REDACTED]") || strings.Contains(value, r.TransientPassword()) || strings.Contains(value, r.Email) {
+		if !strings.Contains(value, "[REDACTED]") ||
+			strings.Contains(value, r.TransientPassword()) ||
+			strings.Contains(value, r.Email) {
 			t.Fatal("sensitive request exposed")
 		}
 	}
+
 	f["email"] = "PRIVATE-SUBMITTED-VALUE"
 	_, e = ParseRequest(strings.NewReader(fixtureJSON(t, f)))
 	b, _ = json.Marshal(e)

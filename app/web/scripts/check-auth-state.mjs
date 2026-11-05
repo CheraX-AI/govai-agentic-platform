@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { allowedReturn, readRoute, loginDestination } from '../src/routing/routes.ts'
 for (const path of ['https://example.com', '#/app/home', '//example.com', 'javascript:alert(1)', '/app/home/extra', undefined]) assert.equal(allowedReturn(path), '/app/home')
 assert.equal(allowedReturn('/app/recent'), '/app/recent')
+assert.equal(allowedReturn('/app/chat'), '/app/chat')
 assert.equal(readRoute('/login', '?returnTo=%2Fapp%2Frecent').returnTo, '/app/recent')
 assert.equal(readRoute('/', '').path, '/login')
 assert.equal(readRoute('/register/', '').path, '/register')

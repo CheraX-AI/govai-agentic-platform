@@ -14,30 +14,45 @@ func (s *Service) WithAccess(ctx context.Context, raw, csrf string, forward func
 	if forward == nil {
 		return ErrUnavailable
 	}
+
 	if ctx.Err() != nil {
 		return ErrUnavailable
 	}
+
 	check, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	snap, err := s.store.Load(check, raw)
 	if err != nil {
 		return storeError(err)
 	}
+
 	c := snap.Credentials
-	if !csrfMatches(c.CSRF, csrf) || !snap.Expires.After(s.now()) || c.AccessUntil <= s.now().Unix() || c.RefreshUntil <= s.now().Unix() || c.AccessToken == "" {
+	if !csrfMatches(c.CSRF, csrf) ||
+		!snap.Expires.After(s.now()) ||
+		c.AccessUntil <= s.now().Unix() ||
+		c.RefreshUntil <= s.now().Unix() ||
+		c.AccessToken == "" {
 		return ErrDenied
 	}
+
 	claims, err := s.verifier.Verify(check, c.AccessToken)
 	if err != nil {
 		return ErrDenied
 	}
-	if claims.Issuer != c.Issuer || claims.Subject != c.Subject || !claims.Verified || !claims.Citizen || !claims.Expires.After(s.now()) {
+
+	if claims.Issuer != c.Issuer ||
+		claims.Subject != c.Subject ||
+		!claims.Verified ||
+		!claims.Citizen ||
+		!claims.Expires.After(s.now()) {
 		return ErrDenied
 	}
+
 	ready, err := s.profiles.HasReadyProfile(check, c.Issuer, c.Subject)
 	if err != nil || check.Err() != nil {
 		return ErrUnavailable
 	}
+
 	if !ready {
 		return ErrDenied
 	}

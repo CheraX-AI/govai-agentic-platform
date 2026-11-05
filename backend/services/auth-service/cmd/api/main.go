@@ -28,31 +28,41 @@ func main() {
 }
 
 func run() error {
+	// Load local settings before validating enabled features.
 	if err := config.LoadLocalEnv(".env.recovery"); err != nil {
 		return err
 	}
+
 	if err := config.LoadLocalEnv(".env.web"); err != nil {
 		return err
 	}
+
 	if err := config.LoadLocalEnv(".env.authorization"); err != nil {
 		return err
 	}
+
 	if err := config.LoadLocalEnv(".env.login"); err != nil {
 		return err
 	}
+
 	if err := config.LoadLocalEnv(".env.registration"); err != nil {
 		return err
 	}
+
 	if err := config.LoadLocalEnv(".env.database"); err != nil {
 		return err
 	}
+
 	if err := config.LoadLocalEnv(".env"); err != nil {
 		return err
 	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+
+	// Prepare shutdown handling and feature configuration.
 	gin.SetMode(gin.ReleaseMode)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -60,35 +70,48 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
 	regCfg, err := config.LoadRegistration()
 	if err != nil {
 		return err
 	}
+
 	loginCfg, err := config.LoadLogin()
 	if err != nil {
 		return err
 	}
+
 	authorizationCfg, err := config.LoadAuthorization()
 	if err != nil {
 		return err
 	}
+
 	webCfg, err := config.LoadWeb()
 	if err != nil {
 		return err
 	}
+
 	recoveryCfg, err := config.LoadRecovery(regCfg, webCfg)
 	if err != nil {
 		return err
 	}
-	tlsEnabled := regCfg.Enabled || loginCfg.Enabled || authorizationCfg.Enabled || webCfg.Enabled || recoveryCfg.Enabled
+
+	tlsEnabled := regCfg.Enabled ||
+		loginCfg.Enabled ||
+		authorizationCfg.Enabled ||
+		webCfg.Enabled ||
+		recoveryCfg.Enabled
 	var apiTLS *tls.Config
 	if tlsEnabled {
 		cert, err := tls.LoadX509KeyPair(os.Getenv("API_TLS_CERT_FILE"), os.Getenv("API_TLS_KEY_FILE"))
 		if err != nil {
 			return config.ErrRegistrationConfig
 		}
+
 		apiTLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	}
+
+	// Open shared persistence before composing HTTP handlers.
 	var pool *pgxpool.Pool
 	var store *postgres.Store
 	if dbCfg.URL != "" {
@@ -96,29 +119,41 @@ func run() error {
 		if err != nil {
 			return err
 		}
+
 		defer pool.Close()
 		if err := postgres.Ready(ctx, pool); err != nil {
 			return err
 		}
+
 		store, err = postgres.NewStore(pool, dbCfg.DataKey, dbCfg.NICKey)
 		if err != nil {
 			return err
 		}
+
 		slog.Info("authentication database connected")
 	}
+
+	// Resolve NIC login through the registered profile binding.
 	var identifierResolver login.IdentifierResolver
 	if regCfg.Enabled && (loginCfg.Enabled || webCfg.Enabled) {
 		expectedIssuer := regCfg.Admin.BaseURL + "/realms/" + regCfg.Admin.Realm
-		if (loginCfg.Enabled && loginCfg.Provider.Issuer != expectedIssuer) || (webCfg.Enabled && webCfg.Provider.Issuer != expectedIssuer) {
+		if (loginCfg.Enabled &&
+			loginCfg.Provider.Issuer != expectedIssuer) ||
+			(webCfg.Enabled &&
+				webCfg.Provider.Issuer != expectedIssuer) {
 			return login.ErrUnavailable
 		}
+
 		var closeIdentifiers func()
 		identifierResolver, closeIdentifiers, err = application.NICLogin(regCfg, store)
 		if err != nil {
 			return err
 		}
+
 		defer closeIdentifiers()
 	}
+
+	// Build each enabled feature with its required dependencies.
 	var registrationHandler *handler.RegistrationHandler
 	if regCfg.Enabled {
 		var closeRegistration func()
@@ -126,9 +161,11 @@ func run() error {
 		if err != nil {
 			return err
 		}
+
 		defer closeRegistration()
 		slog.Info("registration route enabled with HTTPS")
 	}
+
 	var loginHandler *handler.LoginHandler
 	var sessionHandler *handler.NativeSessionHandler
 	if loginCfg.Enabled {
@@ -137,9 +174,11 @@ func run() error {
 		if err != nil {
 			return err
 		}
+
 		defer closeLogin()
 		slog.Info("mobile login route enabled with HTTPS")
 	}
+
 	var protected *handler.Protected
 	if authorizationCfg.Enabled {
 		var closeAuthorization func()
@@ -147,9 +186,11 @@ func run() error {
 		if err != nil {
 			return err
 		}
+
 		defer closeAuthorization()
 		slog.Info("JWT authorization routes enabled with HTTPS")
 	}
+
 	var webHandler *handler.WebSessionHandler
 	if webCfg.Enabled {
 		var closeWeb func()
@@ -157,21 +198,26 @@ func run() error {
 		if len(recoveryCfg.FenceKey) > 0 {
 			fenceKeys = append(fenceKeys, recoveryCfg.FenceKey)
 		}
+
 		webHandler, closeWeb, err = application.WebWithIdentifiers(ctx, webCfg, pool, store, identifierResolver, fenceKeys...)
 		if err != nil {
 			return err
 		}
+
 		defer closeWeb()
 		slog.Info("web session routes enabled with HTTPS")
 	}
+
 	chatCfg, err := config.LoadWebChat(webCfg.Enabled)
 	if err != nil {
 		return err
 	}
+
 	closeChat, err := application.WebChat(chatCfg, webHandler)
 	if err != nil {
 		return err
 	}
+
 	defer closeChat()
 	var recoveryHandler *handler.RecoveryHandler
 	if recoveryCfg.Enabled {
@@ -180,21 +226,30 @@ func run() error {
 		if err != nil {
 			return err
 		}
+
 		defer closeRecovery()
 		slog.Info("password recovery routes enabled with HTTPS and guarded web sessions")
 	}
+
+	// Mount the configured routes and database readiness check.
 	router := handler.NewRouterWithRecovery(registrationHandler, loginHandler, protected, sessionHandler, webHandler, recoveryHandler, cfg.CORSOrigins...)
 	if pool != nil {
 		router.GET("/api/ready", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")
-			if postgres.Ready(c.Request.Context(), pool) != nil || (webCfg.Enabled && postgres.WebSessionsReady(c.Request.Context(), pool) != nil) || (len(recoveryCfg.FenceKey) > 0 && postgres.RecoveryReady(c.Request.Context(), pool) != nil) {
+			if postgres.Ready(c.Request.Context(), pool) != nil ||
+				(webCfg.Enabled &&
+					postgres.WebSessionsReady(c.Request.Context(), pool) != nil) ||
+				(len(recoveryCfg.FenceKey) > 0 &&
+					postgres.RecoveryReady(c.Request.Context(), pool) != nil) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
 				return
 			}
+
 			c.JSON(http.StatusOK, gin.H{"status": "ready"})
 		})
 	}
 
+	// Set HTTP budgets before accepting requests.
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
@@ -207,6 +262,7 @@ func run() error {
 	if tlsEnabled {
 		server.WriteTimeout = 45 * time.Second
 	}
+
 	serverErrors := make(chan error, 1)
 	go func() {
 		slog.Info("starting HTTP server", "port", cfg.Port, "tls", tlsEnabled)
@@ -228,19 +284,23 @@ func run() error {
 	}
 
 	slog.Info("shutting down HTTP server")
+	// Let active requests finish within the shutdown budget.
 	shutdownTimeout := 5 * time.Second
 	if tlsEnabled {
 		shutdownTimeout = 30 * time.Second
 	}
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		_ = server.Close()
 		return err
 	}
+
 	if err := <-serverErrors; !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+
 	slog.Info("HTTP server stopped")
 	return nil
 }

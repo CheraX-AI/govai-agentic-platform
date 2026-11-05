@@ -35,17 +35,29 @@ type testDB struct {
 }
 
 func newDB() *testDB {
-	return &testDB{ops: map[string]Operation{}, claims: map[string]string{}, gates: map[string]chan struct{}{}, profiles: map[string]ProfileRecord{}, users: map[string]Identity{}, owners: map[string]string{}, calls: map[string]int{}, now: time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)}
+	return &testDB{
+		ops:      map[string]Operation{},
+		claims:   map[string]string{},
+		gates:    map[string]chan struct{}{},
+		profiles: map[string]ProfileRecord{},
+		users:    map[string]Identity{},
+		owners:   map[string]string{},
+		calls:    map[string]int{},
+		now:      time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC),
+	}
 }
+
 func (d *testDB) Reserve(ctx context.Context, r Reservation) (OperationSession, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+
 	d.mu.Lock()
 	if d.failReserve {
 		d.mu.Unlock()
 		return nil, errors.New("private database error")
 	}
+
 	if op, ok := d.ops[r.Key]; ok {
 		if op.Issuer != r.Issuer || op.Fingerprint != r.Fingerprint {
 			d.mu.Unlock()
@@ -57,13 +69,16 @@ func (d *testDB) Reserve(ctx context.Context, r Reservation) (OperationSession, 
 			d.mu.Unlock()
 			return nil, ErrNICConflict
 		}
+
 		d.claims[n] = r.Key
 		d.ops[r.Key] = Operation{Reservation: r, Phase: Reserved}
 		d.gates[r.Key] = make(chan struct{}, 1)
 	}
+
 	d.mu.Unlock()
 	return d.Open(ctx, r.Issuer, r.Key)
 }
+
 func (d *testDB) Open(ctx context.Context, issuer, key string) (OperationSession, error) {
 	d.mu.Lock()
 	op, ok := d.ops[key]
@@ -72,6 +87,7 @@ func (d *testDB) Open(ctx context.Context, issuer, key string) (OperationSession
 	if !ok || op.Issuer != issuer {
 		return nil, ErrOperationMissing
 	}
+
 	select {
 	case gate <- struct{}{}:
 		if ctx.Err() != nil {
@@ -98,32 +114,42 @@ func (s *testSession) Snapshot() Operation {
 	defer s.db.mu.Unlock()
 	return s.db.ops[s.key]
 }
+
 func (s *testSession) Save(ctx context.Context, next Operation) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
 	d := s.db
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	op := d.ops[s.key]
-	if op.Reservation != next.Reservation || next.Revision != op.Revision+1 || (op.Subject != "" && next.Subject != op.Subject) {
+	if op.Reservation != next.Reservation ||
+		next.Revision != op.Revision+1 ||
+		(op.Subject != "" &&
+			next.Subject != op.Subject) {
 		return errors.New("immutable state changed")
 	}
+
 	if d.failSave == next.Phase {
 		d.failSave = ""
 		if d.afterCommit {
 			d.ops[s.key] = next
 		}
+
 		return errors.New("private commit failure")
 	}
+
 	d.ops[s.key] = next
 	return nil
 }
+
 func (s *testSession) Close(context.Context) error {
 	<-s.gate
 	if s.db.failClose {
 		return errors.New("private unlock failure")
 	}
+
 	return nil
 }
 
@@ -133,6 +159,7 @@ func (p testProfiles) Persist(ctx context.Context, r ProfileRecord) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
 	d := p.db
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -140,15 +167,18 @@ func (p testProfiles) Persist(ctx context.Context, r ProfileRecord) error {
 	if d.failProfile {
 		return errors.New("private profile failure")
 	}
+
 	key, ok := d.claims[r.Data.NIC.NormalizedNumber()]
 	op := d.ops[key]
 	if !ok || op.OperationID != r.OperationID || op.Subject != r.Subject || op.Issuer != r.Issuer {
 		return ErrProfileConflict
 	}
+
 	pk := r.Issuer + "|" + r.Subject
 	if existing, ok := d.profiles[pk]; ok && existing != r {
 		return ErrProfileConflict
 	}
+
 	d.profiles[pk] = r
 	return nil
 }
@@ -165,10 +195,12 @@ func (a testAdmin) CreateDisabled(ctx context.Context, r Request, op string) (Id
 			valid = true
 		}
 	}
+
 	if !valid {
 		d.mu.Unlock()
 		panic("creation before intent commit")
 	}
+
 	err := d.createError
 	started, release, cancel := d.createStarted, d.createRelease, d.cancelCreate
 	d.mu.Unlock()
@@ -178,6 +210,7 @@ func (a testAdmin) CreateDisabled(ctx context.Context, r Request, op string) (Id
 		default:
 		}
 	}
+
 	if release != nil {
 		select {
 		case <-release:
@@ -185,9 +218,11 @@ func (a testAdmin) CreateDisabled(ctx context.Context, r Request, op string) (Id
 			return Identity{}, &AdminError{Code: AdminAmbiguous, UnknownOutcome: true}
 		}
 	}
+
 	if err != nil {
 		return Identity{}, err
 	}
+
 	d.mu.Lock()
 	u := Identity{Subject: "subject-" + op}
 	d.users[u.Subject] = u
@@ -198,15 +233,19 @@ func (a testAdmin) CreateDisabled(ctx context.Context, r Request, op string) (Id
 		cancel()
 		<-ctx.Done()
 	}
+
 	if after != nil {
 		return Identity{}, after
 	}
+
 	return u, nil
 }
+
 func (a testAdmin) FindOwned(ctx context.Context, op string) (Identity, error) {
 	if ctx.Err() != nil {
 		return Identity{}, ctx.Err()
 	}
+
 	d := a.db
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -214,17 +253,21 @@ func (a testAdmin) FindOwned(ctx context.Context, op string) (Identity, error) {
 	if d.findError != nil {
 		return Identity{}, d.findError
 	}
+
 	for subject, owner := range d.owners {
 		if owner == op {
 			return d.users[subject], nil
 		}
 	}
+
 	return Identity{}, &AdminError{Code: AdminNotFound}
 }
+
 func (a testAdmin) ReadOwned(ctx context.Context, subject, op string) (Identity, error) {
 	if ctx.Err() != nil {
 		return Identity{}, ctx.Err()
 	}
+
 	d := a.db
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -232,15 +275,19 @@ func (a testAdmin) ReadOwned(ctx context.Context, subject, op string) (Identity,
 	if d.readError != nil {
 		return Identity{}, d.readError
 	}
+
 	if d.owners[subject] != op {
 		return Identity{}, &AdminError{Code: AdminOwnership}
 	}
+
 	return d.users[subject], nil
 }
+
 func (a testAdmin) EnableOwned(ctx context.Context, subject, op string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
 	d := a.db
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -251,21 +298,26 @@ func (a testAdmin) EnableOwned(ctx context.Context, subject, op string) error {
 			bound = true
 		}
 	}
+
 	if !bound {
 		panic("enable before committed profile")
 	}
+
 	if d.enableError != nil {
 		return d.enableError
 	}
+
 	u := d.users[subject]
 	u.Enabled = true
 	d.users[subject] = u
 	return nil
 }
+
 func (a testAdmin) SendVerification(ctx context.Context, subject, op string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
 	d := a.db
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -273,25 +325,55 @@ func (a testAdmin) SendVerification(ctx context.Context, subject, op string) err
 	if !d.users[subject].Enabled || d.owners[subject] != op {
 		panic("email before owned enabling")
 	}
+
 	return d.emailError
 }
 
 func service(t *testing.T, d *testDB) *Service {
 	t.Helper()
-	s, err := NewService(ServiceConfig{Issuer: "https://issuer.example.test/realms/GovAI", FingerprintKey: bytes.Repeat([]byte{1}, 32), Timeout: time.Second, EmailRetryBackoff: time.Minute, MaxEmailAttempts: 3, Now: func() time.Time { return d.now }}, testAdmin{d}, testProfiles{d}, d)
+	s, err := NewService(
+		ServiceConfig{
+			Issuer:            "https://issuer.example.test/realms/GovAI",
+			FingerprintKey:    bytes.Repeat([]byte{1}, 32),
+			Timeout:           time.Second,
+			EmailRetryBackoff: time.Minute,
+			MaxEmailAttempts:  3,
+			Now:               func() time.Time { return d.now },
+		},
+		testAdmin{d},
+		testProfiles{d},
+		d,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return s
 }
+
 func requestJSON(nic, email, password string) *strings.Reader {
-	body, _ := json.Marshal(map[string]string{"full_name": "Synthetic Citizen", "nic": nic, "mobile_number": "+14155552671", "email": email, "password": password})
+	body, _ := json.Marshal(
+		map[string]string{
+			"full_name":     "Synthetic Citizen",
+			"nic":           nic,
+			"mobile_number": "+14155552671",
+			"email":         email,
+			"password":      password,
+		},
+	)
 	return strings.NewReader(string(body))
 }
+
 func key(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-%012d", i) }
+
 func register(s *Service, k string) (Receipt, error) {
-	return s.Register(context.Background(), k, requestJSON("000000001V", "synthetic@example.test", "synthetic-secret-password"))
+	return s.Register(
+		context.Background(),
+		k,
+		requestJSON("000000001V", "synthetic@example.test", "synthetic-secret-password"),
+	)
 }
+
 func code(t *testing.T, err error, want string) {
 	t.Helper()
 	var e *ServiceError
@@ -307,16 +389,26 @@ func TestServiceHappyPathReplayAndPasswordExclusion(t *testing.T) {
 	if err != nil || receipt.Status != "received" {
 		t.Fatal(err)
 	}
-	if d.ops[key(1)].Phase != Completed || d.ops[key(1)].EmailState != "request_accepted" || len(d.profiles) != 1 {
+
+	if d.ops[key(1)].Phase != Completed ||
+		d.ops[key(1)].EmailState != "request_accepted" ||
+		len(d.profiles) != 1 {
 		t.Fatal("incomplete state")
 	}
-	_, err = s.Register(context.Background(), key(1), requestJSON("000000001v", "SYNTHETIC@example.test", "replacement-password"))
+
+	_, err = s.Register(
+		context.Background(),
+		key(1),
+		requestJSON("000000001v", "SYNTHETIC@example.test", "replacement-password"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 || d.calls["profile"] != 1 || d.calls["enable"] != 1 || d.calls["email"] != 1 {
 		t.Fatal("replay repeated effects")
 	}
+
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	for _, v := range []any{d.ops[key(1)], d.ops[key(1)].Reservation, d.ops[key(1)].Pending, s, s.cfg} {
@@ -324,20 +416,30 @@ func TestServiceHappyPathReplayAndPasswordExclusion(t *testing.T) {
 		if e != nil || string(b) != `"[REDACTED]"` || fmt.Sprintf("%#v", v) != "[REDACTED]" {
 			t.Fatal("unsafe persistence formatting")
 		}
+
 		logger.Info("safe", "value", v)
 	}
+
 	if strings.Contains(logs.String(), "synthetic") || strings.Contains(logs.String(), "password") {
 		t.Fatal("sensitive log")
 	}
 	// Persistence ports accept only explicit credential-free DTOs.
-	for _, typ := range []reflect.Type{reflect.TypeOf(ProfileData{}), reflect.TypeOf(ProfileRecord{}), reflect.TypeOf(Reservation{}), reflect.TypeOf(Operation{})} {
+	for _, typ := range []reflect.Type{
+		reflect.TypeOf(ProfileData{}),
+		reflect.TypeOf(ProfileRecord{}),
+		reflect.TypeOf(Reservation{}),
+		reflect.TypeOf(Operation{}),
+	} {
 		for i := 0; i < typ.NumField(); i++ {
 			n := strings.ToLower(typ.Field(i).Name)
-			if strings.Contains(n, "password") || strings.Contains(n, "token") || typ.Field(i).Type == reflect.TypeOf(Request{}) {
+			if strings.Contains(n, "password") ||
+				strings.Contains(n, "token") ||
+				typ.Field(i).Type == reflect.TypeOf(Request{}) {
 				t.Fatal("credential-bearing storage DTO")
 			}
 		}
 	}
+
 	r1, _ := ParseRequest(requestJSON("000000001V", "synthetic@example.test", "first-password"))
 	r2, _ := ParseRequest(requestJSON("000000001V", "synthetic@example.test", "different-password"))
 	if s.fingerprint(r1) != s.fingerprint(r2) {
@@ -353,17 +455,20 @@ func TestServiceRejectsOverridesAndConflictsBeforeMutation(t *testing.T) {
 	if !errors.As(err, &input) || len(d.ops) != 0 {
 		t.Fatal("validation not reused")
 	}
+
 	_, err = register(s, "invalid-key")
 	code(t, err, "registration_invalid_key")
 	if _, err = register(s, key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = s.Register(context.Background(), key(1), requestJSON("000000002V", "other@example.test", "password"))
 	code(t, err, "registration_request_conflict")
 	_, err = s.Register(context.Background(), key(2), requestJSON("000000001v", "other@example.test", "password"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 || len(d.ops) != 1 {
 		t.Fatal("conflicting NIC caused identity mutation")
 	}
@@ -381,24 +486,30 @@ func TestServiceEveryCheckpointFailureRecoversWithoutCreateReplay(t *testing.T) 
 				if err == nil {
 					t.Fatal("injected commit error ignored")
 				}
+
 				_, err = register(s, key(1))
 				if phase == Creating && after {
 					code(t, err, "registration_reconciliation_required")
 					if d.calls["create"] != 0 {
 						t.Fatal("intent replayed despite uncertain checkpoint")
 					}
+
 					return
 				}
+
 				if (phase == EmailSending && after) || (phase == Completed && !after) {
 					code(t, err, "registration_reconciliation_required")
 					if d.calls["email"] > 1 {
 						t.Fatal("uncertain email resent")
 					}
+
 					return
 				}
+
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				if d.calls["create"] != 1 || d.calls["email"] != 1 || d.ops[key(1)].Phase != Completed {
 					t.Fatal("non-idempotent recovery")
 				}
@@ -416,14 +527,21 @@ func TestServiceAmbiguousCreateReconcilesExactOwnedMarker(t *testing.T) {
 	if d.ops[key(1)].Phase != Creating || d.calls["enable"] != 0 {
 		t.Fatal("unsafe ambiguous handling")
 	}
+
 	d.errorAfterCreate = nil
 	if _, err = s.Resume(context.Background(), key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 || d.calls["find"] != 1 {
 		t.Fatal("blind create retry")
 	}
-	for _, findErr := range []error{&AdminError{Code: AdminNotFound}, &AdminError{Code: AdminOwnership}, errors.New("private search failure")} {
+
+	for _, findErr := range []error{
+		&AdminError{Code: AdminNotFound},
+		&AdminError{Code: AdminOwnership},
+		errors.New("private search failure"),
+	} {
 		t.Run(fmt.Sprint(findErr), func(t *testing.T) {
 			d := newDB()
 			d.createError = &AdminError{Code: AdminAmbiguous, UnknownOutcome: true}
@@ -448,10 +566,17 @@ func TestServiceDuplicateDoesNotAdoptOrOverwrite(t *testing.T) {
 	if _, err := register(s, key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := register(s, key(1)); err != nil {
 		t.Fatal(err)
 	}
-	if d.calls["find"] != 0 || d.calls["profile"] != 0 || d.calls["enable"] != 0 || d.calls["email"] != 0 || len(d.users) != 1 || d.ops[key(1)].Phase != Duplicate {
+
+	if d.calls["find"] != 0 ||
+		d.calls["profile"] != 0 ||
+		d.calls["enable"] != 0 ||
+		d.calls["email"] != 0 ||
+		len(d.users) != 1 ||
+		d.ops[key(1)].Phase != Duplicate {
 		t.Fatal("duplicate adopted/changed an account")
 	}
 }
@@ -465,6 +590,7 @@ func TestServiceStoreAndProfileOutages(t *testing.T) {
 	if d.calls["create"] != 0 {
 		t.Fatal("created without reservation")
 	}
+
 	d.failReserve = false
 	d.failProfile = true
 	_, err = register(s, key(1))
@@ -472,10 +598,12 @@ func TestServiceStoreAndProfileOutages(t *testing.T) {
 	if d.calls["enable"] != 0 || d.ops[key(1)].Phase != SubjectRecorded {
 		t.Fatal("enabled before profile")
 	}
+
 	d.failProfile = false
 	if _, err = s.Resume(context.Background(), key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 {
 		t.Fatal("profile failure recreated identity")
 	}
@@ -487,25 +615,36 @@ func TestServiceCancellationAndConcurrentRetries(t *testing.T) {
 	d.createRelease = make(chan struct{})
 	s := service(t, d)
 	first := make(chan error, 1)
-	go func() { _, err := register(s, key(1)); first <- err }()
+	go func() {
+
+		_, err := register(s, key(1))
+		first <- err
+	}()
 	<-d.createStarted
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := s.Register(ctx, key(1), requestJSON("000000001V", "synthetic@example.test", "password"))
 	code(t, err, "registration_canceled")
 	second := make(chan error, 1)
-	go func() { _, err := register(s, key(1)); second <- err }()
+	go func() {
+
+		_, err := register(s, key(1))
+		second <- err
+	}()
 	// Another key with the reserved normalized number must not wait/create.
 	if _, err := register(s, key(2)); err != nil {
 		t.Fatal(err)
 	}
+
 	close(d.createRelease)
 	if err = <-first; err != nil {
 		t.Fatal(err)
 	}
+
 	if err = <-second; err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 || d.calls["email"] != 1 {
 		t.Fatal("concurrent replay")
 	}
@@ -520,6 +659,7 @@ func TestServiceCancellationAndConcurrentRetries(t *testing.T) {
 	if _, err = s2.Resume(context.Background(), key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if d2.calls["create"] != 1 {
 		t.Fatal("canceled create replayed")
 	}
@@ -538,13 +678,16 @@ func TestServiceEmailRetryBackoffCapAndUncertainSend(t *testing.T) {
 		} else {
 			code(t, err, "registration_verification_pending")
 		}
+
 		d.now = d.now.Add(10 * time.Minute)
 	}
+
 	_, err := register(s, key(1))
 	code(t, err, "registration_attention_required")
 	if d.calls["email"] != 3 || d.calls["create"] != 1 {
 		t.Fatal("retry bound exceeded")
 	}
+
 	d2 := newDB()
 	d2.emailError = &AdminError{Code: AdminAmbiguous, UnknownOutcome: true}
 	s2 := service(t, d2)
@@ -555,15 +698,18 @@ func TestServiceEmailRetryBackoffCapAndUncertainSend(t *testing.T) {
 	if d2.calls["email"] != 1 {
 		t.Fatal("ambiguous send replayed")
 	}
+
 	d2.mu.Lock()
 	for k, u := range d2.users {
 		u.EmailVerified = true
 		d2.users[k] = u
 	}
+
 	d2.mu.Unlock()
 	if _, err = s2.Resume(context.Background(), key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if d2.ops[key(1)].EmailState != "already_verified" {
 		t.Fatal("verified recovery state lost")
 	}
@@ -584,19 +730,24 @@ func TestServiceDependencyFailuresAndDefiniteCreateRetry(t *testing.T) {
 			case "close":
 				d.failClose = true
 			}
+
 			_, err := register(s, key(1))
 			if err == nil {
 				t.Fatal("dependency failure ignored")
 			}
+
 			if strings.Contains(err.Error(), "private") {
 				t.Fatal("raw dependency error escaped")
 			}
+
 			if kind == "read" && d.calls["profile"] != 0 {
 				t.Fatal("ownership failure persisted profile")
 			}
+
 			if kind == "enable" && d.calls["email"] != 0 {
 				t.Fatal("email before confirmed enabling")
 			}
+
 			d.createError = nil
 			d.readError = nil
 			d.enableError = nil
@@ -604,10 +755,12 @@ func TestServiceDependencyFailuresAndDefiniteCreateRetry(t *testing.T) {
 			if _, err = register(s, key(1)); err != nil {
 				t.Fatal(err)
 			}
+
 			want := 1
 			if kind == "create" {
 				want = 2
 			}
+
 			if d.calls["create"] != want || len(d.users) != 1 {
 				t.Fatal("unexpected identity replay")
 			}
@@ -648,6 +801,7 @@ func TestServiceReservedRecoveryAndProfileOwnershipConflict(t *testing.T) {
 	if d.calls["create"] != 0 {
 		t.Fatal("worker manufactured credentials")
 	}
+
 	d.failProfile = true
 	_, _ = register(s, key(1))
 	d.failProfile = false
@@ -666,7 +820,11 @@ func TestServiceWaitingSessionHonorsCancellation(t *testing.T) {
 	d.createRelease = make(chan struct{})
 	s := service(t, d)
 	finished := make(chan error, 1)
-	go func() { _, err := register(s, key(1)); finished <- err }()
+	go func() {
+
+		_, err := register(s, key(1))
+		finished <- err
+	}()
 	<-d.createStarted
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
@@ -676,6 +834,7 @@ func TestServiceWaitingSessionHonorsCancellation(t *testing.T) {
 	if err = <-finished; err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 {
 		t.Fatal("session waiter created identity")
 	}
@@ -690,15 +849,18 @@ func TestServiceEnableAmbiguityReadbackAndVerifiedEmailNoop(t *testing.T) {
 	if d.calls["enable"] != 1 {
 		t.Fatal("enable not invoked")
 	}
+
 	d.mu.Lock()
 	for k, u := range d.users {
 		u.EmailVerified = true
 		d.users[k] = u
 	}
+
 	d.mu.Unlock()
 	if _, err = s.Resume(context.Background(), key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["enable"] != 1 || d.calls["email"] != 0 || d.ops[key(1)].EmailState != "already_verified" {
 		t.Fatal("enabled readback or verified-email skip failed")
 	}
@@ -721,6 +883,7 @@ func (j ownershipJournal) Reserve(ctx context.Context, r Reservation) (Operation
 	if e != nil {
 		return nil, e
 	}
+
 	return ownershipSession{s, j.ownership}, nil
 }
 
@@ -742,13 +905,18 @@ func TestServiceOwnershipLossCancelsExternalWork(t *testing.T) {
 	if _, err = s.Resume(context.Background(), key(1)); err != nil {
 		t.Fatal(err)
 	}
+
 	if d.calls["create"] != 1 {
 		t.Fatal("ownership loss replayed creation")
 	}
 }
 
 func TestServiceUnknownSendOutcomesFailClosed(t *testing.T) {
-	for _, emailErr := range []error{errors.New("private SMTP failure"), &AdminError{Code: AdminAmbiguous}, &AdminError{Code: AdminCode("unrecognized")}} {
+	for _, emailErr := range []error{
+		errors.New("private SMTP failure"),
+		&AdminError{Code: AdminAmbiguous},
+		&AdminError{Code: AdminCode("unrecognized")},
+	} {
 		d := newDB()
 		d.emailError = emailErr
 		s := service(t, d)
