@@ -1,7 +1,9 @@
 # GovAI web app
 
-React, TypeScript, Vite and plain CSS. The web app talks only to the real backend:
-there are no mock services, demo sessions or preview pages any more.
+React, TypeScript, Vite and plain CSS. The authenticated application uses the real
+backend and has no demo authentication or simulated-success fallback.
+`/preview/chat` is an isolated development-only fixture preview; `/app/chat`
+remains protected by the existing session checks. The preview is unavailable in production.
 
 GovAI is a university prototype. Use synthetic test accounts only.
 
@@ -47,7 +49,7 @@ URLs are normal paths (no `#`). Old `/#/login` style links are redirected.
 | `/forgot-password` → `/check-email` | Request a password reset link |
 | `/reset-password#token=...` | Choose a new password (link from the email; the token is read and removed from the address bar) |
 | `/verify-code` | Asks the user to open a valid reset link |
-| `/app/home`, `/app/recent` | Signed-in pages; guests are sent to `/login?returnTo=...` |
+| `/app/home`, `/app/chat`, `/app/recent` | Signed-in pages; guests are sent to `/login?returnTo=...` |
 | `/home`, `/recent` | Redirect to `/app/home`, `/app/recent` |
 
 Not available yet (no backend): the user's name (`/web/session` returns only an ID),
@@ -129,11 +131,60 @@ npm run lint                                    # Oxlint
 node scripts/check-auth-state.mjs               # routes, return allowlist
 node scripts/check-login.mjs                    # email/NIC login validation
 node scripts/check-registration.mjs             # registration rules + registration API client
-node scripts/check-password-reset.mjs           # shared password policy
 node scripts/check-recovery.mjs                 # recovery NIC validation
 node scripts/integration/check-chat-api.mjs     # chat client: CSRF, sources, errors
+node scripts/integration/check-web-auth-api.mjs # session client transport and errors
+node scripts/integration/check-recovery-api.mjs # recovery client and receipt validation
+node scripts/integration/check-reset-api.mjs    # current reset policy, token handling and client
 ```
 
-The browser scripts (`scripts/*-browser.mjs`, `scripts/integration/*browser*.mjs`)
-use headless Edge and still expect the old `#/` URLs and demo text; they need
-updating before use.
+## Frontend reconciliation
+
+The existing `Modify_Code-structure` branch retains its commits and main's real authentication, pathname routing, recovery, and API services. GA-21's presentation was selectively ported: `ChatComposer`, `ChatMessage`, `ConversationView`, `ChatPage` and `styles/chat.css`. Its mock authentication, demo controls, synthetic user, mock services, hash router and full-history request contract were not imported.
+
+`routing/ApplicationRoutes.tsx` owns one local `chat/useConversation.ts` state for Home, Chat and Recent. Home sends into `/app/chat`; Recent links to the current in-tab conversation without claiming saved history. New chat resets it. Logout, identity change, confirmed session failure, public departure and reload clear local messages and cancel pending work. Existing session checking withholds protected UI; a successful same-identity recheck retains the in-memory conversation. The hook calls the destination's unchanged `services/chatApi.ts` with just the newest message. No request/response mapper, new API endpoint, backend setup or auth changes were added by this reconciliation.
+
+The UI distinguishes citizen/assistant messages, retains messages on errors, permits explicit retry with a duplicate-processing warning, supports cancellation/Enter/Shift+Enter/IME, follows new messages without forcing readers away from older messages, and preserves the reading anchor when the existing GA-21 header collapses. Sources use the existing service's numbered title/page/optional-HTTPS-URL contract. Missing URLs are plain text. Text is rendered by React, not raw HTML. There is no fallback to simulated answers.
+
+Layout, typography, assets, login and account behavior retain main's behavior alongside the pushed GA-21 conversation presentation and the requested shared composer adjustments. Source/UI logic is in `src/chat`, `src/components/chat`, `src/pages/ChatPage.tsx`, and `src/styles/chat.css`; existing authentication code and `src/services` are unchanged. Synthetic chat replies exist only in the explicitly selected development preview under `src/dev`. Fixture-driven browser verification is maintained locally and is outside the proposed shared test set. Neither the preview nor local test responses are a fallback for the authenticated application.
+
+### Shared verification scope
+
+The commands above are self-contained validation and API-client checks. The API-client
+checks replace `fetch` within each check; they require no external fixture files or
+running services and do not demonstrate live integration.
+
+Fixture-driven browser checks are retained locally, outside the proposed shared
+commit. Their coverage includes authentication/recovery navigation, protected routes,
+chat loading/errors/retry/cancellation, source rendering, keyboard/IME handling,
+composer geometry, scrolling and responsive menu focus. Those checks are not part
+of the shared commands above.
+
+The existing opt-in live checks are `scripts/integration/check-auth-live-browser.mjs`
+and `scripts/integration/check-chat-unavailable-live.mjs`. They use the shared,
+fixture-independent browser harness. They require configured HTTPS services and
+create synthetic accounts when explicitly enabled. Historical route/selector
+expectations still require review; live acceptance is not claimed. Keep their opt-in
+flags unset during frontend-only checks; no services are started by this cleanup.
+
+Paused API-integration work remains outside this frontend increment.
+
+Limitations: no server-side conversation history, history CRUD, full-transcript context, attachments or voice. Live verification requires available configured services and legitimate test access, and is not part of this frontend-only reconciliation. The destination's existing API/auth behavior is intentionally unchanged; any transport/security improvements belong to the separately paused integration work.
+
+
+## Isolated development chat preview
+
+Open **http://localhost:5173/preview/chat** with the standard local Vite server (`npm.cmd run dev`; use HTTPS instead if local certificates are configured). This route is outside AuthProvider and does not check, create or require a session. It reuses the conversation UI with an in-memory synthetic service; opening or interacting with it makes no backend requests and stores no cookies or browser data. Normal Vite scripts/assets still load from the frontend server. The notice and replies explicitly identify the synthetic preview; the optional fixture result selector exercises success/error UI. It is never a fallback for real chat.
+
+Production returns Page not found for `/preview/chat`, and its synthetic module is excluded from the built assets. `/app/chat` retains the real protected route. The preview's login link performs normal navigation back to the real application. Reload clears its local conversation.
+
+Only the login form's visible Retry session check button was removed. Automatic session checking, session-error feedback, normal login submission, and the retry action on the protected session-error page remain unchanged. Authentication services were not edited.
+
+### Shared composer sizing and keyboard behavior
+
+`ChatComposer` is reused on Home, authenticated Chat and `/preview/chat`. The one-line form is 56px high with 5px padding, centered 44px controls and readable 16px text. It uses width:100%, max-width:850px and automatic horizontal margins; the disclaimer sits directly below on the same centerline. The textarea grows automatically to 160px, then scrolls internally; it has no manual resize handle. Enter submits through the same form handler as Send, Shift+Enter inserts a newline, and composition/native-IME/229 guards prevent unfinished composition from submitting. Empty/whitespace and pending submissions are blocked both at the shared control and conversation-state boundary.
+
+Local browser verification measures sizing, targets, alignment, growth, internal
+scrolling, resize and overflow at widths 1440/768/375/320, plus whitespace,
+Shift+Enter and IME behavior in preview and normal application contexts.
+Preview fixture success is not authenticated backend evidence.

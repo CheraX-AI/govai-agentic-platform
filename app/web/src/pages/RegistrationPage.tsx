@@ -62,7 +62,7 @@ export default function RegistrationPage() {
 
   return <AuthLayout headingId="registration-heading" wide formProps={{ ref: form, onSubmit: submit, noValidate: true }}
     banner="University prototype. Use test details only."
-    footerControls={<p>Registration uses the GovAI backend. Email verification is required. Login integration remains pending.</p>}>
+    footerControls={<p>Registration uses the GovAI backend. Email verification is required before login.</p>}>
     <div className="heading"><h1 id="registration-heading">Create your account</h1><p>Enter the details exactly as they appear on your NIC.</p></div>
     <InputField id="register-fullName" label="Full name (as on NIC)" icon="register-user" autoComplete="name" required value={values.fullName} disabled={pending} error={error('fullName')} onChange={event => change('fullName', event.target.value)} onBlur={() => blur('fullName')} />
     <div className="registration-row">
