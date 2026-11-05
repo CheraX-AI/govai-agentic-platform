@@ -11,6 +11,7 @@ func CanonicalEmail(value string) string {
 	if len(value) > 254 {
 		return ""
 	}
+
 	return normalizeEmail(value)
 }
 

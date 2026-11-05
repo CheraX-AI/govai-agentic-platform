@@ -12,14 +12,31 @@ import (
 )
 
 func main() {
-	optIn := flag.Bool("allow-disposable-experiment", false, "create a separate Keycloak container/storage and probe synthetic accounts")
-	state := flag.String("state-dir", "", "new private directory outside Git for certificates and a non-secret resource manifest")
-	experiment := flag.String("experiment", "baseline", "baseline, groups or lifecycle; each uses fresh disposable resources")
+	optIn := flag.Bool(
+		"allow-disposable-experiment",
+		false,
+		"create a separate Keycloak container/storage and probe synthetic accounts",
+	)
+	state := flag.String(
+		"state-dir",
+		"",
+		"new private directory outside Git for certificates and a non-secret resource manifest",
+	)
+	experiment := flag.String(
+		"experiment",
+		"baseline",
+		"baseline, groups or lifecycle; each uses fresh disposable resources",
+	)
 	flag.Parse()
-	if !*optIn || *state == "" || (*experiment != "baseline" && *experiment != "groups" && *experiment != "lifecycle") {
+	if !*optIn ||
+		*state == "" ||
+		(*experiment != "baseline" &&
+			*experiment != "groups" &&
+			*experiment != "lifecycle") {
 		fmt.Println("LAB_OPT_IN BLOCKED")
 		os.Exit(1)
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	var code int
@@ -30,5 +47,6 @@ func main() {
 	} else {
 		code = permissionlab.Run(ctx, *state, os.Stdout)
 	}
+
 	os.Exit(code)
 }

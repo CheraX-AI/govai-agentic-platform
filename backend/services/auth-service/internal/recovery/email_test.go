@@ -14,7 +14,14 @@ func TestMaskEmail(t *testing.T) {
 			t.Fatalf("mask mismatch: %v", err)
 		}
 	}
-	for _, value := range []string{"", "invalid", "Name <citizen@example.test>", "citizen@example.test\r\nBcc: other@example.test", string([]byte{255}) + "@example.test"} {
+
+	for _, value := range []string{
+		"",
+		"invalid",
+		"Name <citizen@example.test>",
+		"citizen@example.test\r\nBcc: other@example.test",
+		string([]byte{255}) + "@example.test",
+	} {
 		if got, err := MaskEmail(value); err == nil || got != "" {
 			t.Fatal("unsafe mask input accepted")
 		}
