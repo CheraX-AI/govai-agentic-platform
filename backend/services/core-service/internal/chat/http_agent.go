@@ -143,6 +143,9 @@ func (a *HTTPAgent) Ask(ctx context.Context, q Question) (Reply, error) {
 	if a.cfg.AuthMode == "bearer" {
 		req.Header.Set("Authorization", "Bearer "+a.cfg.BearerToken)
 	}
+	if id := requestIDFrom(ctx); id != "" {
+		req.Header.Set("X-Request-ID", id)
+	}
 	response, err := a.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {

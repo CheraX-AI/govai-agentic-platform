@@ -1,7 +1,0 @@
-import assert from 'node:assert/strict'
-import { validateCode } from '../src/validation/codeValidation.ts'
-import { createDemoChallenge, secondsUntil, verifyMockCode, resendMockCode } from '../src/services/mockCodeService.ts'
-assert.ok(validateCode(''));for(const code of ['1','12345','1234567','abcdef','12 456'])assert.ok(validateCode(code));assert.equal(validateCode('123456'),undefined)
-const challenge=createDemoChallenge(1000);assert.deepEqual(challenge,{expiresAt:301000,resendAt:46000});assert.equal(secondsUntil(challenge.resendAt,1000),45);assert.equal(secondsUntil(challenge.expiresAt,301001),0)
-assert.equal(await verifyMockCode('123456',createDemoChallenge(),'success'),'success');assert.equal(await verifyMockCode('000000',createDemoChallenge(),'success'),'invalid');assert.equal(await verifyMockCode('123456',createDemoChallenge(),'invalid'),'invalid');assert.equal(await verifyMockCode('123456',createDemoChallenge(),'expired'),'expired');assert.equal(await verifyMockCode('123456',{expiresAt:Date.now()-1,resendAt:0},'success'),'expired');await assert.rejects(resendMockCode(createDemoChallenge()));const reset=await resendMockCode({expiresAt:0,resendAt:0});assert.ok(reset.expiresAt>Date.now()+299000&&reset.resendAt>Date.now()+44000)
-console.log('PASS: required/incomplete/non-digit validation, deadline boundaries, mock success/invalid/expired, cooldown enforcement and reset deadlines')

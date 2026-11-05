@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { createMockAuthAdapter } from '../services/mockAuthAdapter'
+import { browserAuthAdapter } from '../services/browserAuthAdapter'
 import { AuthContext } from './AuthContext'
 import type { AuthenticationAdapter, AuthState } from './types'
 
-const defaultAdapter = createMockAuthAdapter(() => sessionStorage, import.meta.env.DEV)
+const defaultAdapter = browserAuthAdapter
 
 export function AuthProvider({ children, adapter = defaultAdapter }: { children: ReactNode; adapter?: AuthenticationAdapter }) {
   const [state, setState] = useState<AuthState>({ status: 'checking' })
@@ -30,16 +30,18 @@ export function AuthProvider({ children, adapter = defaultAdapter }: { children:
       if (mounted.current && request === generation.current) publish({ status: 'unauthenticated' })
     } catch { if (mounted.current && request === generation.current) publish({ status: 'error' }) }
   }, [adapter, publish])
-  const startMockSession = useCallback(async () => {
-    if (!import.meta.env.DEV) return false
+  const login = useCallback(async (identifier: string, password: string) => {
     const request = ++generation.current
     publish({ status: 'checking' })
     try {
-      const session = await adapter.createMockSession()
+      const session = await adapter.login(identifier, password)
       if (!mounted.current || request !== generation.current) return false
       publish({ status: 'authenticated', session })
       return true
-    } catch { if (mounted.current && request === generation.current) publish({ status: 'error' }); return false }
+    } catch (error) {
+      if (mounted.current && request === generation.current) publish({ status: 'unauthenticated' })
+      throw error
+    }
   }, [adapter, publish])
   useEffect(() => {
     mounted.current = true
@@ -54,14 +56,24 @@ export function AuthProvider({ children, adapter = defaultAdapter }: { children:
     }
     const interval = setInterval(checkExpiry, 250)
     addEventListener('focus', checkExpiry)
-    addEventListener('hashchange', checkExpiry)
+    addEventListener('popstate', checkExpiry)
     addEventListener('pageshow', checkExpiry)
     document.addEventListener('visibilitychange', checkExpiry)
     const cancel = () => { mounted.current = false; generation.current += 1 }
     return () => {
       cancel(); clearInterval(interval)
-      removeEventListener('focus', checkExpiry); removeEventListener('hashchange', checkExpiry); removeEventListener('pageshow', checkExpiry); document.removeEventListener('visibilitychange', checkExpiry)
+      removeEventListener('focus', checkExpiry); removeEventListener('popstate', checkExpiry); removeEventListener('pageshow', checkExpiry); document.removeEventListener('visibilitychange', checkExpiry)
     }
   }, [adapter, retry, publish])
-  return <AuthContext.Provider value={{ state, retry, startMockSession, logout }}>{children}</AuthContext.Provider>
+  useEffect(() => {
+    if (state.status !== 'authenticated') return
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void adapter.refresh().catch(() => { void retry() })
+    }, 120_000)
+    const check = () => { void retry() }
+    addEventListener('focus', check)
+    return () => { clearInterval(interval); removeEventListener('focus', check) }
+  }, [state.status, adapter, retry])
+  return <AuthContext.Provider value={{ state, retry, login, logout }}>{children}</AuthContext.Provider>
 }

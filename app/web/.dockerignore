@@ -1,0 +1,11 @@
+node_modules
+dist
+scripts
+*.md
+.env
+.env.*
+*.log
+*.pem
+*.key
+Dockerfile
+.dockerignore

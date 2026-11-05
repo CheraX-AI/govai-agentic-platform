@@ -1,3 +1,4 @@
+import { installAuthFixtures } from './integration/authFixtures.mjs'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -52,6 +53,7 @@ try {
   }
   await send('Runtime.enable')
   await send('Network.enable')
+  const fixture = await installAuthFixtures(socket, send)
   await send('DOM.enable')
   await send('CSS.enable')
   const key = async (name, modifiers = 0) => {
@@ -75,7 +77,7 @@ try {
   }
   const seenAssets = new Set()
 
-  const base = 'http://127.0.0.1:5173';
+  const base = 'https://localhost:5173';
   await send('Page.navigate', {url: base + '/#/preview/home'});
   await delay(1000);
   const measurements = [];
@@ -192,11 +194,11 @@ try {
   await evaluate('location.hash = "#/login"');await delay(100);
   assert.equal(await evaluate('document.querySelector("h1").textContent'),'Welcome back');
   assert.equal(await evaluate('document.title'),'GovAI | Login preview');
-  assert.equal(apiRequests.length,0,'no Fetch/XHR from application');
+  assert.ok(apiRequests.every(url=>/^https:\/\/localhost:5001\/api\/v1\/web\/(session|csrf|refresh)$/.test(url)),'only expected authentication reads');assert.deepEqual(fixture.errors,[]);
   assert.equal(exceptions.length,0,'no runtime exceptions');
   assert.deepEqual(await evaluate('({local:localStorage.length,session:sessionStorage.length,cookies:document.cookie})'),{local:0,session:0,cookies:''},'no session persistence');
   await writeFile('node_modules/.tmp/ga51-layout-measurements.json',JSON.stringify(measurements,null,2));
-  console.log('PASS: 16 layout cases; desktop header/sidebar/right-aligned accounts and active colours; all 21 shell assets at exact exported dimensions; Inter/Montserrat actually render; keyboard skip link and navigation; 320/375/768/900px website menu, Tab/Shift+Tab containment, Escape/Close/selection focus return and resize; history/direct links/unknown preview; no API/runtime errors or stored sessions');
+  console.log('PASS: 16 layout cases; desktop header/sidebar/right-aligned accounts and active colours; all 21 shell assets at exact exported dimensions; Inter/Montserrat actually render; keyboard skip link and navigation; 320/375/768/900px website menu, Tab/Shift+Tab containment, Escape/Close/selection focus return and resize; history/direct links/unknown preview; synthetic auth fixtures, no runtime errors or stored sessions');
   await send('Browser.close');
 } finally {
   for (const call of pending.values()) clearTimeout(call.timer)

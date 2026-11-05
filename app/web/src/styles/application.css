@@ -14,13 +14,13 @@
 .header-account { margin-left: auto; display: flex; align-items: center; gap: 16px; }
 .shell-language { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--border); background: white; border-radius: 999px; font-size: 14px; line-height: 1.5; }
 .notification-preview { border: 0; background: transparent; padding: 0; }
-.synthetic-user { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.synthetic-user { border: 0; padding: 2px; min-height: 44px; border-radius: 8px; background: transparent; text-align: left; }
+.account-button { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.account-button { border: 0; padding: 2px; min-height: 44px; border-radius: 8px; background: transparent; text-align: left; }
 .account-disclosure { position: relative; }
 .account-actions { position: absolute; right: 0; top: calc(100% + 8px); z-index: 6; width: 240px; max-width: calc(100vw - 32px); padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: white; box-shadow: 0 4px 16px #0002; font-size: 13px; line-height: 1.5; }
 .account-actions button, .account-actions a { display: block; width: 100%; min-height: 44px; padding: 10px; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; background: white; text-align: left; }
 .account-actions button:disabled { color: #666; }
-.synthetic-user small { display: block; font-size: 11px; line-height: 1.5; color: var(--tertiary); margin-top: 2px; }
+.account-button small { display: block; font-size: 11px; line-height: 1.5; color: var(--tertiary); margin-top: 2px; }
 .user-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-subtle); color: var(--brand); font-weight: 700; }
 .application-body { display: flex; flex: 1; min-height: 0; }
 .desktop-sidebar { width: var(--sidebar-width); flex: none; min-height: 0; }
@@ -109,3 +109,14 @@
   .home-hero > p:first-child { font-size: 26px; }
 }
 @media (max-height: 720px) and (min-width: 581px) { .home-content { justify-content: flex-start; padding-top: 56px; } }
+
+/* Live composer keeps the existing shell geometry and colour palette. */
+.composer-preview textarea { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1.5; resize: vertical; max-height: 160px; padding: 8px 0; }
+/* The chat box border shows focus, so the textarea inside needs no second ring */
+.composer-preview textarea:focus-visible { outline: none; }
+.composer-preview:focus-within { border-color: var(--brand); }
+.chat-exchange { width: 100%; max-width: 876px; overflow-wrap: anywhere; }
+.chat-question, .chat-answer { white-space: pre-wrap; margin-bottom: 16px; }
+.chat-question { font-weight: 600; }
+.chat-exchange ul { padding-left: 20px; }
+@media (max-width: 480px) { .composer-preview textarea { flex-basis: calc(100% - 70px); } }
