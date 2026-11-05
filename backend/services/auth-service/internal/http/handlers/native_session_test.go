@@ -4,13 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/gin-gonic/gin"
 )
 
 type nativeSessionDouble struct {
@@ -23,9 +24,20 @@ func (s *nativeSessionDouble) RefreshNative(ctx context.Context, raw string) (lo
 	if raw != "synthetic-old" {
 		return login.SessionTokens{}, errors.New("private invalid credential")
 	}
-	return login.SessionTokens{AccessToken: "synthetic-access", RefreshToken: "synthetic-next", ExpiresIn: 300, RefreshExpiresIn: 1800}, s.err
+
+	return login.SessionTokens{
+		AccessToken:      "synthetic-access",
+		RefreshToken:     "synthetic-next",
+		ExpiresIn:        300,
+		RefreshExpiresIn: 1800,
+	}, s.err
 }
-func (s *nativeSessionDouble) RevokeNative(context.Context, string) error { s.calls++; return s.err }
+
+func (s *nativeSessionDouble) RevokeNative(context.Context, string) error {
+
+	s.calls++
+	return s.err
+}
 
 func TestNativeSessionHTTP(t *testing.T) {
 	for _, tc := range []struct {
@@ -44,7 +56,13 @@ func TestNativeSessionHTTP(t *testing.T) {
 		{"bad unicode", `{"refresh_token":"\ud800"}`, 400, false, nil},
 		{"oversize", strings.Repeat(" ", login.MaxRefreshRequestBytes+1), 413, false, nil},
 		{"invalid grant", `{"refresh_token":"synthetic-old"}`, 401, false, login.ErrFailed},
-		{"private error", `{"refresh_token":"synthetic-old"}`, 503, false, errors.New("private database detail")},
+		{
+			"private error",
+			`{"refresh_token":"synthetic-old"}`,
+			503,
+			false,
+			errors.New("private database detail"),
+		},
 		{"HTTP", `{"refresh_token":"synthetic-old"}`, 426, false, nil},
 		{"origin", `{"refresh_token":"synthetic-old"}`, 403, false, nil},
 		{"cookie", `{"refresh_token":"synthetic-old"}`, 403, false, nil},
@@ -53,19 +71,32 @@ func TestNativeSessionHTTP(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			service := &nativeSessionDouble{err: tc.provider}
-			limiter, err := NewLocalRegistrationLimiter(RegistrationLimitConfig{Key: make([]byte, 32), IPAttempts: 10, EmailAttempts: 10, IPWindow: time.Minute, EmailWindow: time.Minute, MaxKeys: 32, MaxConcurrent: 2})
+			limiter, err := NewLocalRegistrationLimiter(
+				RegistrationLimitConfig{
+					Key:           make([]byte, 32),
+					IPAttempts:    10,
+					EmailAttempts: 10,
+					IPWindow:      time.Minute,
+					EmailWindow:   time.Minute,
+					MaxKeys:       32,
+					MaxConcurrent: 2,
+				},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			h, err := NewNativeSessionHandler(service, limiter)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			router := gin.New()
 			route := h.Refresh
 			if tc.revoke {
 				route = h.Revoke
 			}
+
 			router.POST("/session", route)
 			request := httptest.NewRequest("POST", "https://localhost/session", strings.NewReader(tc.body))
 			request.TLS = &tls.ConnectionState{}
@@ -85,22 +116,34 @@ func TestNativeSessionHTTP(t *testing.T) {
 				cancel()
 				request = request.WithContext(ctx)
 			}
+
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, request)
 			if w.Code != tc.status {
 				t.Fatalf("status %d expected %d", w.Code, tc.status)
 			}
+
 			if w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Set-Cookie") != "" {
 				t.Fatal("incorrect custody headers")
 			}
-			if tc.status >= 400 && (strings.Contains(w.Body.String(), "private") || strings.Contains(w.Body.String(), "synthetic-")) {
+
+			if tc.status >= 400 &&
+				(strings.Contains(w.Body.String(), "private") ||
+					strings.Contains(w.Body.String(), "synthetic-")) {
 				t.Fatal("sensitive error response")
 			}
-			if tc.status == 400 || tc.status == 413 || tc.status == 415 || tc.status == 426 || tc.status == 403 || tc.name == "cancel" {
+
+			if tc.status == 400 ||
+				tc.status == 413 ||
+				tc.status == 415 ||
+				tc.status == 426 ||
+				tc.status == 403 ||
+				tc.name == "cancel" {
 				if service.calls != 0 {
 					t.Fatal("invalid request reached provider")
 				}
 			}
+
 			if tc.status == 204 && w.Body.Len() != 0 {
 				t.Fatal("revoke body must be empty")
 			}
@@ -110,12 +153,26 @@ func TestNativeSessionHTTP(t *testing.T) {
 
 func TestNativeSessionRateLimit(t *testing.T) {
 	service := &nativeSessionDouble{}
-	limiter, _ := NewLocalRegistrationLimiter(RegistrationLimitConfig{Key: make([]byte, 32), IPAttempts: 1, EmailAttempts: 1, IPWindow: time.Minute, EmailWindow: time.Minute, MaxKeys: 2, MaxConcurrent: 1})
+	limiter, _ := NewLocalRegistrationLimiter(
+		RegistrationLimitConfig{
+			Key:           make([]byte, 32),
+			IPAttempts:    1,
+			EmailAttempts: 1,
+			IPWindow:      time.Minute,
+			EmailWindow:   time.Minute,
+			MaxKeys:       2,
+			MaxConcurrent: 1,
+		},
+	)
 	h, _ := NewNativeSessionHandler(service, limiter)
 	router := gin.New()
 	router.POST("/session", h.Refresh)
 	for i := 0; i < 2; i++ {
-		r := httptest.NewRequest(http.MethodPost, "https://localhost/session", strings.NewReader(`{"refresh_token":"synthetic-old"}`))
+		r := httptest.NewRequest(
+			http.MethodPost,
+			"https://localhost/session",
+			strings.NewReader(`{"refresh_token":"synthetic-old"}`),
+		)
 		r.TLS = &tls.ConnectionState{}
 		r.RemoteAddr = "127.0.0.1:1234"
 		r.Header.Set("Content-Type", "application/json")
@@ -125,6 +182,7 @@ func TestNativeSessionRateLimit(t *testing.T) {
 			t.Fatal("rate limit missing")
 		}
 	}
+
 	if service.calls != 1 {
 		t.Fatal("rate limit bypass")
 	}

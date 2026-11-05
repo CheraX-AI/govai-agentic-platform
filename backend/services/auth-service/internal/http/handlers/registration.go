@@ -25,25 +25,37 @@ import (
 type RegistrationService interface {
 	Register(context.Context, string, io.Reader) (registration.Receipt, error)
 }
+
 type RegistrationHTTPConfig struct {
 	Timeout               time.Duration
 	UnavailableRetryAfter time.Duration
 	MinResponseTime       time.Duration // optional bounded response floor, not enumeration resistance
 }
+
 type RegistrationHandler struct {
 	service RegistrationService
 	limiter RegistrationLimiter
 	cfg     RegistrationHTTPConfig
 }
 
+// NewRegistrationHandler checks dependencies and request budgets.
 func NewRegistrationHandler(service RegistrationService, limiter RegistrationLimiter, cfg RegistrationHTTPConfig) (*RegistrationHandler, error) {
-	if service == nil || limiter == nil || cfg.Timeout <= 0 || cfg.Timeout > 30*time.Second || cfg.UnavailableRetryAfter <= 0 || cfg.UnavailableRetryAfter > time.Hour || cfg.MinResponseTime < 0 || cfg.MinResponseTime > time.Second {
+	if service == nil ||
+		limiter == nil ||
+		cfg.Timeout <= 0 ||
+		cfg.Timeout > 30*time.Second ||
+		cfg.UnavailableRetryAfter <= 0 ||
+		cfg.UnavailableRetryAfter > time.Hour ||
+		cfg.MinResponseTime < 0 ||
+		cfg.MinResponseTime > time.Second {
 		return nil, errors.New("invalid registration handler configuration")
 	}
+
 	return &RegistrationHandler{service: service, limiter: limiter, cfg: cfg}, nil
 }
 
 var registrationKey = regexp.MustCompile(`^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$`)
+
 var responseRequestID = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 
 type registrationErrorBody struct {
@@ -73,8 +85,10 @@ func (h *RegistrationHandler) Handle(c *gin.Context) {
 			h.unavailable(c, started)
 			return
 		}
+
 		c.Header("X-Request-ID", hex.EncodeToString(id[:]))
 	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), h.cfg.Timeout)
 	defer cancel()
 	c.Request = c.Request.WithContext(ctx)
@@ -82,65 +96,91 @@ func (h *RegistrationHandler) Handle(c *gin.Context) {
 		h.unavailable(c, started)
 		return
 	}
+
 	if c.Request.Method != http.MethodPost {
 		c.Header("Allow", "POST")
-		h.respond(c, 405, registrationErrorBody{Error: "method not allowed", Code: "method_not_allowed"}, started)
+		h.respond(
+			c,
+			405,
+			registrationErrorBody{Error: "method not allowed", Code: "method_not_allowed"},
+			started,
+		)
 		return
 	}
+
 	ip, ok := registrationSource(c.Request.RemoteAddr)
 	if !ok {
 		h.unavailable(c, started)
 		return
 	}
+
 	permit, retry, err := h.limiter.Acquire(ctx, ip)
 	if err != nil {
 		if permit != nil {
 			permit.Release()
 		}
+
 		h.limitError(c, err, retry, started)
 		return
 	}
+
 	if permit == nil {
 		h.unavailable(c, started)
 		return
 	}
+
 	defer permit.Release()
 	contentTypes := c.Request.Header.Values("Content-Type")
 	if len(contentTypes) != 1 {
 		h.unsupported(c, started)
 		return
 	}
+
 	media, params, err := mime.ParseMediaType(contentTypes[0])
-	if err != nil || media != "application/json" || (params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8")) {
+	if err != nil ||
+		media != "application/json" ||
+		(params["charset"] != "" &&
+			!strings.EqualFold(params["charset"], "utf-8")) {
 		h.unsupported(c, started)
 		return
 	}
-	if encoding := c.Request.Header.Get("Content-Encoding"); len(c.Request.Header.Values("Content-Encoding")) > 1 || (encoding != "" && !strings.EqualFold(encoding, "identity")) {
+
+	if encoding := c.Request.Header.Get("Content-Encoding"); len(c.Request.Header.Values("Content-Encoding")) > 1 ||
+
+		(encoding != "" &&
+			!strings.EqualFold(encoding, "identity")) {
 		h.unsupported(c, started)
 		return
 	}
-	if len(c.Request.Header.Values("Idempotency-Key")) != 1 || !registrationKey.MatchString(c.GetHeader("Idempotency-Key")) {
+
+	if len(c.Request.Header.Values("Idempotency-Key")) != 1 ||
+		!registrationKey.MatchString(c.GetHeader("Idempotency-Key")) {
 		h.invalid(c, started)
 		return
 	}
+
 	if c.Request.ContentLength > registration.MaxRequestBytes {
 		h.tooLarge(c, started)
 		return
 	}
+
 	if c.Request.Body == nil {
 		h.invalid(c, started)
 		return
 	}
+
 	defer c.Request.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, registration.MaxRequestBytes+1))
 	if ctx.Err() != nil {
 		h.unavailable(c, started)
 		return
 	}
+
 	if len(body) > registration.MaxRequestBytes {
 		h.tooLarge(c, started)
 		return
 	}
+
 	if err != nil {
 		h.invalid(c, started)
 		return
@@ -152,27 +192,33 @@ func (h *RegistrationHandler) Handle(c *gin.Context) {
 		h.mapError(c, inputErr, started)
 		return
 	}
+
 	if retry, err = permit.CheckEmail(ctx, r.Email); err != nil {
 		h.limitError(c, err, retry, started)
 		return
 	}
+
 	if ctx.Err() != nil {
 		h.unavailable(c, started)
 		return
 	}
+
 	receipt, err := h.service.Register(ctx, strings.ToLower(c.GetHeader("Idempotency-Key")), bytes.NewReader(body))
 	if ctx.Err() != nil {
 		h.unavailable(c, started)
 		return
 	}
+
 	if err != nil {
 		h.mapError(c, err, started)
 		return
 	}
+
 	if receipt.Status != "received" {
 		h.unavailable(c, started)
 		return
 	}
+
 	h.received(c, started)
 }
 
@@ -181,12 +227,15 @@ func registrationSource(remote string) (string, bool) {
 	if err != nil {
 		host = remote
 	}
+
 	ip, err := netip.ParseAddr(host)
 	if err != nil {
 		return "", false
 	}
+
 	return ip.WithZone("").Unmap().String(), true
 }
+
 func (h *RegistrationHandler) respond(c *gin.Context, status int, body any, started time.Time) {
 	if remaining := h.cfg.MinResponseTime - time.Since(started); remaining > 0 {
 		timer := time.NewTimer(remaining)
@@ -196,44 +245,71 @@ func (h *RegistrationHandler) respond(c *gin.Context, status int, body any, star
 		case <-c.Request.Context().Done():
 		}
 	}
+
 	abortJSON(c, status, body)
 }
+
 func (h *RegistrationHandler) received(c *gin.Context, t time.Time) {
 	h.respond(c, 202, struct {
 		Status  string `json:"status"`
 		Message string `json:"message"`
 	}{"received", "If registration can proceed, check your email for the next step."}, t)
 }
+
 func (h *RegistrationHandler) invalid(c *gin.Context, t time.Time) {
 	h.respond(c, 400, registrationErrorBody{Error: "invalid request", Code: "invalid_request"}, t)
 }
+
 func (h *RegistrationHandler) tooLarge(c *gin.Context, t time.Time) {
 	h.respond(c, 413, registrationErrorBody{Error: "request body too large", Code: "too_large"}, t)
 }
+
 func (h *RegistrationHandler) unsupported(c *gin.Context, t time.Time) {
-	h.respond(c, 415, registrationErrorBody{Error: "unsupported content type", Code: "unsupported_media_type"}, t)
+	h.respond(
+		c,
+		415,
+		registrationErrorBody{Error: "unsupported content type", Code: "unsupported_media_type"},
+		t,
+	)
 }
+
 func retrySeconds(d time.Duration) string {
 	if d <= 0 {
 		d = time.Second
 	}
+
 	if d > 24*time.Hour {
 		d = 24 * time.Hour
 	}
+
 	return strconv.FormatInt(int64((d+time.Second-1)/time.Second), 10)
 }
+
 func (h *RegistrationHandler) unavailable(c *gin.Context, t time.Time) {
 	c.Header("Retry-After", retrySeconds(h.cfg.UnavailableRetryAfter))
-	h.respond(c, 503, registrationErrorBody{Error: "registration unavailable", Code: "registration_unavailable"}, t)
+	h.respond(
+		c,
+		503,
+		registrationErrorBody{Error: "registration unavailable", Code: "registration_unavailable"},
+		t,
+	)
 }
+
 func (h *RegistrationHandler) limitError(c *gin.Context, err error, retry time.Duration, t time.Time) {
 	if errors.Is(err, ErrRegistrationLimited) {
 		c.Header("Retry-After", retrySeconds(retry))
-		h.respond(c, 429, registrationErrorBody{Error: "too many registration attempts", Code: "rate_limited"}, t)
+		h.respond(
+			c,
+			429,
+			registrationErrorBody{Error: "too many registration attempts", Code: "rate_limited"},
+			t,
+		)
 		return
 	}
+
 	h.unavailable(c, t)
 }
+
 func (h *RegistrationHandler) mapError(c *gin.Context, err error, t time.Time) {
 	var input *registration.RequestError
 	if errors.As(err, &input) {
@@ -245,10 +321,20 @@ func (h *RegistrationHandler) mapError(c *gin.Context, err error, t time.Time) {
 			h.tooLarge(c, t)
 			return
 		case "validation_failed":
-			h.respond(c, 422, registrationErrorBody{Error: "invalid registration details", Code: "validation_failed", Fields: safeRegistrationFields(input.Fields)}, t)
+			h.respond(
+				c,
+				422,
+				registrationErrorBody{
+					Error:  "invalid registration details",
+					Code:   "validation_failed",
+					Fields: safeRegistrationFields(input.Fields),
+				},
+				t,
+			)
 			return
 		}
 	}
+
 	var service *registration.ServiceError
 	if errors.As(err, &service) {
 		switch service.Code {
@@ -256,19 +342,32 @@ func (h *RegistrationHandler) mapError(c *gin.Context, err error, t time.Time) {
 			h.invalid(c, t)
 			return
 		case "registration_request_conflict":
-			h.respond(c, 409, registrationErrorBody{Error: "registration request conflict", Code: "request_conflict"}, t)
+			h.respond(
+				c,
+				409,
+				registrationErrorBody{Error: "registration request conflict", Code: "request_conflict"},
+				t,
+			)
 			return
 		case "registration_policy_rejected":
-			h.respond(c, 422, registrationErrorBody{Error: "invalid registration details", Code: "validation_failed"}, t)
+			h.respond(
+				c,
+				422,
+				registrationErrorBody{Error: "invalid registration details", Code: "validation_failed"},
+				t,
+			)
 			return
 		}
 	}
+
 	if errors.Is(err, registration.ErrNICConflict) {
 		h.received(c, t)
 		return
 	}
+
 	h.unavailable(c, t)
 }
+
 func safeRegistrationFields(fields map[string]string) map[string]string {
 	clean := map[string]string{}
 	for _, name := range []string{"full_name", "nic", "mobile_number", "email", "password"} {
@@ -281,5 +380,6 @@ func safeRegistrationFields(fields map[string]string) map[string]string {
 			}
 		}
 	}
+
 	return clean
 }

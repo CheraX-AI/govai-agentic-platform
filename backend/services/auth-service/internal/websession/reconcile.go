@@ -3,8 +3,9 @@ package websession
 import (
 	"context"
 	"errors"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 )
 
 type RevocationQueue interface {
@@ -12,9 +13,11 @@ type RevocationQueue interface {
 	CompleteRevocation(context.Context, string) error
 	RetryRevocation(context.Context, postgres.WebRevocation) error
 }
+
 type Revoker interface {
 	RevokeNative(context.Context, string) error
 }
+
 type Reconciliation struct{ Completed, Deferred int }
 
 // Reconcile performs a bounded, explicitly invoked recovery pass. Only RFC 7009
@@ -25,6 +28,7 @@ func Reconcile(ctx context.Context, q RevocationQueue, r Revoker, maximum int) (
 	if q == nil || r == nil || maximum < 1 || maximum > 20 {
 		return result, ErrUnavailable
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for i := 0; i < maximum; i++ {
@@ -32,9 +36,11 @@ func Reconcile(ctx context.Context, q RevocationQueue, r Revoker, maximum int) (
 		if errors.Is(err, postgres.ErrWebSessionMissing) {
 			return result, nil
 		}
+
 		if err != nil {
 			return result, ErrUnavailable
 		}
+
 		attempt, stop := context.WithTimeout(ctx, 5*time.Second)
 		err = r.RevokeNative(attempt, job.RefreshToken)
 		stop()
@@ -52,10 +58,12 @@ func Reconcile(ctx context.Context, q RevocationQueue, r Revoker, maximum int) (
 				result.Deferred++
 			}
 		}
+
 		done()
 		if err != nil || ctx.Err() != nil {
 			return result, ErrUnavailable
 		}
 	}
+
 	return result, nil
 }

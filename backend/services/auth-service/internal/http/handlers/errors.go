@@ -15,8 +15,10 @@ func errorResponse(c *gin.Context, status int, code, message string) {
 	if code != "" {
 		body["code"] = code
 	}
+
 	if message != "" {
 		body["error"] = message
 	}
+
 	abortJSON(c, status, body)
 }

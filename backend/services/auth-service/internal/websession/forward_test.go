@@ -3,10 +3,11 @@ package websession
 import (
 	"context"
 	"errors"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 )
 
 type forwardVerifier struct {
@@ -28,7 +29,25 @@ func (p forwardProfile) HasReadyProfile(context.Context, string, string) (bool, 
 }
 
 func TestForwardAuthorization(t *testing.T) {
-	for _, name := range []string{"valid", "bad csrf", "expired session", "expired access", "expired refresh", "ended", "pending refresh", "database outage", "wrong subject", "wrong issuer", "unverified", "wrong role", "expired claims", "verification error", "missing profile", "profile outage", "canceled"} {
+	for _, name := range []string{
+		"valid",
+		"bad csrf",
+		"expired session",
+		"expired access",
+		"expired refresh",
+		"ended",
+		"pending refresh",
+		"database outage",
+		"wrong subject",
+		"wrong issuer",
+		"unverified",
+		"wrong role",
+		"expired claims",
+		"verification error",
+		"missing profile",
+		"profile outage",
+		"canceled",
+	} {
 		t.Run(name, func(t *testing.T) {
 			s, d, started := setup(t)
 			csrf := started.CSRF
@@ -67,10 +86,12 @@ func TestForwardAuthorization(t *testing.T) {
 			case "canceled":
 				cancel()
 			}
+
 			s.verifier = forwardVerifier{claims: claims}
 			if name == "verification error" {
 				s.verifier = forwardVerifier{err: errors.New("private verifier failure")}
 			}
+
 			calls := 0
 			sentinel := errors.New("upstream sentinel")
 			err := s.WithAccess(ctx, started.Cookie, csrf, func(got context.Context, token string) error {
@@ -78,20 +99,24 @@ func TestForwardAuthorization(t *testing.T) {
 				if got != ctx || token != "synthetic-access" {
 					t.Fatal("forwarding boundary changed context or token")
 				}
+
 				return sentinel
 			})
 			if name == "valid" {
 				if calls != 1 || err != sentinel {
 					t.Fatal("authorized forwarding did not preserve outcome")
 				}
+
 				return
 			}
+
 			if calls != 0 || (err != ErrDenied && err != ErrUnavailable) {
 				t.Fatal("unauthorized or unavailable session reached upstream")
 			}
 		})
 	}
 }
+
 func TestForwardMissingCallback(t *testing.T) {
 	s, _, started := setup(t)
 	if s.WithAccess(context.Background(), started.Cookie, started.CSRF, nil) != ErrUnavailable {

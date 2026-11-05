@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
 )
 
 type chatSessionDouble struct {
@@ -23,21 +24,46 @@ func (s *chatSessionDouble) WithAccess(ctx context.Context, raw, csrf string, f 
 	if s.denied || csrf != syntheticWebSecret {
 		return websession.ErrDenied
 	}
+
 	return f(ctx, "synthetic-access")
 }
+
 func TestWebChatEndpoint(t *testing.T) {
-	for _, mode := range []string{"success", "no cookie", "no csrf", "wrong csrf", "wrong origin", "no tls", "authorization header", "empty", "duplicate", "unknown field", "oversized", "wrong media", "denied session", "bad response", "unsafe source", "upstream failure", "upstream timeout", "preflight", "disabled"} {
+	for _, mode := range []string{
+		"success",
+		"no cookie",
+		"no csrf",
+		"wrong csrf",
+		"wrong origin",
+		"no tls",
+		"authorization header",
+		"empty",
+		"duplicate",
+		"unknown field",
+		"oversized",
+		"wrong media",
+		"denied session",
+		"bad response",
+		"unsafe source",
+		"upstream failure",
+		"upstream timeout",
+		"preflight",
+		"disabled",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			calls := 0
 			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++
-				if r.Header.Get("Authorization") != "Bearer synthetic-access" || r.Header.Get("Cookie") != "" {
+				if r.Header.Get("Authorization") != "Bearer synthetic-access" ||
+					r.Header.Get("Cookie") != "" {
 					t.Error("credential boundary")
 				}
+
 				body, _ := io.ReadAll(r.Body)
 				if string(body) != `{"message":"Synthetic question"}` {
 					t.Error("request changed")
 				}
+
 				w.Header().Set("Content-Type", "application/json")
 				switch mode {
 				case "upstream failure":
@@ -53,7 +79,11 @@ func TestWebChatEndpoint(t *testing.T) {
 					io.WriteString(w, `{"answer":"x","sources":[{"number":1,"title":"x","url":"javascript:bad"}]}`)
 					return
 				}
-				io.WriteString(w, `{"answer":"Synthetic answer [1]","sources":[{"number":1,"title":"Reference","page":3},{"number":2,"title":"Guide","url":"https://example.test/guide"}]}`)
+
+				io.WriteString(
+					w,
+					`{"answer":"Synthetic answer [1]","sources":[{"number":1,"title":"Reference","page":3},{"number":2,"title":"Guide","url":"https://example.test/guide"}]}`,
+				)
 			}))
 			defer upstream.Close()
 			roots := x509.NewCertPool()
@@ -62,21 +92,35 @@ func TestWebChatEndpoint(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			defer client.Close()
 			s := &chatSessionDouble{denied: mode == "denied session"}
-			limit, err := NewLocalRegistrationLimiter(RegistrationLimitConfig{Key: make([]byte, 32), IPAttempts: 60, EmailAttempts: 1, IPWindow: time.Minute, EmailWindow: time.Minute, MaxKeys: 10, MaxConcurrent: 3})
+			limit, err := NewLocalRegistrationLimiter(
+				RegistrationLimitConfig{
+					Key:           make([]byte, 32),
+					IPAttempts:    60,
+					EmailAttempts: 1,
+					IPWindow:      time.Minute,
+					EmailWindow:   time.Minute,
+					MaxKeys:       10,
+					MaxConcurrent: 3,
+				},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			h, err := NewWebSessionHandler(s, limit, "https://govai.test")
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if mode != "disabled" {
 				if err = h.EnableChat(client); err != nil {
 					t.Fatal(err)
 				}
 			}
+
 			router := NewRouterWithWeb(nil, nil, nil, nil, h)
 			body := `{"message":"Synthetic question"}`
 			want := 200
@@ -123,6 +167,7 @@ func TestWebChatEndpoint(t *testing.T) {
 				want = 204
 				expectedCalls = 0
 			}
+
 			req := httptest.NewRequest("POST", "https://govai.test/api/v1/web/chat", strings.NewReader(body))
 			req.RemoteAddr = "127.0.0.1:1234"
 			req.Header.Set("Origin", "https://govai.test")
@@ -132,6 +177,7 @@ func TestWebChatEndpoint(t *testing.T) {
 			if mode != "no cookie" {
 				req.AddCookie(&http.Cookie{Name: WebSessionCookie, Value: syntheticWebSecret})
 			}
+
 			switch mode {
 			case "no csrf":
 				req.Header.Del("X-CSRF-Token")
@@ -150,23 +196,30 @@ func TestWebChatEndpoint(t *testing.T) {
 				req.Header.Set("Access-Control-Request-Method", "POST")
 				req.Header.Set("Access-Control-Request-Headers", "Content-Type, X-GovAI-Web, X-CSRF-Token")
 			}
+
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 			if w.Code != want || calls != expectedCalls {
 				t.Fatalf("status=%d want=%d upstream=%d want=%d", w.Code, want, calls, expectedCalls)
 			}
+
 			if strings.Contains(w.Body.String(), "synthetic-access") {
 				t.Fatal("token exposed")
 			}
-			if mode == "success" && (!strings.Contains(w.Body.String(), `{"number":1,"title":"Reference","page":3}`) || !strings.Contains(w.Body.String(), `{"number":2,"title":"Guide","url":"https://example.test/guide"}`)) {
+
+			if mode == "success" &&
+				(!strings.Contains(w.Body.String(), `{"number":1,"title":"Reference","page":3}`) ||
+					!strings.Contains(w.Body.String(), `{"number":2,"title":"Guide","url":"https://example.test/guide"}`)) {
 				t.Fatal("source lost")
 			}
+
 			if mode != "disabled" && w.Header().Get("Cache-Control") != "no-store" {
 				t.Fatal("cache policy missing")
 			}
 		})
 	}
 }
+
 func TestEnableChatRequiresServerForwarder(t *testing.T) {
 	h := &WebSessionHandler{service: &browserDouble{}}
 	if err := h.EnableChat(nil); !errors.Is(err, chatgateway.ErrUnavailable) {

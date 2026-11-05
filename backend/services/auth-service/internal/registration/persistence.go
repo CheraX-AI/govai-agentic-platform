@@ -19,9 +19,11 @@ var (
 // Adapters must explicitly map allowed fields; it is not an encryption mechanism.
 type privateValue struct{}
 
-func (privateValue) Format(s fmt.State, _ rune)   { _, _ = io.WriteString(s, "[REDACTED]") }
+func (privateValue) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+
 func (privateValue) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
-func (privateValue) LogValue() slog.Value         { return slog.StringValue("[REDACTED]") }
+
+func (privateValue) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
 
 // ProfileData has no identity credential, token or email fields. Pending copies
 // must be access-restricted/encrypted so recovery needs no original HTTP body.
