@@ -4,7 +4,7 @@ import { conversationAssets, type LocalThread } from '../chatDemo';
 import { layout } from '../layout';
 import { AiResponse, CitizenMessage } from './ChatMessage';
 export type ChatFollowController = { threadId: number | null; revision: number; capture?: () => void };
-export function ChatConversation({ thread, pending, failed, onRetry, follow }: { thread: LocalThread; pending: boolean; failed: boolean; onRetry: () => void; follow: RefObject<ChatFollowController> }) {
+export function ChatConversation({ thread, pending, failed, onRetry, follow, live = false }: { live?: boolean; thread: LocalThread; pending: boolean; failed: boolean; onRetry: () => void; follow: RefObject<ChatFollowController> }) {
   const scroll = useRef<ScrollView>(null);
   const nearBottom = useRef(true);
   const [unseen, setUnseen] = useState(false);
@@ -60,11 +60,11 @@ export function ChatConversation({ thread, pending, failed, onRetry, follow }: {
         snapshot.current=null; initialLayout.current=false;
         if(shouldFollow){setUnseen(false);scrollToLatest();}else if(changed)setUnseen(true);
       }}>
-      <View style={styles.date}><View style={styles.divider}/><Text style={styles.caption}>Today · Local demo</Text><View style={styles.divider}/></View>
+      <View style={styles.date}><View style={styles.divider}/><Text style={styles.caption}>{live ? 'Today' : 'Today \u00b7 Local demo'}</Text><View style={styles.divider}/></View>
       {thread.messages.map(message => message.role==='citizen' ? <CitizenMessage key={message.id} message={message}/> : <AiResponse key={message.id} message={message}/>)}
-      {pending && <Text accessibilityRole="progressbar" accessibilityLiveRegion="polite" style={styles.body}>Preparing local mock response…</Text>}
-      {failed && <View style={styles.error}><Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.body}>The local mock response could not be prepared. Your message is kept. Try again.</Text>
-        <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry local mock response" style={styles.action}><Text style={styles.actionText}>Retry</Text></Pressable></View>}
+      {pending && <Text accessibilityRole="progressbar" accessibilityLiveRegion="polite" style={styles.body}>{live ? 'Preparing response...' : 'Preparing local mock response...'}</Text>}
+      {failed && <View style={styles.error}><Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.body}>{live ? 'The response could not be retrieved. Your message is kept. Try again.' : 'The local mock response could not be prepared. Your message is kept. Try again.'}</Text>
+        <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel={live ? "Retry response" : "Retry local mock response"} style={styles.action}><Text style={styles.actionText}>Retry</Text></Pressable></View>}
     </ScrollView>
     {unseen && !nearBottom.current && <Pressable onPress={jump} accessibilityRole="button" accessibilityLabel="Jump to latest messages" style={styles.jumpButton}>
       <Image source={conversationAssets.back} accessible={false} resizeMode="contain" style={styles.jumpIcon} />

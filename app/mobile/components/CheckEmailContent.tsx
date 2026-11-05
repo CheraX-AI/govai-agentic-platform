@@ -1,3 +1,4 @@
+import type { RecoveryReceipt } from '../services/recoveryApi';
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -9,12 +10,12 @@ import { registerAssets } from '../pages/RegisterScreen';
 const mail = require('../assets/figma/check-email/mail.png');
 const info = require('../assets/figma/forgot-password/info.png');
 
-export function CheckEmailContent({ mode, onBack, onDifferentNic, onLogin }: { mode: 'standalone' | 'demo'; onBack: () => void; onDifferentNic: () => void; onLogin: () => void }) {
-  if (!__DEV__ || (mode === 'demo' ? process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1' : process.env.EXPO_PUBLIC_CHECK_EMAIL_PREVIEW !== '1')) return null;
-  return <ContentBody onBack={onBack} onDifferentNic={onDifferentNic} onLogin={onLogin} />;
+export function CheckEmailContent({ mode, onBack, onDifferentNic, onLogin, receipt }: { receipt?: RecoveryReceipt; mode: 'standalone' | 'demo' | 'live'; onBack: () => void; onDifferentNic: () => void; onLogin: () => void }) {
+  if (mode !== 'live' && (!__DEV__ || (mode === 'demo' ? process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1' : process.env.EXPO_PUBLIC_CHECK_EMAIL_PREVIEW !== '1'))) return null;
+  return <ContentBody receipt={receipt} live={mode === 'live'} onBack={onBack} onDifferentNic={onDifferentNic} onLogin={onLogin} />;
 }
 
-function ContentBody({ onBack, onDifferentNic, onLogin }: { onBack: () => void; onDifferentNic: () => void; onLogin: () => void }) {
+function ContentBody({ onBack, onDifferentNic, onLogin, receipt, live }: { receipt?: RecoveryReceipt; live?: boolean; onBack: () => void; onDifferentNic: () => void; onLogin: () => void }) {
   const { width, fontScale } = useWindowDimensions();
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [visionHeight, setVisionHeight] = useState(47);
@@ -63,16 +64,16 @@ function ContentBody({ onBack, onDifferentNic, onLogin }: { onBack: () => void; 
             <View style={styles.badge}><Image source={mail} accessible={false} style={styles.mailIcon} /></View>
             <View style={styles.cardHeader}>
               <Text accessibilityRole="header" style={styles.heading}>Check your email</Text>
-              <Text style={styles.description}>Demo preview — no email was sent.</Text>
-              <Text style={styles.description}>Sample reset-link destination:</Text>
-              <Text style={styles.sampleEmail}>sample@example.test</Text>
+              <Text style={styles.description}>{live ? 'If an eligible account exists, a reset link will be sent to its registered email.' : 'Demo preview - no email was sent.'}</Text>
+              <Text style={styles.description}>{live ? 'Registered email:' : 'Sample reset-link destination:'}</Text>
+              <Text style={styles.sampleEmail}>{live ? receipt?.maskedEmail ?? 'Check your registered email inbox.' : 'sample@example.test'}</Text>
             </View>
             <View style={styles.infoPanel}>
               <Image source={info} accessible={false} style={styles.infoIcon} />
               <Text style={styles.infoText}>Check your spam folder or try again.</Text>
             </View>
             <Pressable onPress={onLogin} accessibilityRole="button" accessibilityLabel="Back to log in"
-              accessibilityHint="Returns to a fresh Login form. No email was sent." style={styles.primary}>
+              accessibilityHint="Returns to the Login form." style={styles.primary}>
               <Text style={[typography.action, styles.primaryText]}>Back to log in</Text>
               <Image source={registerAssets.next} accessible={false} style={styles.nextIcon} />
             </Pressable>
@@ -84,7 +85,7 @@ function ContentBody({ onBack, onDifferentNic, onLogin }: { onBack: () => void; 
                   <Text style={styles.link}>Resend link</Text>
                 </Pressable>
               </View>
-              <Text style={styles.caption}>Unavailable in demo</Text>
+              <Text style={styles.caption}>{live ? 'Return to Forgot Password to request another link.' : 'Unavailable in demo'}</Text>
               <View style={styles.footerActions}>
                 <Pressable onPress={onDifferentNic} accessibilityRole="link" accessibilityLabel="Use a different NIC. Return to a fresh Forgot Password screen." style={styles.differentNic}>
                   <Text style={styles.link}>Use a different NIC</Text>

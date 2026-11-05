@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
 )
 
 func TestIdentifierInput(t *testing.T) {
@@ -26,11 +27,13 @@ func TestIdentifierInput(t *testing.T) {
 		if err != nil || r.LimitKey() != tc.key || r.isNIC != tc.nic || r.password != "  private-password  " {
 			t.Fatal("identifier normalization failed")
 		}
+
 		encoded, _ := json.Marshal(r)
 		if strings.Contains(fmt.Sprintf("%+v", r), tc.value) || strings.Contains(string(encoded), tc.value) {
 			t.Fatal("identifier disclosure")
 		}
 	}
+
 	for _, b := range []string{
 		`{"identifier":"+94771234567","password":"x"}`,
 		`{"identifier":"123456789V ","password":"x"}`,
@@ -76,6 +79,7 @@ type identifierVerifierDouble struct{ claims Claims }
 func (v identifierVerifierDouble) Verify(context.Context, string) (Claims, error) {
 	return v.claims, nil
 }
+
 func TestNICLoginBinding(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
@@ -86,46 +90,98 @@ func TestNICLoginBinding(t *testing.T) {
 	}{
 		{name: "success", subject: "synthetic-subject", calls: 1},
 		{name: "unknown NIC", resolveErr: ErrFailed, want: ErrFailed},
-		{name: "lookup unavailable", resolveErr: errors.New("private database details"), want: ErrUnavailable},
-		{name: "wrong password", subject: "synthetic-subject", providerErr: ErrFailed, want: ErrFailed, calls: 1},
+		{
+			name:       "lookup unavailable",
+			resolveErr: errors.New("private database details"),
+			want:       ErrUnavailable,
+		},
+		{
+			name:        "wrong password",
+			subject:     "synthetic-subject",
+			providerErr: ErrFailed,
+			want:        ErrFailed,
+			calls:       1,
+		},
 		{name: "wrong account token", subject: "other-subject", want: ErrFailed, calls: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resolver := &identifierResolverDouble{account: NICAccount{Email: "citizen@example.test", Issuer: "https://issuer.test", Subject: "synthetic-subject"}, err: tc.resolveErr}
+			resolver := &identifierResolverDouble{
+				account: NICAccount{
+					Email:   "citizen@example.test",
+					Issuer:  "https://issuer.test",
+					Subject: "synthetic-subject",
+				},
+				err: tc.resolveErr,
+			}
 			provider := &identifierProviderDouble{err: tc.providerErr}
-			claims := Claims{Issuer: "https://issuer.test", Subject: tc.subject, Verified: true, Citizen: true, Expires: time.Now().Add(time.Minute)}
+			claims := Claims{
+				Issuer:   "https://issuer.test",
+				Subject:  tc.subject,
+				Verified: true,
+				Citizen:  true,
+				Expires:  time.Now().Add(time.Minute),
+			}
 			profiles := &profileDouble{ready: true}
 			service, err := NewService(provider, identifierVerifierDouble{claims}, profiles, resolver)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			request, err := Parse(strings.NewReader(`{"identifier":"123456789v","password":"private-password"}`))
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			_, err = service.Login(context.Background(), request)
-			if !errors.Is(err, tc.want) || resolver.calls != 1 || resolver.normalized != "123456789V" || provider.calls != tc.calls {
+			if !errors.Is(err, tc.want) ||
+				resolver.calls != 1 ||
+				resolver.normalized != "123456789V" ||
+				provider.calls != tc.calls {
 				t.Fatal("NIC binding result mismatch")
 			}
-			if tc.calls == 1 && (provider.email != "citizen@example.test" || provider.password != "private-password") {
+
+			if tc.calls == 1 &&
+				(provider.email != "citizen@example.test" ||
+					provider.password != "private-password") {
 				t.Fatal("provider received incorrect credentials")
 			}
+
 			if tc.want != nil && profiles.calls != 0 {
 				t.Fatal("failed identity reached profile authorization")
 			}
 		})
 	}
 }
+
 func TestEmailLoginBypassesNICResolver(t *testing.T) {
 	resolver := &identifierResolverDouble{err: ErrUnavailable}
 	provider := &identifierProviderDouble{}
-	service, _ := NewService(provider, identifierVerifierDouble{Claims{Issuer: "https://issuer.test", Subject: "synthetic-subject", Verified: true, Citizen: true, Expires: time.Now().Add(time.Minute)}}, &profileDouble{ready: true}, resolver)
-	for _, body := range []string{`{"email":"Citizen@Example.Test","password":"x"}`, `{"identifier":"Citizen@Example.Test","password":"x"}`} {
+	service, _ := NewService(
+		provider,
+		identifierVerifierDouble{
+			Claims{
+				Issuer:   "https://issuer.test",
+				Subject:  "synthetic-subject",
+				Verified: true,
+				Citizen:  true,
+				Expires:  time.Now().Add(time.Minute),
+			},
+		},
+		&profileDouble{ready: true},
+		resolver,
+	)
+	for _, body := range []string{
+		`{"email":"Citizen@Example.Test","password":"x"}`,
+		`{"identifier":"Citizen@Example.Test","password":"x"}`,
+	} {
 		request, err := Parse(strings.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = service.Login(context.Background(), request); err != nil || resolver.calls != 0 || provider.email != "citizen@example.test" {
+
+		if _, err = service.Login(context.Background(), request); err != nil ||
+			resolver.calls != 0 ||
+			provider.email != "citizen@example.test" {
 			t.Fatal("email compatibility failed")
 		}
 	}

@@ -24,7 +24,7 @@ try {
   assert.equal((await browserAuthAdapter.restore()).userId,'synthetic-subject')
   await browserAuthAdapter.refresh()
   await browserAuthAdapter.logout()
-  await assert.rejects(browserAuthAdapter.createMockSession(),/disabled/)
+  assert.equal('createMockSession' in browserAuthAdapter,false,'obsolete demo authentication is absent')
   denied=true
   assert.equal(await browserAuthAdapter.restore(),null)
   await browserAuthAdapter.logout()
@@ -32,4 +32,4 @@ try {
   globalThis.fetch=async()=>{throw new Error('private network detail')}
   await assert.rejects(browserAuthAdapter.restore(),/service is unavailable/)
 } finally {globalThis.fetch=original}
-console.log('PASS: web API headers, cookie custody, login payload, CSRF refresh/logout, restore rejection, disabled mock login and safe network errors')
+console.log('PASS: web API headers, cookie custody, login payload, CSRF refresh/logout, restore rejection, absence of obsolete mock login and safe network errors')

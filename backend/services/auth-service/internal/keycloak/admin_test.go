@@ -24,7 +24,19 @@ import (
 const usersPath = "/admin/realms/GovAI/users"
 
 func config(base string) RegistrationConfig {
-	return RegistrationConfig{RegistrationGroupPath: "/ga48-registration", BaseURL: base, Realm: "GovAI", ClientID: "registration-only", ClientSecret: "synthetic-secret", VerificationClientID: "action-client", VerificationRedirect: "https://app.example.test/verified", VerificationLifespan: 15 * time.Minute, CallTimeout: time.Second, MaxResponseBytes: 4096, TokenSkew: 5 * time.Second}
+	return RegistrationConfig{
+		RegistrationGroupPath: "/ga48-registration",
+		BaseURL:               base,
+		Realm:                 "GovAI",
+		ClientID:              "registration-only",
+		ClientSecret:          "synthetic-secret",
+		VerificationClientID:  "action-client",
+		VerificationRedirect:  "https://app.example.test/verified",
+		VerificationLifespan:  15 * time.Minute,
+		CallTimeout:           time.Second,
+		MaxResponseBytes:      4096,
+		TokenSkew:             5 * time.Second,
+	}
 }
 
 func adapter(t *testing.T, handler http.HandlerFunc) (*Admin, *httptest.Server) {
@@ -35,16 +47,22 @@ func adapter(t *testing.T, handler http.HandlerFunc) (*Admin, *httptest.Server) 
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(a.Close)
 	return a, s
 }
 
 func request(t *testing.T) registration.Request {
 	t.Helper()
-	r, err := registration.ParseRequest(strings.NewReader(`{"full_name":"Synthetic Citizen","nic":"000000001V","mobile_number":"+14155552671","email":"synthetic@example.test","password":" password &+= "}`))
+	r, err := registration.ParseRequest(
+		strings.NewReader(
+			`{"full_name":"Synthetic Citizen","nic":"000000001V","mobile_number":"+14155552671","email":"synthetic@example.test","password":" password &+= "}`,
+		),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return r
 }
 
@@ -54,6 +72,7 @@ func assertError(t *testing.T, err error, code registration.AdminCode, unknown b
 	if !errors.As(err, &e) || e.Code != code || e.UnknownOutcome != unknown {
 		t.Fatalf("outcome = %v, want %s unknown=%v", err, code, unknown)
 	}
+
 	if strings.Contains(err.Error(), "synthetic") {
 		t.Fatal("unsafe error")
 	}
@@ -70,44 +89,78 @@ func TestCreateConstructionAndCache(t *testing.T) {
 	a, s := adapter(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/realms/GovAI/protocol/openid-connect/token" {
 			tokens.Add(1)
-			if r.Method != "POST" || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" || r.Header.Get("Authorization") != "" {
+			if r.Method != "POST" ||
+				r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" ||
+				r.Header.Get("Authorization") != "" {
 				t.Error("incorrect token request")
 			}
+
 			if err := r.ParseForm(); err != nil {
 				t.Error(err)
 			}
-			if len(r.PostForm) != 3 || r.PostForm.Get("grant_type") != "client_credentials" || r.PostForm.Get("client_id") != "registration-only" || r.PostForm.Get("client_secret") != "synthetic-secret" {
+
+			if len(r.PostForm) != 3 ||
+				r.PostForm.Get("grant_type") != "client_credentials" ||
+				r.PostForm.Get("client_id") != "registration-only" ||
+				r.PostForm.Get("client_secret") != "synthetic-secret" {
 				t.Error("incorrect administrative credentials form")
 			}
+
 			issueToken(w)
 			return
 		}
+
 		creates.Add(1)
-		if r.Method != "POST" || r.URL.Path != usersPath || r.Header.Get("Authorization") != "Bearer synthetic-token" || r.Header.Get("Content-Type") != "application/json" {
+		if r.Method != "POST" ||
+			r.URL.Path != usersPath ||
+			r.Header.Get("Authorization") != "Bearer synthetic-token" ||
+			r.Header.Get("Content-Type") != "application/json" {
 			t.Error("incorrect create request")
 		}
+
 		var body map[string]json.RawMessage
 		if json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 8 {
 			t.Error("unexpected create shape")
 		}
-		for _, key := range []string{"username", "email", "enabled", "emailVerified", "requiredActions", "attributes", "credentials", "groups"} {
+
+		for _, key := range []string{
+			"username",
+			"email",
+			"enabled",
+			"emailVerified",
+			"requiredActions",
+			"attributes",
+			"credentials",
+			"groups",
+		} {
 			if body[key] == nil {
 				t.Error("missing allowlisted field")
 			}
 		}
-		if string(body["enabled"]) != "false" || string(body["emailVerified"]) != "false" || string(body["requiredActions"]) != `["VERIFY_EMAIL"]` || string(body["attributes"]) != `{"govai_registration_operation":["operation-1"]}` {
+
+		if string(body["enabled"]) != "false" ||
+			string(body["emailVerified"]) != "false" ||
+			string(body["requiredActions"]) != `["VERIFY_EMAIL"]` ||
+			string(body["attributes"]) != `{"govai_registration_operation":["operation-1"]}` {
 			t.Error("unsafe initial state")
 		}
+
 		if string(body["groups"]) != `["/ga48-registration"]` {
 			t.Error("incorrect server group representation")
 		}
+
 		var credentials []struct {
 			Type, Value string
 			Temporary   bool
 		}
-		if json.Unmarshal(body["credentials"], &credentials) != nil || len(credentials) != 1 || credentials[0].Type != "password" || credentials[0].Value != " password &+= " || credentials[0].Temporary {
+		if json.Unmarshal(body["credentials"], &credentials) != nil ||
+			len(credentials) != 1 ||
+			credentials[0].Type != "password" ||
+			credentials[0].Value != " password &+= " ||
+			credentials[0].Temporary {
 			t.Error("credential changed")
 		}
+
 		w.Header().Set("Location", base+usersPath+"/subject-1")
 		w.WriteHeader(201)
 	})
@@ -118,6 +171,7 @@ func TestCreateConstructionAndCache(t *testing.T) {
 			t.Fatalf("incorrect create result: %v", err)
 		}
 	}
+
 	if tokens.Load() != 1 || creates.Load() != 2 {
 		t.Fatal("token not cached")
 	}
@@ -125,7 +179,11 @@ func TestCreateConstructionAndCache(t *testing.T) {
 
 func TestTokenExpiryAndConcurrentRetrieval(t *testing.T) {
 	var count atomic.Int32
-	a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) { count.Add(1); issueToken(w) })
+	a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) {
+
+		count.Add(1)
+		issueToken(w)
+	})
 	now := time.Now()
 	a.now = func() time.Time { return now }
 	var wg sync.WaitGroup
@@ -138,28 +196,48 @@ func TestTokenExpiryAndConcurrentRetrieval(t *testing.T) {
 			}
 		}()
 	}
+
 	wg.Wait()
 	if count.Load() != 1 {
 		t.Fatal("concurrent cache misses were not serialized")
 	}
+
 	now = now.Add(55 * time.Second) // expires_in less configured skew, boundary is expired
 	if _, err := a.serviceToken(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	if count.Load() != 2 {
 		t.Fatal("expired token reused")
 	}
 }
 
 func TestTokenFailuresNotCached(t *testing.T) {
-	for _, body := range []string{`{`, `{"access_token":"x","token_type":"Bearer","expires_in":0}`, `{"access_token":"x","token_type":"Bearer","expires_in":5}`, `{"access_token":"x","token_type":"Bearer","expires_in":86401}`, `{"access_token":"x","token_type":"Other","expires_in":60}`, `{"token_type":"Bearer","expires_in":60}`, `{"access_token":"x\r\ny","token_type":"Bearer","expires_in":60}`, strings.Repeat("x", 4097)} {
+	for _, body := range []string{
+		`{`,
+		`{"access_token":"x","token_type":"Bearer","expires_in":0}`,
+		`{"access_token":"x","token_type":"Bearer","expires_in":5}`,
+		`{"access_token":"x","token_type":"Bearer","expires_in":86401}`,
+		`{"access_token":"x","token_type":"Other","expires_in":60}`,
+		`{"token_type":"Bearer","expires_in":60}`,
+		`{"access_token":"x\r\ny","token_type":"Bearer","expires_in":60}`,
+		strings.Repeat("x", 4097),
+	} {
 		t.Run(fmt.Sprint(len(body), body[:1]), func(t *testing.T) {
 			var count atomic.Int32
-			a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) { count.Add(1); _, _ = io.WriteString(w, body) })
+			a, _ := adapter(
+				t,
+				func(w http.ResponseWriter, r *http.Request) {
+
+					count.Add(1)
+					_, _ = io.WriteString(w, body)
+				},
+			)
 			for i := 0; i < 2; i++ {
 				_, err := a.serviceToken(context.Background())
 				assertError(t, err, registration.AdminUpstream, false)
 			}
+
 			if count.Load() != 2 {
 				t.Fatal("failed token cached")
 			}
@@ -173,7 +251,14 @@ func TestStatusMappingAndNoRetry(t *testing.T) {
 		code    registration.AdminCode
 		unknown bool
 	}{
-		{400, registration.AdminPolicyRejected, true}, {401, registration.AdminPermission, false}, {403, registration.AdminPermission, false}, {409, registration.AdminDuplicate, false}, {500, registration.AdminAmbiguous, true}, {429, registration.AdminAmbiguous, true}, {302, registration.AdminAmbiguous, true}, {200, registration.AdminAmbiguous, true},
+		{400, registration.AdminPolicyRejected, true},
+		{401, registration.AdminPermission, false},
+		{403, registration.AdminPermission, false},
+		{409, registration.AdminDuplicate, false},
+		{500, registration.AdminAmbiguous, true},
+		{429, registration.AdminAmbiguous, true},
+		{302, registration.AdminAmbiguous, true},
+		{200, registration.AdminAmbiguous, true},
 	} {
 		t.Run(fmt.Sprint(tc.status), func(t *testing.T) {
 			var creates atomic.Int32
@@ -182,6 +267,7 @@ func TestStatusMappingAndNoRetry(t *testing.T) {
 					issueToken(w)
 					return
 				}
+
 				creates.Add(1)
 				w.Header().Set("Location", "https://elsewhere.example.test/")
 				w.WriteHeader(tc.status)
@@ -200,7 +286,13 @@ func TestTokenHTTPFailures(t *testing.T) {
 	for _, tc := range []struct {
 		status int
 		code   registration.AdminCode
-	}{{400, registration.AdminPermission}, {401, registration.AdminPermission}, {403, registration.AdminPermission}, {500, registration.AdminUpstream}, {302, registration.AdminUpstream}} {
+	}{
+		{400, registration.AdminPermission},
+		{401, registration.AdminPermission},
+		{403, registration.AdminPermission},
+		{500, registration.AdminUpstream},
+		{302, registration.AdminUpstream},
+	} {
 		t.Run(fmt.Sprint(tc.status), func(t *testing.T) {
 			var calls atomic.Int32
 			a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) {
@@ -225,6 +317,7 @@ func TestUnauthorizedInvalidatesWithoutReplay(t *testing.T) {
 			issueToken(w)
 			return
 		}
+
 		creates.Add(1)
 		w.WriteHeader(401)
 	})
@@ -232,19 +325,37 @@ func TestUnauthorizedInvalidatesWithoutReplay(t *testing.T) {
 		_, err := a.CreateDisabled(context.Background(), request(t), "op")
 		assertError(t, err, registration.AdminPermission, false)
 	}
+
 	if tokens.Load() != 2 || creates.Load() != 2 {
 		t.Fatal("401 replayed or stale token retained")
 	}
 }
 
 func TestLocationValidation(t *testing.T) {
-	for _, location := range []string{"", "https://evil.example.test" + usersPath + "/id", "http://HOST" + usersPath + "/id", "//HOST" + usersPath + "/id", usersPath + "/../id", usersPath + "/id/extra", usersPath + "/id?x=1", usersPath + "/id#", usersPath + "/%2e%2e", usersPath + "/id%2Fextra", "/admin/realms/Other/users/id", "id", usersPath + "/id/", "https://user:pass@HOST" + usersPath + "/id", usersPath + "/id,other"} {
+	for _, location := range []string{
+		"",
+		"https://evil.example.test" + usersPath + "/id",
+		"http://HOST" + usersPath + "/id",
+		"//HOST" + usersPath + "/id",
+		usersPath + "/../id",
+		usersPath + "/id/extra",
+		usersPath + "/id?x=1",
+		usersPath + "/id#",
+		usersPath + "/%2e%2e",
+		usersPath + "/id%2Fextra",
+		"/admin/realms/Other/users/id",
+		"id",
+		usersPath + "/id/",
+		"https://user:pass@HOST" + usersPath + "/id",
+		usersPath + "/id,other",
+	} {
 		t.Run(location, func(t *testing.T) {
 			a, s := adapter(t, func(w http.ResponseWriter, r *http.Request) {
 				if strings.HasSuffix(r.URL.Path, "/token") {
 					issueToken(w)
 					return
 				}
+
 				w.Header().Set("Location", location)
 				w.WriteHeader(201)
 			})
@@ -253,6 +364,7 @@ func TestLocationValidation(t *testing.T) {
 			assertError(t, err, registration.AdminAmbiguous, true)
 		})
 	}
+
 	for _, absolute := range []bool{false, true} {
 		t.Run(fmt.Sprint("valid", absolute), func(t *testing.T) {
 			var base string
@@ -261,10 +373,12 @@ func TestLocationValidation(t *testing.T) {
 					issueToken(w)
 					return
 				}
+
 				location := usersPath + "/id"
 				if absolute {
 					location = base + location
 				}
+
 				w.Header().Set("Location", location)
 				w.WriteHeader(201)
 			})
@@ -275,11 +389,13 @@ func TestLocationValidation(t *testing.T) {
 			}
 		})
 	}
+
 	a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/token") {
 			issueToken(w)
 			return
 		}
+
 		w.Header().Add("Location", usersPath+"/id")
 		w.Header().Add("Location", usersPath+"/other")
 		w.WriteHeader(201)
@@ -296,16 +412,24 @@ func TestOwnedOperations(t *testing.T) {
 			issueToken(w)
 			return
 		}
+
 		if r.Header.Get("Authorization") != "Bearer synthetic-token" {
 			t.Error("missing admin authorization")
 		}
+
 		switch {
 		case r.Method == "GET":
-			user := fmt.Sprintf(`{"id":"id","enabled":%t,"emailVerified":false,"attributes":{"govai_registration_operation":["op"]}}`, enabled.Load())
+			user := fmt.Sprintf(
+				`{"id":"id","enabled":%t,"emailVerified":false,"attributes":{"govai_registration_operation":["op"]}}`,
+				enabled.Load(),
+			)
 			if r.URL.Path == usersPath {
-				if r.URL.Query().Get("q") != marker+":op" || r.URL.Query().Get("max") != "2" || r.URL.Query().Get("briefRepresentation") != "false" {
+				if r.URL.Query().Get("q") != marker+":op" ||
+					r.URL.Query().Get("max") != "2" ||
+					r.URL.Query().Get("briefRepresentation") != "false" {
 					t.Error("unsafe search")
 				}
+
 				user = "[" + user + "]"
 			}
 			_, _ = io.WriteString(w, user)
@@ -318,7 +442,10 @@ func TestOwnedOperations(t *testing.T) {
 			w.WriteHeader(204)
 		case r.Method == "PUT" && r.URL.Path == usersPath+"/id/send-verify-email":
 			q := r.URL.Query()
-			if len(q) != 3 || q.Get("client_id") != "action-client" || q.Get("redirect_uri") != "https://app.example.test/verified" || q.Get("lifespan") != "900" {
+			if len(q) != 3 ||
+				q.Get("client_id") != "action-client" ||
+				q.Get("redirect_uri") != "https://app.example.test/verified" ||
+				q.Get("lifespan") != "900" {
 				t.Error("unsafe action configuration")
 			}
 			mail.Add(1)
@@ -332,15 +459,19 @@ func TestOwnedOperations(t *testing.T) {
 	if err != nil || u.Subject != "id" {
 		t.Fatal(err)
 	}
+
 	if err = a.SendVerification(context.Background(), "id", "op"); err == nil {
 		t.Fatal("email for disabled user")
 	}
+
 	if err = a.EnableOwned(context.Background(), "id", "op"); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = a.SendVerification(context.Background(), "id", "op"); err != nil {
 		t.Fatal(err)
 	}
+
 	if mail.Load() != 1 {
 		t.Fatal("email not requested")
 	}
@@ -351,10 +482,18 @@ func TestOwnershipAndReconciliationFailures(t *testing.T) {
 		body string
 		code registration.AdminCode
 	}{
-		{`[]`, registration.AdminNotFound}, {`null`, registration.AdminUpstream}, {`{`, registration.AdminUpstream},
-		{`[{"id":"id","attributes":{"govai_registration_operation":["other"]}}]`, registration.AdminOwnership},
+		{`[]`, registration.AdminNotFound},
+		{`null`, registration.AdminUpstream},
+		{`{`, registration.AdminUpstream},
+		{
+			`[{"id":"id","attributes":{"govai_registration_operation":["other"]}}]`,
+			registration.AdminOwnership,
+		},
 		{`[{"id":"id"},{"id":"other"}]`, registration.AdminOwnership},
-		{`[{"id":"id","attributes":{"govai_registration_operation":["op","op"]}}]`, registration.AdminOwnership},
+		{
+			`[{"id":"id","attributes":{"govai_registration_operation":["op","op"]}}]`,
+			registration.AdminOwnership,
+		},
 	} {
 		t.Run(tc.body, func(t *testing.T) {
 			a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) {
@@ -362,25 +501,34 @@ func TestOwnershipAndReconciliationFailures(t *testing.T) {
 					issueToken(w)
 					return
 				}
+
 				_, _ = io.WriteString(w, tc.body)
 			})
 			_, err := a.FindOwned(context.Background(), "op")
 			assertError(t, err, tc.code, false)
 		})
 	}
+
 	var mutations atomic.Int32
 	a, _ := adapter(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/token") {
 			issueToken(w)
 			return
 		}
+
 		if r.Method != "GET" {
 			mutations.Add(1)
 		}
+
 		_, _ = io.WriteString(w, `{"id":"id","attributes":{"govai_registration_operation":["other"]}}`)
 	})
 	assertError(t, a.EnableOwned(context.Background(), "id", "op"), registration.AdminOwnership, false)
-	assertError(t, a.SendVerification(context.Background(), "id", "op"), registration.AdminOwnership, false)
+	assertError(
+		t,
+		a.SendVerification(context.Background(), "id", "op"),
+		registration.AdminOwnership,
+		false,
+	)
 	if mutations.Load() != 0 {
 		t.Fatal("mutated unowned account")
 	}
@@ -397,6 +545,7 @@ func TestCancellationAndTimeouts(t *testing.T) {
 					issueToken(w)
 					return
 				}
+
 				calls.Add(1)
 				close(started)
 				select {
@@ -410,7 +559,11 @@ func TestCancellationAndTimeouts(t *testing.T) {
 			defer cancel()
 			result := make(chan error, 1)
 			r := request(t)
-			go func() { _, err := a.CreateDisabled(ctx, r, "op"); result <- err }()
+			go func() {
+
+				_, err := a.CreateDisabled(ctx, r, "op")
+				result <- err
+			}()
 			<-started
 			cancel()
 			select {
@@ -423,6 +576,7 @@ func TestCancellationAndTimeouts(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("cancellation not propagated")
 			}
+
 			if calls.Load() != 1 {
 				t.Fatal("request retried")
 			}
@@ -436,6 +590,7 @@ func TestCancellationAndTimeouts(t *testing.T) {
 			issueToken(w)
 			return
 		}
+
 		select {
 		case <-r.Context().Done():
 		case <-release:
@@ -463,10 +618,12 @@ func TestResponseBoundsAndReadFailures(t *testing.T) {
 					issueToken(w)
 					return
 				}
+
 				w.Header().Set("Location", usersPath+"/id")
 				if !oversized {
 					w.Header().Set("Content-Length", "100")
 				}
+
 				w.WriteHeader(201)
 				if oversized {
 					_, _ = io.WriteString(w, strings.Repeat("x", 4097))
@@ -487,23 +644,39 @@ func TestTLSAndConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer a.Close()
 	_, err = a.serviceToken(context.Background())
 	assertError(t, err, registration.AdminUpstream, false) // unknown CA
 	for _, change := range []func(*RegistrationConfig){
-		func(c *RegistrationConfig) { c.BaseURL = "http://localhost:8180" }, func(c *RegistrationConfig) { c.BaseURL = s.URL + "/../escape" }, func(c *RegistrationConfig) { c.BaseURL = s.URL + "?q=secret" }, func(c *RegistrationConfig) { c.Realm = "../master" }, func(c *RegistrationConfig) { c.ClientSecret = "" }, func(c *RegistrationConfig) { c.CallTimeout = 6 * time.Second }, func(c *RegistrationConfig) { c.MaxResponseBytes = 2 << 20 }, func(c *RegistrationConfig) { c.VerificationRedirect = "http://app.example.test" }, func(c *RegistrationConfig) { c.VerificationLifespan = 0 }, func(c *RegistrationConfig) { c.TokenSkew = -time.Second },
+		func(c *RegistrationConfig) { c.BaseURL = "http://localhost:8180" },
+		func(c *RegistrationConfig) { c.BaseURL = s.URL + "/../escape" },
+		func(c *RegistrationConfig) { c.BaseURL = s.URL + "?q=secret" },
+		func(c *RegistrationConfig) { c.Realm = "../master" },
+		func(c *RegistrationConfig) { c.ClientSecret = "" },
+		func(c *RegistrationConfig) { c.CallTimeout = 6 * time.Second },
+		func(c *RegistrationConfig) { c.MaxResponseBytes = 2 << 20 },
+		func(c *RegistrationConfig) { c.VerificationRedirect = "http://app.example.test" },
+		func(c *RegistrationConfig) { c.VerificationLifespan = 0 },
+		func(c *RegistrationConfig) { c.TokenSkew = -time.Second },
 	} {
 		cfg := config(s.URL)
 		change(&cfg)
 		_, err = NewRegistrationAdmin(cfg, s.Client())
 		assertError(t, err, registration.AdminInvalid, false)
 	}
-	for _, tlsConfig := range []*tls.Config{{InsecureSkipVerify: true}, {ServerName: "other.test"}, {VerifyConnection: func(tls.ConnectionState) error { return nil }}} {
+
+	for _, tlsConfig := range []*tls.Config{
+		{InsecureSkipVerify: true},
+		{ServerName: "other.test"},
+		{VerifyConnection: func(tls.ConnectionState) error { return nil }},
+	} {
 		transport := s.Client().Transport.(*http.Transport).Clone()
 		transport.TLSClientConfig = tlsConfig
 		_, err = NewRegistrationAdmin(config(s.URL), &http.Client{Transport: transport})
 		assertError(t, err, registration.AdminInvalid, false)
 	}
+
 	_, err = NewRegistrationAdmin(config(s.URL), nil)
 	assertError(t, err, registration.AdminInvalid, false)
 }
@@ -517,20 +690,31 @@ func TestSensitiveFormattingAndNoLogs(t *testing.T) {
 	if _, err := a.serviceToken(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
 	if logs.Len() != 0 {
 		t.Fatal("adapter emitted logs")
 	}
+
 	for _, v := range []any{a, a.cfg, registration.Identity{Subject: "synthetic-person"}, request(t)} {
 		if fmt.Sprintf("%+v", v) != "[REDACTED]" || fmt.Sprintf("%#v", v) != "[REDACTED]" {
 			t.Fatal("unsafe formatting")
 		}
+
 		body, err := json.Marshal(v)
 		if err != nil || string(body) != `"[REDACTED]"` {
 			t.Fatal("unsafe serialization")
 		}
+
 		slog.Info("redaction test", "value", v)
 	}
-	for _, secret := range []string{"synthetic-secret", "synthetic-token", "synthetic-person", "synthetic@example.test", "/ga48-registration"} {
+
+	for _, secret := range []string{
+		"synthetic-secret",
+		"synthetic-token",
+		"synthetic-person",
+		"synthetic@example.test",
+		"/ga48-registration",
+	} {
 		if strings.Contains(logs.String(), secret) {
 			t.Fatal("unsafe structured logging")
 		}
@@ -541,7 +725,25 @@ func TestRegistrationGroupConfigRequiredBeforeNetwork(t *testing.T) {
 	var calls atomic.Int32
 	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1) }))
 	defer s.Close()
-	for _, group := range []string{"", "registration", "/", "//registration", "/registration/", "/parent/child", "/.", "/..", "/a/../b", "/%72egistration", "/registration?x=1", "/registration#x", "/registration name", "/registration\\other", "/citizen\n", "/සිංහල", "/" + strings.Repeat("a", 129)} {
+	for _, group := range []string{
+		"",
+		"registration",
+		"/",
+		"//registration",
+		"/registration/",
+		"/parent/child",
+		"/.",
+		"/..",
+		"/a/../b",
+		"/%72egistration",
+		"/registration?x=1",
+		"/registration#x",
+		"/registration name",
+		"/registration\\other",
+		"/citizen\n",
+		"/සිංහල",
+		"/" + strings.Repeat("a", 129),
+	} {
 		cfg := config(s.URL)
 		cfg.RegistrationGroupPath = group
 		a, err := NewRegistrationAdmin(cfg, s.Client())
@@ -550,6 +752,7 @@ func TestRegistrationGroupConfigRequiredBeforeNetwork(t *testing.T) {
 			t.Fatal("invalid group constructed adapter")
 		}
 	}
+
 	if calls.Load() != 0 {
 		t.Fatal("configuration validation contacted upstream")
 	}
@@ -561,18 +764,22 @@ func TestServerGroupIsCopiedAndCallerCannotAssignRoles(t *testing.T) {
 			issueToken(w)
 			return
 		}
+
 		var body map[string]json.RawMessage
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			t.Error("invalid body")
 		}
+
 		if string(body["groups"]) != `["/server-registration"]` || len(body) != 8 {
 			t.Error("server group or payload allowlist changed")
 		}
+
 		for _, field := range []string{"roles", "realmRoles", "clientRoles", "group", "full_name", "nic", "mobile_number"} {
 			if _, ok := body[field]; ok {
 				t.Error("caller field escaped allowlist")
 			}
 		}
+
 		w.Header().Set("Location", usersPath+"/id")
 		w.WriteHeader(201)
 	}))
@@ -583,6 +790,7 @@ func TestServerGroupIsCopiedAndCallerCannotAssignRoles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer a.Close()
 	cfg.RegistrationGroupPath = "/attacker-controlled"
 	r := request(t)
@@ -593,14 +801,30 @@ func TestServerGroupIsCopiedAndCallerCannotAssignRoles(t *testing.T) {
 }
 
 func TestPublicRegistrationRejectsGroupAndRoleOverrides(t *testing.T) {
-	base := map[string]any{"full_name": "Synthetic Citizen", "nic": "000000001V", "mobile_number": "+14155552671", "email": "synthetic@example.test", "password": "synthetic-password"}
-	for _, field := range []string{"group", "groups", "registration_group_path", "RegistrationGroupPath", "role", "roles", "realmRoles", "clientRoles"} {
+	base := map[string]any{
+		"full_name":     "Synthetic Citizen",
+		"nic":           "000000001V",
+		"mobile_number": "+14155552671",
+		"email":         "synthetic@example.test",
+		"password":      "synthetic-password",
+	}
+	for _, field := range []string{
+		"group",
+		"groups",
+		"registration_group_path",
+		"RegistrationGroupPath",
+		"role",
+		"roles",
+		"realmRoles",
+		"clientRoles",
+	} {
 		base[field] = []string{"administrators"}
 		body, _ := json.Marshal(base)
 		_, err := registration.ParseRequest(strings.NewReader(string(body)))
 		if err == nil || err.Code != "invalid_request" {
 			t.Fatal("caller privilege field was accepted")
 		}
+
 		delete(base, field)
 	}
 }
@@ -620,6 +844,7 @@ func TestTrustedRootDoesNotBypassHostname(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer a.Close()
 	_, err = a.serviceToken(context.Background())
 	assertError(t, err, registration.AdminUpstream, false)
@@ -633,6 +858,7 @@ func TestTokenDeadlinePreventsCreation(t *testing.T) {
 			creates.Add(1)
 			return
 		}
+
 		select {
 		case <-r.Context().Done():
 		case <-release:
@@ -655,6 +881,11 @@ func TestInvalidInputsDoNotDispatch(t *testing.T) {
 	assertError(t, err, registration.AdminInvalid, false)
 	_, err = a.FindOwned(context.Background(), "bad:operation")
 	assertError(t, err, registration.AdminInvalid, false)
-	assertError(t, a.EnableOwned(context.Background(), "../legacy", "op"), registration.AdminInvalid, false)
+	assertError(
+		t,
+		a.EnableOwned(context.Background(), "../legacy", "op"),
+		registration.AdminInvalid,
+		false,
+	)
 	assertError(t, a.SendVerification(context.Background(), "id", ""), registration.AdminInvalid, false)
 }

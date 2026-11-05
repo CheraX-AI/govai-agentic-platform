@@ -16,6 +16,10 @@
       "eas": {
         "projectId": "9f6f8b0c-bc06-4118-a908-8efa920d291b"
       }
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "scheme": "govai"
   }
 }

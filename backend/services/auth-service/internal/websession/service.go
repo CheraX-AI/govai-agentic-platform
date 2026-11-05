@@ -9,36 +9,45 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"io"
 	"log/slog"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 )
 
 var ErrDenied = errors.New("web_session_rejected")
+
 var ErrUnavailable = errors.New("web_session_unavailable")
+
 var ErrRevocationPending = errors.New("web_session_ended_provider_revocation_pending")
 
 type private struct{}
 
-func (private) Format(s fmt.State, _ rune)   { _, _ = io.WriteString(s, "[REDACTED]") }
+func (private) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+
 func (private) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
-func (private) LogValue() slog.Value         { return slog.StringValue("[REDACTED]") }
+
+func (private) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
 
 type Started struct {
 	private
 	Cookie, CSRF string
 	Expires      time.Time
 }
+
 type Identity struct{ Issuer, Subject string }
+
 type Login interface {
 	Login(context.Context, login.Request) (login.Access, error)
 }
+
 type Rotation interface {
 	RefreshBound(context.Context, string, login.SessionIdentity) (login.SessionTokens, error)
 	RevokeNative(context.Context, string) error
 }
+
 type Store interface {
 	Create(context.Context, postgres.WebCredentials, time.Time) (string, error)
 	Load(context.Context, string) (postgres.WebSnapshot, error)
@@ -61,6 +70,7 @@ type RevocationStore interface {
 	QueueRevocation(context.Context, string, string) (string, error)
 	LoadRevocation(context.Context, string) (postgres.WebRevocation, error)
 }
+
 type Service struct {
 	private
 	login    Login
@@ -72,12 +82,37 @@ type Service struct {
 	now      func() time.Time
 }
 
-func New(l Login, r Rotation, v login.AccessVerifier, p login.ProfileLookup, store Store, lifetime time.Duration) (*Service, error) {
-	if l == nil || r == nil || v == nil || p == nil || store == nil || lifetime < time.Minute || lifetime > 24*time.Hour {
+// New connects browser sessions to login, refresh and persistent storage.
+func New(
+	l Login,
+	r Rotation,
+	v login.AccessVerifier,
+	p login.ProfileLookup,
+	store Store,
+	lifetime time.Duration,
+) (*Service, error) {
+	if l == nil ||
+		r == nil ||
+		v == nil ||
+		p == nil ||
+		store == nil ||
+		lifetime < time.Minute ||
+		lifetime > 24*time.Hour {
 		return nil, ErrUnavailable
 	}
-	return &Service{login: l, rotation: r, verifier: v, profiles: p, store: store, lifetime: lifetime, now: time.Now}, nil
+
+	return &Service{
+		login:    l,
+		rotation: r,
+		verifier: v,
+		profiles: p,
+		store:    store,
+		lifetime: lifetime,
+		now:      time.Now,
+	}, nil
 }
+
+// Start creates a browser session after successful authentication.
 func (s *Service) Start(ctx context.Context, request login.Request) (Started, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -90,27 +125,42 @@ func (s *Service) Start(ctx context.Context, request login.Request) (Started, er
 			return Started{}, ErrUnavailable
 		}
 	}
+
 	issued, err := s.login.Login(ctx, request)
 	if err != nil {
 		if errors.Is(err, login.ErrFailed) {
 			return Started{}, ErrDenied
 		}
+
 		return Started{}, ErrUnavailable
 	}
-	if issued.RefreshToken == "" || issued.RefreshExpiresIn <= 0 || issued.RefreshExpiresIn > 86400*365 || issued.ExpiresIn <= 0 || issued.ExpiresIn > 3600 {
+
+	if issued.RefreshToken == "" ||
+		issued.RefreshExpiresIn <= 0 ||
+		issued.RefreshExpiresIn > 86400*365 ||
+		issued.ExpiresIn <= 0 ||
+		issued.ExpiresIn > 3600 {
 		return Started{}, ErrUnavailable
 	}
+
 	claims, err := s.verifier.Verify(ctx, issued.Token)
 	if err != nil {
 		return Started{}, ErrUnavailable
 	}
-	if !claims.Verified || !claims.Citizen || claims.Issuer == "" || claims.Subject == "" || !claims.Expires.After(s.now()) {
+
+	if !claims.Verified ||
+		!claims.Citizen ||
+		claims.Issuer == "" ||
+		claims.Subject == "" ||
+		!claims.Expires.After(s.now()) {
 		return Started{}, ErrDenied
 	}
+
 	var random [32]byte
 	if _, err = rand.Read(random[:]); err != nil {
 		return Started{}, ErrUnavailable
 	}
+
 	csrf := base64.RawURLEncoding.EncodeToString(random[:])
 	now := s.now()
 	expires := now.Add(s.lifetime)
@@ -118,20 +168,32 @@ func (s *Service) Start(ctx context.Context, request login.Request) (Started, er
 	if refreshExpiry.Before(expires) {
 		expires = refreshExpiry
 	}
+
 	accessExpiry := now.Add(time.Duration(issued.ExpiresIn) * time.Second)
 	if claims.Expires.Before(accessExpiry) {
 		accessExpiry = claims.Expires
 	}
-	c := postgres.WebCredentials{Issuer: claims.Issuer, Subject: claims.Subject, AccessToken: issued.Token, RefreshToken: issued.RefreshToken, CSRF: csrf, AccessUntil: accessExpiry.Unix(), RefreshUntil: refreshExpiry.Unix()}
+
+	c := postgres.WebCredentials{
+		Issuer:       claims.Issuer,
+		Subject:      claims.Subject,
+		AccessToken:  issued.Token,
+		RefreshToken: issued.RefreshToken,
+		CSRF:         csrf,
+		AccessUntil:  accessExpiry.Unix(),
+		RefreshUntil: refreshExpiry.Unix(),
+	}
 	var raw string
 	if guarded {
 		raw, err = fenced.CreateFenced(ctx, c, expires, marker)
 	} else {
 		raw, err = s.store.Create(ctx, c, expires)
 	}
+
 	if err != nil || ctx.Err() != nil {
 		return Started{}, ErrUnavailable
 	}
+
 	return Started{Cookie: raw, CSRF: csrf, Expires: expires}, nil
 }
 
@@ -143,24 +205,30 @@ func (s *Service) Check(ctx context.Context, raw string) (Identity, string, erro
 	if err != nil {
 		return Identity{}, "", storeError(err)
 	}
+
 	c := snap.Credentials
 	if !snap.Expires.After(s.now()) || c.AccessUntil <= s.now().Unix() || c.RefreshUntil <= s.now().Unix() {
 		return Identity{}, "", ErrDenied
 	}
+
 	claims, err := s.verifier.Verify(ctx, c.AccessToken)
 	if err != nil {
 		return Identity{}, "", ErrDenied
 	}
+
 	if claims.Issuer != c.Issuer || claims.Subject != c.Subject || !claims.Verified || !claims.Citizen {
 		return Identity{}, "", ErrDenied
 	}
+
 	ready, err := s.profiles.HasReadyProfile(ctx, c.Issuer, c.Subject)
 	if err != nil || ctx.Err() != nil {
 		return Identity{}, "", ErrUnavailable
 	}
+
 	if !ready {
 		return Identity{}, "", ErrDenied
 	}
+
 	return Identity{Issuer: c.Issuer, Subject: c.Subject}, c.CSRF, nil
 }
 
@@ -179,11 +247,17 @@ func (s *Service) CSRF(ctx context.Context, raw string) (string, error) {
 	if err != nil {
 		return "", storeError(err)
 	}
-	if !snap.Expires.After(s.now()) || snap.Credentials.RefreshUntil <= s.now().Unix() || len(snap.Credentials.CSRF) != 43 {
+
+	if !snap.Expires.After(s.now()) ||
+		snap.Credentials.RefreshUntil <= s.now().Unix() ||
+		len(snap.Credentials.CSRF) != 43 {
 		return "", ErrDenied
 	}
+
 	return snap.Credentials.CSRF, nil
 }
+
+// Refresh rotates the provider credentials for a browser session.
 func (s *Service) Refresh(ctx context.Context, raw, csrf string) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -191,28 +265,46 @@ func (s *Service) Refresh(ctx context.Context, raw, csrf string) error {
 	if err != nil {
 		return storeError(err)
 	}
-	if !csrfMatches(snap.Credentials.CSRF, csrf) || !snap.Expires.After(s.now()) || snap.Credentials.RefreshUntil <= s.now().Unix() {
+
+	if !csrfMatches(snap.Credentials.CSRF, csrf) ||
+		!snap.Expires.After(s.now()) ||
+		snap.Credentials.RefreshUntil <= s.now().Unix() {
 		return ErrDenied
 	}
+
 	snap, err = s.store.BeginRefresh(ctx, raw)
 	if err != nil {
 		return storeError(err)
 	}
+
 	if !csrfMatches(snap.Credentials.CSRF, csrf) {
 		return ErrDenied
 	}
-	tokens, err := s.rotation.RefreshBound(ctx, snap.Credentials.RefreshToken, login.SessionIdentity{Issuer: snap.Credentials.Issuer, Subject: snap.Credentials.Subject})
+
+	tokens, err := s.rotation.RefreshBound(
+		ctx,
+		snap.Credentials.RefreshToken,
+		login.SessionIdentity{Issuer: snap.Credentials.Issuer, Subject: snap.Credentials.Subject},
+	)
 	if err != nil {
 		s.queueFailedRefresh(ctx, raw, snap.Credentials.Issuer, "")
 		if errors.Is(err, login.ErrFailed) {
 			return ErrDenied
 		}
+
 		return ErrUnavailable
 	}
-	if tokens.ExpiresIn <= 0 || tokens.ExpiresIn > 3600 || tokens.RefreshExpiresIn <= 0 || tokens.RefreshExpiresIn > 86400*365 || tokens.AccessToken == "" || tokens.RefreshToken == "" {
+
+	if tokens.ExpiresIn <= 0 ||
+		tokens.ExpiresIn > 3600 ||
+		tokens.RefreshExpiresIn <= 0 ||
+		tokens.RefreshExpiresIn > 86400*365 ||
+		tokens.AccessToken == "" ||
+		tokens.RefreshToken == "" {
 		s.queueFailedRefresh(ctx, raw, snap.Credentials.Issuer, tokens.RefreshToken)
 		return ErrUnavailable
 	}
+
 	next := snap.Credentials
 	next.AccessToken = tokens.AccessToken
 	next.RefreshToken = tokens.RefreshToken
@@ -222,6 +314,7 @@ func (s *Service) Refresh(ctx context.Context, raw, csrf string) error {
 		s.queueFailedRefresh(ctx, raw, snap.Credentials.Issuer, tokens.RefreshToken)
 		return ErrUnavailable
 	}
+
 	return nil
 }
 
@@ -234,9 +327,11 @@ func (s *Service) End(ctx context.Context, raw, csrf string) error {
 	if err != nil {
 		return storeError(err)
 	}
+
 	if !csrfMatches(snap.Credentials.CSRF, csrf) {
 		return ErrDenied
 	}
+
 	job := ""
 	queue, queued := s.store.(RevocationStore)
 	if queued {
@@ -244,23 +339,29 @@ func (s *Service) End(ctx context.Context, raw, csrf string) error {
 	} else {
 		err = s.store.Terminate(ctx, raw)
 	}
+
 	if err != nil {
 		return ErrUnavailable
 	}
+
 	refreshToken := snap.Credentials.RefreshToken
 	if queued {
 		captured, e := queue.LoadRevocation(ctx, job)
 		if e != nil {
 			return ErrRevocationPending
 		}
+
 		refreshToken = captured.RefreshToken
 	}
+
 	if s.rotation.RevokeNative(ctx, refreshToken) != nil || ctx.Err() != nil {
 		return ErrRevocationPending
 	}
+
 	if queued && queue.CompleteRevocation(ctx, job) != nil {
 		return ErrRevocationPending
 	}
+
 	return nil
 }
 
@@ -269,6 +370,7 @@ func (s *Service) queueFailedRefresh(ctx context.Context, raw, issuer, rotated s
 	if !ok {
 		return
 	}
+
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	_, _ = queue.TerminateQueued(cleanup, raw)
@@ -283,5 +385,6 @@ func storeError(err error) error {
 	if errors.Is(err, postgres.ErrWebSessionMissing) {
 		return ErrDenied
 	}
+
 	return ErrUnavailable
 }

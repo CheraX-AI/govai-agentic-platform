@@ -3,11 +3,12 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestMiddleware(t *testing.T) {
@@ -39,23 +40,30 @@ func TestMiddleware(t *testing.T) {
 			if response.Code != tc.status {
 				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 			}
+
 			id := response.Header().Get("X-Request-ID")
 			if len(id) != 32 || !strings.Contains(logs.String(), id) {
 				t.Fatal("missing request ID/log")
 			}
+
 			if strings.Contains(logs.String(), "private") {
 				t.Fatal("sensitive log")
 			}
+
 			if tc.status >= 400 {
 				var body map[string]string
 				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body["error"] == "" {
 					t.Fatal("invalid JSON error")
 				}
 			}
-			if tc.origin == "http://localhost:5173" && response.Header().Get("Access-Control-Allow-Origin") != tc.origin {
+
+			if tc.origin == "http://localhost:5173" &&
+				response.Header().Get("Access-Control-Allow-Origin") != tc.origin {
 				t.Fatal("missing CORS origin")
 			}
-			if tc.origin != "http://localhost:5173" && response.Header().Get("Access-Control-Allow-Origin") != "" {
+
+			if tc.origin != "http://localhost:5173" &&
+				response.Header().Get("Access-Control-Allow-Origin") != "" {
 				t.Fatal("unexpected CORS origin")
 			}
 		})

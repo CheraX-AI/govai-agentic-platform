@@ -36,23 +36,46 @@ type Service struct {
 type Receipt struct {
 	Status string `json:"status"`
 }
+
 type ServiceError struct{ Code string }
 
 func (e *ServiceError) Error() string { return e.Code }
-func serviceError(code string) error  { return &ServiceError{Code: code} }
+
+func serviceError(code string) error { return &ServiceError{Code: code} }
 
 var keyPattern = regexp.MustCompile(`^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$`)
+
 var identityPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
+// NewService connects registration dependencies and validates retry settings.
 func NewService(cfg ServiceConfig, admin Admin, profiles ProfileStore, journal RegistrationJournal) (*Service, error) {
 	u, err := url.Parse(cfg.Issuer)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery || strings.ContainsAny(cfg.Issuer, "\\ \t\r\n#") || len(cfg.FingerprintKey) < 32 || cfg.Timeout <= 0 || cfg.Timeout > 30*time.Second || cfg.EmailRetryBackoff <= 0 || cfg.EmailRetryBackoff > time.Hour || cfg.MaxEmailAttempts < 1 || cfg.MaxEmailAttempts > 10 || admin == nil || profiles == nil || journal == nil {
+	if err != nil ||
+		u.Scheme != "https" ||
+		u.Hostname() == "" ||
+		u.User != nil ||
+		u.RawQuery != "" ||
+		u.Fragment != "" ||
+		u.ForceQuery ||
+		strings.ContainsAny(cfg.Issuer, "\\ \t\r\n#") ||
+		len(cfg.FingerprintKey) < 32 ||
+		cfg.Timeout <= 0 ||
+		cfg.Timeout > 30*time.Second ||
+		cfg.EmailRetryBackoff <= 0 ||
+		cfg.EmailRetryBackoff > time.Hour ||
+		cfg.MaxEmailAttempts < 1 ||
+		cfg.MaxEmailAttempts > 10 ||
+		admin == nil ||
+		profiles == nil ||
+		journal == nil {
 		return nil, serviceError("registration_configuration")
 	}
+
 	cfg.FingerprintKey = append([]byte(nil), cfg.FingerprintKey...)
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+
 	return &Service{cfg: cfg, admin: admin, profiles: profiles, journal: journal}, nil
 }
 
@@ -65,29 +88,42 @@ func (s *Service) Register(ctx context.Context, key string, body io.Reader) (Rec
 	if ctx.Err() != nil {
 		return Receipt{}, serviceError("registration_canceled")
 	}
+
 	if !keyPattern.MatchString(key) {
 		return Receipt{}, serviceError("registration_invalid_key")
 	}
+
 	r, inputErr := ParseRequest(body)
 	if inputErr != nil {
 		return Receipt{}, inputErr
 	}
+
 	data := ProfileData{FullName: r.FullName, NIC: r.NIC, MobileNumber: r.MobileNumber}
 	var random [16]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return Receipt{}, serviceError("registration_unavailable")
 	}
-	reservation := Reservation{Issuer: s.cfg.Issuer, Key: strings.ToLower(key), OperationID: hex.EncodeToString(random[:]), Fingerprint: s.fingerprint(r), Pending: data}
+
+	reservation := Reservation{
+		Issuer:      s.cfg.Issuer,
+		Key:         strings.ToLower(key),
+		OperationID: hex.EncodeToString(random[:]),
+		Fingerprint: s.fingerprint(r),
+		Pending:     data,
+	}
 	session, err := s.journal.Reserve(ctx, reservation)
 	if err != nil {
 		if errors.Is(err, ErrNICConflict) {
 			return Receipt{Status: "received"}, nil
 		}
+
 		if errors.Is(err, ErrRequestConflict) {
 			return Receipt{}, serviceError("registration_request_conflict")
 		}
+
 		return Receipt{}, s.storeError(ctx)
 	}
+
 	return s.withSession(ctx, session, &r)
 }
 
@@ -100,10 +136,12 @@ func (s *Service) Resume(ctx context.Context, key string) (Receipt, error) {
 	if !keyPattern.MatchString(key) {
 		return Receipt{}, serviceError("registration_invalid_key")
 	}
+
 	session, err := s.journal.Open(ctx, s.cfg.Issuer, strings.ToLower(key))
 	if err != nil {
 		return Receipt{}, s.storeError(ctx)
 	}
+
 	return s.withSession(ctx, session, nil)
 }
 
@@ -121,6 +159,7 @@ func (s *Service) storeError(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return serviceError("registration_canceled")
 	}
+
 	return serviceError("registration_unavailable")
 }
 
@@ -128,6 +167,7 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 	if session == nil {
 		return Receipt{}, serviceError("registration_unavailable")
 	}
+
 	defer func() {
 		release, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
@@ -140,6 +180,7 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 	if ownership == nil {
 		return Receipt{}, serviceError("registration_unavailable")
 	}
+
 	work, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(ownership, cancel)
 	defer stop()
@@ -154,15 +195,20 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 		if ctx.Err() != nil {
 			return Receipt{}, s.storeError(ctx)
 		}
+
 		op := session.Snapshot()
-		if op.Issuer != s.cfg.Issuer || !identityPattern.MatchString(op.OperationID) || op.Pending.NIC.NormalizedNumber() == "" {
+		if op.Issuer != s.cfg.Issuer ||
+			!identityPattern.MatchString(op.OperationID) ||
+			op.Pending.NIC.NormalizedNumber() == "" {
 			return Receipt{}, serviceError("registration_reconciliation_required")
 		}
+
 		save := func(next Operation) error {
 			next.Revision = op.Revision + 1
 			if e := session.Save(ctx, next); e != nil {
 				return s.storeError(ctx)
 			}
+
 			return nil
 		}
 		switch op.Phase {
@@ -191,6 +237,7 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 				if !errors.As(e, &ae) || ae.UnknownOutcome {
 					return Receipt{}, serviceError("registration_reconciliation_required")
 				}
+
 				op = session.Snapshot()
 				switch ae.Code {
 				case AdminDuplicate:
@@ -202,16 +249,20 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 				default:
 					return Receipt{}, serviceError("registration_reconciliation_required")
 				}
+
 				op.Revision++
 				if err = session.Save(ctx, op); err != nil {
 					return Receipt{}, s.storeError(ctx)
 				}
+
 				if op.Phase == Duplicate {
 					return Receipt{Status: "received"}, nil
 				}
+
 				if op.Phase == Rejected {
 					return Receipt{}, serviceError("registration_policy_rejected")
 				}
+
 				return Receipt{}, s.storeError(ctx)
 			}
 			if !identityPattern.MatchString(u.Subject) || u.Enabled || u.EmailVerified {
@@ -239,11 +290,15 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 			if e != nil || u.Subject != op.Subject || u.Enabled {
 				return Receipt{}, serviceError("registration_reconciliation_required")
 			}
-			e = s.profiles.Persist(ctx, ProfileRecord{OperationID: op.OperationID, Issuer: op.Issuer, Subject: op.Subject, Data: op.Pending})
+			e = s.profiles.Persist(
+				ctx,
+				ProfileRecord{OperationID: op.OperationID, Issuer: op.Issuer, Subject: op.Subject, Data: op.Pending},
+			)
 			if e != nil {
 				if errors.Is(e, ErrProfileConflict) {
 					return Receipt{}, serviceError("registration_reconciliation_required")
 				}
+
 				return Receipt{}, s.storeError(ctx)
 			}
 			op.Phase = ProfileReady
@@ -280,6 +335,7 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 				if err = save(op); err != nil {
 					return Receipt{}, err
 				}
+
 				continue
 			}
 			if op.EmailAttempts >= s.cfg.MaxEmailAttempts {
@@ -287,6 +343,7 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 				if err = save(op); err != nil {
 					return Receipt{}, err
 				}
+
 				return Receipt{}, serviceError("registration_attention_required")
 			}
 			if s.cfg.Now().Before(op.NextEmailAttempt) {
@@ -304,18 +361,21 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 				if !errors.As(e, &ae) || ae.UnknownOutcome {
 					return Receipt{}, serviceError("registration_reconciliation_required")
 				}
+
 				switch ae.Code {
 				case AdminPermission, AdminInvalid, AdminCanceled, AdminUpstream, AdminPolicyRejected:
 					// Explicit adapter outcomes guaranteeing no email acceptance.
 				default:
 					return Receipt{}, serviceError("registration_reconciliation_required")
 				}
+
 				op.Phase = Enabled
 				op.NextEmailAttempt = s.cfg.Now().Add(s.cfg.EmailRetryBackoff * time.Duration(op.EmailAttempts))
 				op.Revision++
 				if err = session.Save(ctx, op); err != nil {
 					return Receipt{}, s.storeError(ctx)
 				}
+
 				return Receipt{}, s.storeError(ctx)
 			}
 			op.Phase = Completed
@@ -341,5 +401,6 @@ func (s *Service) withSession(ctx context.Context, session OperationSession, r *
 			return Receipt{}, serviceError("registration_reconciliation_required")
 		}
 	}
+
 	return Receipt{}, serviceError("registration_reconciliation_required")
 }

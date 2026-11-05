@@ -31,7 +31,7 @@ assert.ok(validateResetPasswords('abcdefgh','different').confirmation)
 let replacement
 const history={replaceState:(_state,_unused,url)=>{replacement=url}}
 assert.deepEqual(takeResetLink({pathname:'/reset-password',hash:'#token='+token},history),{token})
-assert.equal(replacement,'/reset-password#/reset-password')
+assert.equal(replacement,'/reset-password')
 assert.deepEqual(takeResetLink({pathname:'/reset-password',hash:'#token=bad'},history),{token:null})
 assert.deepEqual(takeResetLink({pathname:'/',hash:'#token='+token},history),{token:null})
 assert.equal(takeResetLink({pathname:'/',hash:'#/login'},history),null)

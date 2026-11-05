@@ -1,3 +1,4 @@
+import type { ChatReply } from '../services/chatApi';
 import { useEffect, useRef, useState } from 'react';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
@@ -28,15 +29,15 @@ const preloadAssets = { ...chatHomeAssets, ...Object.fromEntries(Object.entries(
 const suggestions = ['How do I renew my NIC?', 'What do I need for a passport?', 'Pay my vehicle licence'];
 
 
-export type ChatHomeProps = { onExit: () => void; mode: 'standalone' | 'demo'; authenticatedDisplayName?: string | null };
+export type ChatHomeProps = { onExit: () => void; mode: 'standalone' | 'demo' | 'authenticated'; authenticatedDisplayName?: string | null; onSendChat?: (message: string, signal: AbortSignal) => Promise<ChatReply> };
 
 // Only a future backend-authenticated adapter should supply this name.
 export function ChatHomeContent(props: ChatHomeProps) {
-  if (!__DEV__ || (props.mode === 'demo' ? process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1' : process.env.EXPO_PUBLIC_CHAT_HOME_PREVIEW !== '1')) return null;
+  if (props.mode !== 'authenticated' && (!__DEV__ || (props.mode === 'demo' ? process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1' : process.env.EXPO_PUBLIC_CHAT_HOME_PREVIEW !== '1'))) return null;
   return <ChatHomeBody {...props} />;
 }
 
-function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps) {
+function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: ChatHomeProps) {
   const name = authenticatedDisplayName?.trim();
   const greeting = name ? `Hello, ${name}` : 'Hello';
   const insets = useSafeAreaInsets();
@@ -55,6 +56,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
   const [failNext, setFailNext] = useState(false);
   const failNextRef = useRef(false);
   const sequence = useRef(0);
+  const responseAbort = useRef<AbortController | null>(null);
   const responseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const request = useRef<{ thread: number; prompt: string; status: 'pending' | 'failed' } | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -83,6 +85,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
   }
 
   function cancelResponse() {
+    responseAbort.current?.abort(); responseAbort.current = null;
     follow.current.threadId=null; follow.current.revision++;
     if (responseTimer.current !== null) clearTimeout(responseTimer.current);
     responseTimer.current = null; request.current = null; setPending(false); setFailed(false);
@@ -92,6 +95,24 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
     captureFollow();
     const attempt = { thread: current.id, prompt, status: 'pending' as 'pending' | 'failed' };
     request.current = attempt; setPending(true); setFailed(false);
+    if (mode === 'authenticated') {
+      const controller = new AbortController(); responseAbort.current = controller;
+      void (async () => {
+        try {
+          if (!onSendChat) throw new Error('Chat configuration is unavailable.');
+          const reply = await onSendChat(prompt, controller.signal);
+          if (controller.signal.aborted || leaving.current || request.current !== attempt || threadRef.current?.id !== attempt.thread) return;
+          captureFollow();
+          const updated = { ...threadRef.current, messages: [...threadRef.current.messages, { id: ++sequence.current, role: 'ai' as const, text: reply.answer, sources: reply.sources, live: true }] };
+          threadRef.current = updated; setThread(updated); request.current = null; setPending(false); setMessageError('');
+        } catch (error) {
+          if (controller.signal.aborted || leaving.current || request.current !== attempt) return;
+          attempt.status = 'failed'; setPending(false); setFailed(true);
+          setMessageError(error instanceof Error ? error.message : 'Chat is unavailable. Please try again later.');
+        } finally { if (responseAbort.current === controller) responseAbort.current = null; }
+      })();
+      return;
+    }
     const shouldFail = failNextRef.current; failNextRef.current = false; setFailNext(false);
     responseTimer.current = setTimeout(() => {
       if (leaving.current || request.current !== attempt || threadRef.current?.id !== attempt.thread) return;
@@ -105,9 +126,10 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
   }
   function startConversation(prompt: string, submittedDraft = false) {
     if (!ready || leaving.current || menuPhase.current !== 'closed' || threadRef.current || sequence.current !== actionVersion) return;
+    if ([...prompt.trim()].length > 4000) { setMessageError('Enter a question of at most 4000 characters.'); return; }
     if (!prompt.trim()) { setMessageError('Enter a message.'); input.current?.focus(); return; }
     const current: LocalThread = { id: ++sequence.current, title: prompt.trim() === suggestions[0] ? 'Renew your NIC' : 'Sample conversation',
-      messages: [{ id: ++sequence.current, role: 'citizen', text: prompt.trim() }] };
+      messages: [{ id: ++sequence.current, role: 'citizen', live: mode === 'authenticated', text: prompt.trim() }] };
     threadRef.current = current; setThread(current); setConversationDraft(''); setMessageError('');
     follow.current.threadId=current.id;
     if (submittedDraft) { setDraft(''); input.current?.clear(); }
@@ -120,8 +142,9 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
     if (!current) { startConversation(draft, true); return; }
     if (!conversationDraft.trim()) { setMessageError('Enter a message.'); input.current?.focus(); return; }
     const prompt = conversationDraft.trim();
+    if ([...prompt].length > 4000) { setMessageError('Enter a question of at most 4000 characters.'); return; }
     captureFollow();
-    const updated = { ...current, messages: [...current.messages, { id: ++sequence.current, role: 'citizen' as const, text: prompt }] };
+    const updated = { ...current, messages: [...current.messages, { id: ++sequence.current, role: 'citizen' as const, live: mode === 'authenticated', text: prompt }] };
     threadRef.current = updated; setThread(updated); setConversationDraft(''); input.current?.clear(); setMessageError('');
     prepareResponse(updated, prompt);
   }
@@ -168,7 +191,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
     });
   }
   function logout() {
-    if (!__DEV__ || mode !== 'demo' || process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1' || leaving.current || menuPhase.current !== 'open') return;
+    if ((mode !== 'authenticated' && (!__DEV__ || mode !== 'demo' || process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1')) || leaving.current || menuPhase.current !== 'open') return;
     leaving.current = true; menuPhase.current = 'closed'; hadMenu.current = false;
     cancelResponse(); threadRef.current = null; setThread(null); setConversationDraft(''); setMessageError(''); failNextRef.current = false; setFailNext(false);
     menuOpacity.stopAnimation(); menuOpacity.setValue(0);
@@ -183,7 +206,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
     let mounted = true;
     AccessibilityInfo.isReduceMotionEnabled().then(value => { if (mounted) setReduceMotion(value); });
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => { mounted = false; leaving.current = true; follow.current.threadId=null; follow.current.revision++; if(responseTimer.current!==null)clearTimeout(responseTimer.current); request.current=null; threadRef.current=null; subscription.remove(); menuOpacity.stopAnimation(); if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current); };
+    return () => { responseAbort.current?.abort(); mounted = false; leaving.current = true; follow.current.threadId=null; follow.current.revision++; if(responseTimer.current!==null)clearTimeout(responseTimer.current); request.current=null; threadRef.current=null; subscription.remove(); menuOpacity.stopAnimation(); if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current); };
   }, []);
   useEffect(() => {
     if (menuVisible && menuPhase.current === 'open') {
@@ -266,10 +289,10 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
         <View testID="chat-header" onLayout={event => measureChrome('header',event.nativeEvent.layout.height)}><ChatHeader title={thread?.title} onBack={() => { if(threadRef.current?.id===thread?.id)returnToLanding(); }} onNewChat={newChat} onMenu={openMenu} menuRef={menuButton}
           ready={ready} menuVisible={menuVisible} menuAsset={chatHomeAssets.menu} notificationAsset={chatHomeAssets.notifications} /></View>
         <View testID="chat-notices" onLayout={event => measureChrome('notices',event.nativeEvent.layout.height)}>
-        <Text style={styles.notice}>{mode === 'demo' ? 'UI demo · Credentials were not verified. AI and actions are disconnected.' : 'Development preview · Local mock chat works. Authentication, AI and backend are disconnected; service actions are unavailable.'}</Text>
-        {!!thread && <Text style={styles.notice}>Local demo · Responses are samples, not verified government advice. AI is disconnected.</Text>}
+        <Text style={styles.notice}>{mode === 'authenticated' ? 'Ask GovAI. Check the cited sources before acting on guidance.' : mode === 'demo' ? 'UI demo · Credentials were not verified. AI and actions are disconnected.' : 'Development preview · Local mock chat works. Authentication, AI and backend are disconnected; service actions are unavailable.'}</Text>
+        {!!thread && mode !== 'authenticated' && <Text style={styles.notice}>Local demo · Responses are samples, not verified government advice. AI is disconnected.</Text>}
         </View>
-        {__DEV__ && ready && !!thread && <View testID="chat-demo-controls" onLayout={event => measureChrome('demo',event.nativeEvent.layout.height)} style={styles.demoControls}>
+        {__DEV__ && mode !== 'authenticated' && ready && !!thread && <View testID="chat-demo-controls" onLayout={event => measureChrome('demo',event.nativeEvent.layout.height)} style={styles.demoControls}>
           <Pressable accessibilityRole="switch" accessibilityLabel="Simulate next response error" accessibilityState={{ checked: failNext }}
             onPress={() => { if(leaving.current)return; failNextRef.current=!failNextRef.current;setFailNext(failNextRef.current); }} style={styles.errorSwitch}>
             <Text style={styles.demoControlText}>{`Demo controls · Simulate next response error: ${failNext ? 'On' : 'Off'}`}</Text>
@@ -280,7 +303,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
             {fontError || assetError ? 'Unable to load Chat Home preview assets. Reload the preview.' : 'Loading Chat Home preview…'}
           </Text>
         </View> : <>
-          {thread ? <ChatConversation key={thread.id} thread={thread} pending={pending} failed={failed} onRetry={retryResponse} follow={follow} /> : <View style={styles.landing}>
+          {thread ? <ChatConversation live={mode === 'authenticated'} key={thread.id} thread={thread} pending={pending} failed={failed} onRetry={retryResponse} follow={follow} /> : <View style={styles.landing}>
             <View style={styles.greeting}>
               <View style={styles.avatar} accessible accessibilityRole="image" accessibilityLabel="GovAI assistant illustration">
                 <Image source={chatHomeAssets.avatar} accessible={false} resizeMode="stretch" style={styles.avatarImage} />
@@ -312,7 +335,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName }: ChatHomeProps)
       </View>
     </View>
     {menuVisible && <Animated.View style={[StyleSheet.absoluteFill, { opacity: menuOpacity, zIndex: 10 }]}>
-      <ChatHomeMenu onClose={closeMenu} onCloseLayout={focusClose} closeRef={closeButton} onLogout={mode === 'demo' ? logout : undefined} onNewChat={newChat} />
+      <ChatHomeMenu authenticated={mode === 'authenticated'} onClose={closeMenu} onCloseLayout={focusClose} closeRef={closeButton} onLogout={mode === 'demo' || mode === 'authenticated' ? logout : undefined} onNewChat={newChat} />
     </Animated.View>}
     {!ready && <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.preload}>
       {Object.entries(preloadAssets).map(([key, source]) => <Image key={key} source={source} accessible={false} style={styles.preloadImage}

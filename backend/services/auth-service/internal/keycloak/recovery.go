@@ -18,10 +18,13 @@ import (
 // serialize it in the public masked-email response or accept it from a caller.
 type RecoveryRecipient struct{ email string }
 
-func (r RecoveryRecipient) Email() string              { return r.email }
-func (RecoveryRecipient) Format(s fmt.State, _ rune)   { _, _ = io.WriteString(s, "[REDACTED]") }
+func (r RecoveryRecipient) Email() string { return r.email }
+
+func (RecoveryRecipient) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+
 func (RecoveryRecipient) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
-func (RecoveryRecipient) LogValue() slog.Value         { return slog.StringValue("[REDACTED]") }
+
+func (RecoveryRecipient) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
 
 // Recovery uses persisted subject/operation bindings, not email/NIC user searches.
 // This reuses accepted group-wide credentials but exposes no route or new grant.
@@ -31,10 +34,12 @@ func (a *Admin) RecoveryRecipient(ctx context.Context, subject, operation string
 	if !segment.MatchString(subject) || !segment.MatchString(operation) {
 		return RecoveryRecipient{}, failure(registration.AdminInvalid, false)
 	}
+
 	body, _, err := a.call(ctx, http.MethodGet, a.users+"/"+subject, nil, http.StatusOK, false)
 	if err != nil {
 		return RecoveryRecipient{}, err
 	}
+
 	var user struct {
 		userRepresentation
 		Email string `json:"email"`
@@ -42,16 +47,23 @@ func (a *Admin) RecoveryRecipient(ctx context.Context, subject, operation string
 	if json.Unmarshal(body, &user) != nil {
 		return RecoveryRecipient{}, failure(registration.AdminUpstream, false)
 	}
+
 	if user.ID != subject || !owned(user.userRepresentation, operation) {
 		return RecoveryRecipient{}, failure(registration.AdminOwnership, false)
 	}
+
 	if !user.Enabled || !user.EmailVerified {
 		return RecoveryRecipient{}, failure(registration.AdminInvalid, false)
 	}
+
 	address, err := mail.ParseAddress(user.Email)
-	if err != nil || address.Address != user.Email || len(user.Email) > 254 || strings.ContainsAny(user.Email, "\r\n") {
+	if err != nil ||
+		address.Address != user.Email ||
+		len(user.Email) > 254 ||
+		strings.ContainsAny(user.Email, "\r\n") {
 		return RecoveryRecipient{}, failure(registration.AdminUpstream, false)
 	}
+
 	return RecoveryRecipient{email: user.Email}, nil
 }
 
@@ -62,11 +74,13 @@ func (a *Admin) ResetOwnedPassword(ctx context.Context, subject, operation strin
 	if _, err := recovery.ParsePassword(password.Reveal()); err != nil {
 		return failure(registration.AdminInvalid, false)
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, a.cfg.CallTimeout)
 	defer cancel()
 	if _, err := a.RecoveryRecipient(ctx, subject, operation); err != nil {
 		return err
 	}
+
 	body, err := json.Marshal(struct {
 		Type      string `json:"type"`
 		Value     string `json:"value"`
@@ -75,7 +89,15 @@ func (a *Admin) ResetOwnedPassword(ctx context.Context, subject, operation strin
 	if err != nil {
 		return failure(registration.AdminInvalid, false)
 	}
-	_, _, err = a.call(ctx, http.MethodPut, a.users+"/"+subject+"/reset-password", body, http.StatusNoContent, false)
+
+	_, _, err = a.call(
+		ctx,
+		http.MethodPut,
+		a.users+"/"+subject+"/reset-password",
+		body,
+		http.StatusNoContent,
+		false,
+	)
 	return err
 }
 
@@ -88,6 +110,7 @@ func (a *Admin) LogoutOwnedSessions(ctx context.Context, subject, operation stri
 	if _, err := a.RecoveryRecipient(ctx, subject, operation); err != nil {
 		return err
 	}
+
 	_, _, err := a.call(ctx, http.MethodPost, a.users+"/"+subject+"/logout", nil, http.StatusNoContent, false)
 	return err
 }
