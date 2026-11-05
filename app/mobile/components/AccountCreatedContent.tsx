@@ -3,8 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Screen } from './Screen';
 import { layout, typography } from '../layout';
-import { loginAssets } from '../LoginScreen';
-import { registerAssets } from '../RegisterScreen';
+import { loginAssets } from '../pages/LoginScreen';
+import { registerAssets } from '../pages/RegisterScreen';
 
 const checkCircle = require('../assets/figma/account-created/check-circle.png');
 

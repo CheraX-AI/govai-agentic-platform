@@ -4,8 +4,9 @@ const args = process.argv.slice(2);
 if (args.length && !(args.length === 2 && args[0] === '--port' && /^\d+$/.test(args[1]) && Number(args[1]) >= 1 && Number(args[1]) <= 65535)) {
   throw Error('Optional supported argument: --port NUMBER');
 }
-console.log('Connected UI demo: local navigation only. No account is created and no email is sent.');
-const result = spawnSync(process.execPath, [path.join(__dirname, 'expo.cjs'), 'start', '--go', '--lan', ...args], {
+console.log('Connected UI demo: EXPO_PUBLIC_CONNECTED_UI_DEMO=1. Reopen this server in Expo Go; npm start uses disconnected mode.');
+console.log('Clearing Metro cache for the selected demo environment. No account is created; no email or SMS is sent.');
+const result = spawnSync(process.execPath, [path.join(__dirname, 'expo.cjs'), 'start', '--go', '--lan', '--clear', ...args], {
   cwd: path.resolve(__dirname, '..'), stdio: 'inherit',
   env: {
     ...process.env,

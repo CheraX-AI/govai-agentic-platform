@@ -1,21 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
-import { OnboardingProgress } from './components/OnboardingProgress';
+import { OnboardingProgress } from '../components/OnboardingProgress';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { layout, typography } from './layout';
+import { layout, typography } from '../layout';
 
-export const payAssets = {
-  payment: require('./assets/figma/onboarding-pay/payment.png'),
-  application: require('./assets/figma/onboarding-pay/application.png'),
-  clock: require('./assets/figma/onboarding-pay/clock.png'),
-  meta: require('./assets/figma/onboarding-pay/meta.png'),
-  hero: require('./assets/figma/onboarding-discover/hero.jpg'),
-  back: require('./assets/figma/onboarding-meet/back.png'),
-  next: require('./assets/figma/onboarding-meet/next.png'),
+export const askAssets = {
+  hero: require('../assets/figma/onboarding-discover/hero.jpg'),
+  back: require('../assets/figma/onboarding-meet/back.png'),
+  next: require('../assets/figma/onboarding-meet/next.png'),
 };
 
-export function OnboardingPayScreen({ onBack, onLogin }: { onBack: () => void; onLogin: () => void }) {
+export function OnboardingAskScreen({ onBack, onNext, onLogin }: { onBack: () => void; onNext: () => void; onLogin: () => void }) {
   const insets = useSafeAreaInsets();
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [bodyHeight, setBodyHeight] = useState(0);
@@ -51,7 +47,7 @@ export function OnboardingPayScreen({ onBack, onLogin }: { onBack: () => void; o
       <StatusBar style="dark" />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={[styles.hero, { height: heroHeight }]}>
-          <View style={styles.heroCrop}><Image source={payAssets.hero} resizeMode="contain" accessible={false}
+          <View style={styles.heroCrop}><Image source={askAssets.hero} resizeMode="contain" accessible={false}
             style={[styles.heroImage, { width: artworkWidth, height: artworkHeight, top: imageTop }]} /></View>
           <Pressable onPress={onLogin} accessibilityRole="button" accessibilityLabel={"Skip onboarding and open Login"} style={[styles.skip, { top: insets.top + 12, right: insets.right + 16 }]}>
             <Text style={styles.skipText}>{"Skip"}</Text>
@@ -67,43 +63,35 @@ export function OnboardingPayScreen({ onBack, onLogin }: { onBack: () => void; o
           }}>
           <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.handle} />
           <Text accessibilityRole="header" style={[typography.heading, styles.title]}>
-            {"Pay and stay"}{'\n'}<Text style={styles.brand}>{"informed"}</Text>
+            {"Ask GovAI"}{'\n'}<Text style={styles.brand}>{"in your language"}</Text>
           </Text>
           <Text style={[typography.body, styles.description]}>
-            {"Pay fees securely and get notified the moment something changes."}{' '}</Text>
-          {/* Illustrative notification copy only: no actions or payment state. */}
-          <View style={styles.notifications}>
-            {[
-              { title: "Payment confirmed", message: "LKR 999.00 for GovAI Plus was paid.", time: "Just now", icon: payAssets.payment, color: '#f2f8f4' },
-              { title: "Application update", message: "Your NIC renewal is now under review.", time: "10 minutes ago", icon: payAssets.application, color: '#fcf3f5' },
-            ].map(notification => (
-              <View key={notification.title} style={styles.notification}>
-                <View style={[styles.notificationIcon, { backgroundColor: notification.color }]}>
-                  <Image source={notification.icon} accessible={false} style={styles.icon} />
-                </View>
-                <View style={styles.notificationText}>
-                  <Text style={styles.notificationTitle}>{notification.title}</Text>
-                  <Text style={styles.notificationMessage}>{notification.message}</Text>
-                  <View style={styles.time}>
-                    <Image source={payAssets.clock} accessible={false} style={styles.clock} />
-                    <Text style={styles.timeText}>{notification.time}</Text>
-                  </View>
-                </View>
-                <Image source={payAssets.meta} accessible={false} style={styles.meta} />
-              </View>
-            ))}
+            {"Get answers in English, Sinhala or Tamil, with step-by-step help for every service."}{' '}</Text>
+          {/* Static onboarding example, not a functional chat. */}
+          <View style={styles.conversation}>
+            <View style={styles.userBubble}>
+              <Text style={styles.userText}>{"How do I renew my NIC?"}</Text>
+            </View>
+            <View style={styles.aiBubble}>
+              <Text style={styles.aiText}>{"Log in to the DRP portal, fill in the renewal form and upload your photo. I’ll guide you through each step."}</Text>
+            </View>
+            <View style={styles.languages}>
+              <View style={[styles.chip, styles.englishChip]}><Text style={styles.englishText}>English</Text></View>
+              <View style={styles.chip}><Text style={styles.sinhalaText}>සිංහල</Text></View>
+              <View style={styles.chip}><Text style={styles.tamilText}>தமிழ்</Text></View>
+            </View>
           </View>
           </View>
           <View style={styles.panelSpacer} />
           <View style={styles.footer} onLayout={({ nativeEvent: { layout: measured } }) => {
             setFooterHeight(previous => Math.abs(previous - measured.height) < 0.5 ? previous : measured.height);
           }}>
-            <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel={"Back to Track"} style={styles.back}>
-              <Image source={payAssets.back} accessible={false} style={styles.icon} />
+            <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel={"Back to Discover"} style={styles.back}>
+              <Image source={askAssets.back} accessible={false} style={styles.icon} />
             </Pressable>
-            <OnboardingProgress current={5} />
-            <Pressable onPress={onLogin} accessibilityRole="button" accessibilityLabel={"Next: Login"} style={styles.next}>
-              <Image source={payAssets.next} accessible={false} style={styles.icon} />
+            <OnboardingProgress current={3} />
+            <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel={"Next: Track every request"} style={styles.next}>
+              <Image source={askAssets.next} accessible={false} style={styles.icon} />
             </Pressable>
           </View>
           </View>
@@ -133,18 +121,17 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Inter_700Bold', textAlign: 'center', color: '#142033' },
   brand: { color: '#a30f2d' },
   description: { fontFamily: 'Inter_400Regular', color: '#666', textAlign: 'center' },
-  notifications: { width: '100%', gap: 8 },
-  notification: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 12,
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#f1f5f9', borderRadius: 16,
-    boxShadow: '0px 2px 4px rgba(0,0,0,0.03)' },
-  notificationIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  notificationText: { flex: 1, minWidth: 0, gap: 4 },
-  notificationTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, lineHeight: 19, color: '#142033' },
-  notificationMessage: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, color: '#666' },
-  time: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  clock: { width: 12, height: 12 },
-  timeText: { flexShrink: 1, fontFamily: 'Inter_400Regular', fontSize: 10, lineHeight: 12, color: '#666666' },
-  meta: { width: 30, height: 30, alignSelf: 'center' },
+  conversation: { width: '100%', alignItems: 'center', gap: 8 },
+  userBubble: { maxWidth: '100%', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#a30f2d', borderRadius: 16, borderBottomRightRadius: 2 },
+  userText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, color: '#fff' },
+  aiBubble: { width: '100%', maxWidth: 298, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f1f7fc', borderRadius: 16, borderTopLeftRadius: 2 },
+  aiText: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17, color: '#142033' },
+  languages: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, width: '100%' },
+  chip: { maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f5f5f5', justifyContent: 'center' },
+  englishChip: { backgroundColor: '#a30f2d' },
+  englishText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, lineHeight: 18, color: '#fff' },
+  sinhalaText: { fontFamily: 'Yaldevi_400Regular', fontSize: 14, color: '#444' },
+  tamilText: { fontFamily: 'NotoSansTamil_400Regular', fontSize: 14, color: '#444' },
   footer: { flexShrink: 0, width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   back: { width: 52, height: 52, borderRadius: 9999, backgroundColor: '#fcf3f5', alignItems: 'center', justifyContent: 'center' },
   next: { width: 56, height: 56, borderRadius: 9999, backgroundColor: '#a30f2d', alignItems: 'center', justifyContent: 'center', boxShadow: '0px 6px 16px rgba(139,26,46,0.25)' },

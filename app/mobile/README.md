@@ -15,6 +15,36 @@ clone therefore should use the shared `npm.cmd run typecheck`,
 `npm.cmd run check:expo`, preview launchers and Android export commands documented
 below; it should not expect the historical local checker commands to exist.
 
+## GA-20 page organization and recovery flows — November 5, 2026
+
+All screen components now live directly in `pages/`; reusable presentation stays
+in `components/`, while entry points, configuration and shared layout helpers
+remain at the app root. The move changes only relative module and asset paths for
+existing screens. Login retains the approved GA-55 design and disconnected normal
+mode. No GA-22 Chat Home screen, route or Login-to-Chat behavior is included.
+
+Forgot Password now offers mutually exclusive Email and Phone choices, requires a
+nonblank NIC plus the explicitly simulated checkbox, and keeps normal mode honest
+and disconnected. With both `__DEV__` and `EXPO_PUBLIC_CONNECTED_UI_DEMO=1`, Email
+opens Check Email and Phone opens Check Phone. Check Email uses the static sample
+address and no-email notice. Check Phone uses a static masked number, one accessible
+numeric input rendered as six visual slots, and no-SMS/no-verification notices.
+Resend actions remain disabled, and neither screen performs account lookup,
+delivery, authentication, token handling or onward verified navigation.
+
+Header Back, Use a different NIC and Android Back return to a cleared Forgot
+Password form; Back to log in opens a fresh Login without changing its original
+return destination. The connected launcher clears Metro's cache to avoid reusing
+a bundle created with the wrong demo flag. Standalone preview and production
+guards remain separate.
+
+Validation for this combined change: TypeScript passed; Expo reported dependencies
+up to date; relative import, asset and package-script audits found no missing
+targets. Fresh Android/Hermes exports passed with the connected-demo flag both off
+and on. Neither export contained Check Email/Check Phone demo strings or their
+exclusive mail/message assets. These automated and bundle checks do not establish
+physical Android layout, IME, font-scaling or TalkBack behavior.
+
 ## GA-55 Login Figma alignment - November 4, 2026
 
 Login is aligned to the live Figma `Display` frame 54:15 (400 x 772) and

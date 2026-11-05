@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { Screen } from './components/Screen';
-import { layout, typography } from './layout';
+import { Screen } from '../components/Screen';
+import { layout, typography } from '../layout';
 
 export const loginAssets = {
-  topRibbon: require('./assets/figma/login/top-ribbon.png'),
-  skyline: require('./assets/figma/login/skyline.png'),
-  bottomRibbon: require('./assets/figma/login/bottom-ribbon.png'),
-  logo: require('./assets/figma/login/logo.png'),
-  user: require('./assets/figma/login/user.png'),
-  lock: require('./assets/figma/login/lock.png'),
-  eye: require('./assets/figma/login/eye.png'),
+  topRibbon: require('../assets/figma/login/top-ribbon.png'),
+  skyline: require('../assets/figma/login/skyline.png'),
+  bottomRibbon: require('../assets/figma/login/bottom-ribbon.png'),
+  logo: require('../assets/figma/login/logo.png'),
+  user: require('../assets/figma/login/user.png'),
+  lock: require('../assets/figma/login/lock.png'),
+  eye: require('../assets/figma/login/eye.png'),
 };
 
 type Viewport = { width: number; height: number };
