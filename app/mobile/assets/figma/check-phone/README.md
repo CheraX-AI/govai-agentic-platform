@@ -6,7 +6,7 @@ six visual code slots and footer actions; it is not a backend specification.
 Phone border, camera island, simulated status icons and black home indicator
 are excluded. Native safe areas and existing status-bar handling are preserved.
 
-No image files were generated or modified. Reused original assets:
+No image files were generated, copied or modified. Reused original assets:
 
 | Purpose | Existing source | Adaptation |
 | --- | --- | --- |
@@ -15,12 +15,10 @@ No image files were generated or modified. Reused original assets:
 | Badge handset | assets/figma/register/phone.png | Green tintColor, 26dp |
 | Badge message | assets/figma/chat-home/message.png | Green tintColor, 16dp, composed over handset |
 
-Login and Register provenance remains in their existing asset READMEs. The
-original Chat Home `message.svg` and its unchanged PNG raster are retained only
-for this composed recovery badge; their SHA-256 values are
+Upstream provenance remains in the Login, Register and Chat Home asset READMEs.
+The original Chat Home `message.svg` and unchanged PNG raster have SHA-256 values
 `75260a55924d57c8a8b1558d83d9dbd66962295e263db1820c06e514c307a662` and
 `2b4e76833dff8c558305cddf28b5f259c3359142fcfaa1121ac17bc4e5f324c8`.
-No Chat Home screen or behavior is included by this asset reuse.
 The exact smartphone/check composite in the reference is not an available asset;
 the approved composition reuses the original handset and message shapes. The
 badge is 48dp with #edf6f1 background and #007a53 icon tint. The original opaque

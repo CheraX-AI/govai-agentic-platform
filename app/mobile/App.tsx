@@ -1,5 +1,5 @@
 import { useFonts } from 'expo-font';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { WelcomeScreen, welcomeAssets } from './pages/WelcomeScreen';
@@ -104,7 +104,13 @@ const startupAssets = [...Object.values(assets), ...Object.values(welcomeAssets)
 type OriginScreen = 'welcome' | 'meet' | 'discover' | 'ask' | 'track' | 'pay';
 
 function Startup() {
-  const [screen, setScreen] = useState<OriginScreen | 'login' | 'register' | 'forgot' | 'demo-account' | 'demo-email' | 'demo-phone'>('welcome');
+  const [screen, setScreen] = useState<OriginScreen | 'login' | 'register' | 'forgot' | 'demo-account' | 'demo-email' | 'demo-phone' | 'demo-chat'>('welcome');
+  const navigation = useRef({ screen, loginVisit: 0 });
+  if (navigation.current.screen !== screen) {
+    if (screen === 'login') navigation.current.loginVisit++;
+    navigation.current.screen = screen;
+  }
+  const loginVisit = navigation.current.loginVisit;
   const connectedDemo = __DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1';
   const [loginOrigin, setLoginOrigin] = useState<OriginScreen>('welcome');
   const [accountPreviewOpen, setAccountPreviewOpen] = useState(() =>
@@ -118,6 +124,10 @@ function Startup() {
     __DEV__ && process.env.EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW === '1' &&
     process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW !== '1' && process.env.EXPO_PUBLIC_CHECK_EMAIL_PREVIEW !== '1' &&
     process.env.EXPO_PUBLIC_RESET_PASSWORD_PREVIEW !== '1');
+  const [chatHomePreviewOpen, setChatHomePreviewOpen] = useState(() =>
+    __DEV__ && process.env.EXPO_PUBLIC_CHAT_HOME_PREVIEW === '1' && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1' &&
+    process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW !== '1' && process.env.EXPO_PUBLIC_CHECK_EMAIL_PREVIEW !== '1' &&
+    process.env.EXPO_PUBLIC_RESET_PASSWORD_PREVIEW !== '1' && process.env.EXPO_PUBLIC_PASSWORD_UPDATED_PREVIEW !== '1');
   const closePasswordUpdatedPreview = (destination: 'welcome' | 'login') => {
     setPasswordUpdatedPreviewOpen(false); setLoginOrigin('welcome'); setScreen(destination);
   };
@@ -147,6 +157,8 @@ function Startup() {
       });
       return () => subscription.remove();
     }
+    if (connectedDemo && screen === 'demo-chat') return; // Chat content owns keyboard-first Back.
+    if (__DEV__ && chatHomePreviewOpen) return; // Chat preview owns keyboard-first Back and draft clearing.
     if (screen === 'welcome') return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (Keyboard.isVisible()) { Keyboard.dismiss(); return true; }
@@ -160,7 +172,7 @@ function Startup() {
       return true;
     });
     return () => subscription.remove();
-  }, [screen, loginOrigin, connectedDemo, accountPreviewOpen, checkEmailPreviewOpen, resetPasswordPreviewOpen, passwordUpdatedPreviewOpen]);
+  }, [screen, loginOrigin, connectedDemo, accountPreviewOpen, checkEmailPreviewOpen, resetPasswordPreviewOpen, passwordUpdatedPreviewOpen, chatHomePreviewOpen]);
   const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
     Yaldevi_400Regular: require('./assets/figma/onboarding-ask/fonts/Yaldevi.ttf'),
     NotoSansTamil_400Regular: require('./assets/figma/onboarding-ask/fonts/NotoSansTamil.ttf'),
@@ -180,8 +192,7 @@ function Startup() {
       // Keep the module and its exclusive asset outside the production graph.
       const { CheckEmailPreviewScreen } = require('./pages/CheckEmailPreviewScreen') as typeof import('./pages/CheckEmailPreviewScreen');
       return <CheckEmailPreviewScreen onBack={() => exitCheckEmailPreview('forgot')}
-        onDifferentNic={() => exitCheckEmailPreview('forgot')} onLogin={() => exitCheckEmailPreview('login')}
-        onExit={() => exitCheckEmailPreview('welcome')} />;
+        onDifferentNic={() => exitCheckEmailPreview('forgot')} onLogin={() => exitCheckEmailPreview('login')} onExit={() => exitCheckEmailPreview('welcome')} />;
     }
   }
   if (__DEV__) {
@@ -199,6 +210,17 @@ function Startup() {
     }
   }
   if (__DEV__) {
+    if (ready && chatHomePreviewOpen && process.env.EXPO_PUBLIC_CHAT_HOME_PREVIEW === '1') {
+      const { ChatHomePreviewScreen } = require('./pages/ChatHomePreviewScreen') as typeof import('./pages/ChatHomePreviewScreen');
+      return <ChatHomePreviewScreen onExit={() => { setChatHomePreviewOpen(false); setScreen('welcome'); }} />;
+    }
+    if (ready && connectedDemo && screen === 'demo-chat') {
+      const { ChatHomeDemoScreen } = require('./pages/ChatHomePreviewScreen') as typeof import('./pages/ChatHomePreviewScreen');
+      return <ChatHomeDemoScreen onExit={() => {
+        if (navigation.current.screen !== 'demo-chat' || navigation.current.loginVisit !== loginVisit) return;
+        setScreen(current => current === 'demo-chat' ? 'login' : current);
+      }} />;
+    }
     if (ready && connectedDemo && screen === 'demo-account') {
       const { AccountCreatedDemoScreen } = require('./pages/AccountCreatedPreviewScreen') as typeof import('./pages/AccountCreatedPreviewScreen');
       return <AccountCreatedDemoScreen onContinue={() => setScreen(current => current === 'demo-account' ? 'login' : current)} />;
@@ -217,9 +239,11 @@ function Startup() {
     }
   }
   if (ready && screen === 'register') return <RegisterScreen onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? () => setScreen(current => current === 'register' ? 'demo-account' : current) : undefined} />;
-  if (ready && screen === 'forgot') return <ForgotPasswordScreen onLogin={() => setScreen('login')}
-    onDemoValidated={connectedDemo ? (method: 'email' | 'phone') => setScreen(current => current === 'forgot' ? (method === 'phone' ? 'demo-phone' : 'demo-email') : current) : undefined} />;
-  if (ready && screen === 'login') return <LoginScreen onBack={() => setScreen(loginOrigin)} onSignUp={() => setScreen('register')} onForgotPassword={() => setScreen('forgot')} />;
+  if (ready && screen === 'forgot') return <ForgotPasswordScreen onLogin={() => setScreen('login')} onDemoValidated={connectedDemo ? (method: 'email' | 'phone' = 'email') => setScreen(current => current === 'forgot' ? (method === 'phone' ? 'demo-phone' : 'demo-email') : current) : undefined} />;
+  if (ready && screen === 'login') return <LoginScreen onDemoValidated={connectedDemo ? () => {
+    if (navigation.current.screen !== 'login' || navigation.current.loginVisit !== loginVisit) return;
+    navigation.current.screen = 'demo-chat'; setScreen('demo-chat');
+  } : undefined} onBack={() => setScreen(loginOrigin)} onSignUp={() => setScreen('register')} onForgotPassword={() => setScreen('forgot')} />;
   if (ready && screen === 'pay') return <OnboardingPayScreen onLogin={() => openLogin('pay')} onBack={() => setScreen('track')} />;
   if (ready && screen === 'track') return <OnboardingTrackScreen onLogin={() => openLogin('track')} onBack={() => setScreen('ask')} onNext={() => setScreen('pay')} />;
   if (ready && screen === 'ask') return <OnboardingAskScreen onLogin={() => openLogin('ask')} onBack={() => setScreen('discover')} onNext={() => setScreen('track')} />;
