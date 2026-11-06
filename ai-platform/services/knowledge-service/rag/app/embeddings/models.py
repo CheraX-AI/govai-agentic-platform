@@ -1,5 +1,7 @@
 """Data models for the embedder, chunks, embeddings, results, and vector-store output."""
 
+from pathlib import Path
+
 from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,8 +44,8 @@ class EmbeddingResult(BaseModel):
     auth_failed: bool = False
 
 
-class DocumentEmbeddings(BaseModel):
-    """The embedded chunks of one document, in chunk order, ready for the vector store."""
+class EmbeddingFile(BaseModel):
+    """Embeddings of one document, as saved to <document_id>.embeddings.json."""
 
     document_id: str
     model: str
@@ -51,23 +53,12 @@ class DocumentEmbeddings(BaseModel):
     records: list[EmbeddedChunk]
 
 
-class DocumentEmbeddingResult(BaseModel):
-    """What happened when one document was embedded.
-
-    embeddings is None when no chunk could be embedded.
-    """
-
+class EmbeddingFileResult(BaseModel):
     document_id: str
-    embeddings: DocumentEmbeddings | None = None
+    embedded_count: int
+    reused_count: int
     failed: list[FailedBatch] = []
-
-    @property
-    def embedded_count(self):
-
-        # Chunks that have a vector
-        count = len(self.embeddings.records) if self.embeddings is not None else 0
-
-        return count
+    embeddings_path: Path | None = None
 
     @property
     def failed_chunk_ids(self):

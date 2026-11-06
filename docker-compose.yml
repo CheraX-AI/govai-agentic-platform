@@ -140,57 +140,6 @@ services:
     networks:
       - govai-network
 
-  # ---------------------------------------------------------------------------
-  # Web app on https://localhost:5173 (the origin auth-service accepts).
-  # The browser calls the auth API on the host (https://localhost:5001).
-  # Only one of web / web-prod / `npm run dev` can use port 5173 at a time.
-  # ---------------------------------------------------------------------------
-
-  # Development: Vite dev server with live reload (starts with `docker compose up -d`)
-  web:
-    build:
-      context: ./app/web
-      target: dev
-    image: govai-web-dev
-    container_name: govai-web
-    restart: unless-stopped
-    environment:
-      VITE_WATCH_POLLING: "true"
-    volumes:
-      # Source for live reload (read-only); dependencies stay inside the image
-      - ./app/web/src:/app/web/src:ro
-      - ./app/web/public:/app/web/public:ro
-      - ./app/web/index.html:/app/web/index.html:ro
-      # vite.config.ts reads ../../infrastructure/keycloak/tls from /app/web
-      - ./infrastructure/keycloak/tls/api-cert.pem:/infrastructure/keycloak/tls/api-cert.pem:ro
-      - ./infrastructure/keycloak/tls/api-key.pem:/infrastructure/keycloak/tls/api-key.pem:ro
-    ports:
-      - "127.0.0.1:5173:5173"
-    networks:
-      - govai-network
-
-  # Production build served by nginx. Start with:
-  #   docker compose stop web
-  #   docker compose --profile prod up -d --build web-prod
-  web-prod:
-    build:
-      context: ./app/web
-      target: prod
-      args:
-        VITE_AUTH_API_URL: ${VITE_AUTH_API_URL:-https://localhost:5001}
-    image: govai-web-prod
-    container_name: govai-web-prod
-    restart: unless-stopped
-    profiles:
-      - prod
-    volumes:
-      - ./infrastructure/keycloak/tls/api-cert.pem:/etc/nginx/tls/api-cert.pem:ro
-      - ./infrastructure/keycloak/tls/api-key.pem:/etc/nginx/tls/api-key.pem:ro
-    ports:
-      - "127.0.0.1:5173:8443"
-    networks:
-      - govai-network
-
 volumes:
   postgres_data:
   redis_data:

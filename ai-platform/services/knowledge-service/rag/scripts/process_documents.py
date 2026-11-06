@@ -5,12 +5,8 @@ Upload the PDFs first with scripts/upload_documents.py. Then run (from the rag f
     python scripts/process_documents.py --department-id IRD --service-id TIN_REGISTRATION \
         --document-type service_guideline
 
-Each PDF is downloaded to a temporary folder (deleted afterwards), extracted,
-chunked, and embedded in memory, and stored in ChromaDB; no files are kept.
-Only documents whose chunks were all embedded are stored, so a partly embedded
-document never replaces a complete older version.
-
---dry-run only extracts and chunks, and prints the counts (no NVIDIA, no ChromaDB).
+Only documents whose chunks were all embedded are stored in ChromaDB, so a
+partly embedded document never replaces a complete older version.
 
 Exit codes: 0 everything succeeded, 1 some PDFs, chunks, or vector storage failed,
 2 invalid input, settings, storage, or vector database.
@@ -34,6 +30,7 @@ from app.embeddings.embedding_service import (
     InvalidEmbeddingError,
     create_embedder,
     format_validation_error,
+    load_embeddings,
     load_settings,
 )
 from app.processing.pdf_extractor import DocumentSource, DocumentType, PublicationStatus
@@ -49,6 +46,8 @@ EXIT_OK = 0
 EXIT_FAILURES = 1
 EXIT_INVALID_INPUT = 2
 
+# Generated files stay local until the embeddings are stored in ChromaDB (GA-75)
+DEFAULT_OUTPUT_DIR = RAG_ROOT / "data" / "output"
 DEFAULT_ENV_FILE = RAG_ROOT / ".env"
 
 
@@ -123,7 +122,7 @@ def main(argv=None):
             items.append((pdf_path, document_source))
 
         # Run extraction, chunking, and embedding
-        report = process_documents(items, embedder=embedder)
+        report = process_documents(items, args.output_dir, embedder=embedder)
 
     report.failed.extend(download_failures)
 
@@ -159,16 +158,22 @@ def parse_arguments(argv):
         choices=[status.value for status in PublicationStatus],
         help="Only published documents can be found by search; drafts are stored but hidden",
     )
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Folder for generated files")
     parser.add_argument("--env-file", default=DEFAULT_ENV_FILE, help="File with the embedding, storage, and ChromaDB settings")
-    parser.add_argument("--dry-run", action="store_true", help="Only extract and chunk; no NVIDIA, no ChromaDB")
+    parser.add_argument("--skip-embeddings", action="store_true", help="Only extract and chunk")
+    parser.add_argument(
+        "--skip-vector-store",
+        action="store_true",
+        help="Embed, but do not store the embeddings in ChromaDB",
+    )
 
     return parser.parse_args(argv)
 
 
 def load_embedder(args):
-    """Create the NVIDIA embedder, or return None for a dry run."""
+    """Create the NVIDIA embedder, or return None when embeddings are skipped."""
 
-    if args.dry_run:
+    if args.skip_embeddings:
         return None
 
     # Raises EmbeddingConfigError when the settings are missing or invalid
@@ -180,7 +185,7 @@ def load_embedder(args):
 def load_vector_store(args, embedder):
     """Connect to ChromaDB, or return None when there will be no embeddings to store."""
 
-    if embedder is None:
+    if embedder is None or args.skip_vector_store:
         return None
 
     # Raises a VectorStoreError when the settings are invalid or ChromaDB is not reachable
@@ -196,7 +201,7 @@ def store_documents(report, vector_store):
     for document in report.processed:
 
         # Nothing was embedded, e.g. a scanned PDF or a rejected key
-        if document.embeddings is None:
+        if document.embeddings_path is None:
             continue
 
         # A partly embedded document must not replace a complete older version
@@ -204,8 +209,9 @@ def store_documents(report, vector_store):
             continue
 
         try:
-            # Store the document's embeddings
-            store_results.append(vector_store.store_document(document.embeddings))
+            # Read the saved embeddings and store them
+            embedding_file = load_embeddings(document.embeddings_path)
+            store_results.append(vector_store.store_document(embedding_file))
 
         except (InvalidEmbeddingError, VectorStoreError) as error:
             report.failed.append(
@@ -228,10 +234,12 @@ def print_summary(report, embedder, vector_store=None, store_results=()):
 
     if embedder is not None:
         embedded = 0
+        reused = 0
         for document in report.processed:
             embedded += document.embedded_chunk_count
+            reused += document.reused_chunk_count
         print(f"Model:           nvidia / {embedder.settings.model}")
-        print(f"Chunks embedded: {embedded}")
+        print(f"Chunks embedded: {embedded} (reused {reused})")
         print(f"Chunks failed:   {report.failed_chunk_count}")
 
     if vector_store is not None:
@@ -262,7 +270,8 @@ def print_summary(report, embedder, vector_store=None, store_results=()):
                 print(f"  NOT STORED {document.source_file}: run again to embed the rest, then it is stored")
 
     if report.embedding_stopped:
-        print("  Embedding stopped: NVIDIA rejected the API key. Fix it and run again.")
+        print("  Embedding stopped: NVIDIA rejected the API key. Fix it and run again;")
+        print("  chunks that were already embedded are reused.")
 
 
 if __name__ == "__main__":

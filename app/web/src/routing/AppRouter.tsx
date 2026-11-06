@@ -1,115 +1,54 @@
 import LoginPage from '../pages/LoginPage'
 import { useEffect, useState } from 'react'
-import ApplicationRoutes from './ApplicationRoutes'
+import HomePage from '../pages/HomePage'
+import RecentPage from '../pages/RecentPage'
+import { ApplicationPageLayout } from '../components/layout/ApplicationPageLayout'
 import RegistrationPage from '../pages/RegistrationPage'
 import ForgotPasswordPage from '../pages/ForgotPasswordPage'
 import ResetEmailConfirmationPage from '../pages/ResetEmailConfirmationPage'
+import VerificationCodePage from '../pages/VerificationCodePage'
 import ResetPasswordPage from '../pages/ResetPasswordPage'
 import RecoveryRequiredPage from '../pages/RecoveryRequiredPage'
 import { useAuth } from '../auth/AuthContext'
+import { ProtectedRoute } from '../auth/ProtectedRoute'
 import UnavailablePage from '../pages/UnavailablePage'
-import { handleLinkClick, navigate, readRoute, pageTitle, upgradeHashLink } from './routes'
-import type { RecoveryReceipt } from '../services/recoveryApi'
-import { takeResetLink } from '../services/recoveryApi'
-
-upgradeHashLink()
-let initialResetLink = takeResetLink()
+import { navigate, readRoute, pageTitle } from './routes'
 
 export default function AppRouter() {
-  const [location_, setLocation] = useState({
-    pathname: location.pathname,
-    search: location.search,
-  })
+  const [hash, setHash] = useState(location.hash)
   const auth = useAuth()
-  const route = readRoute(location_.pathname, location_.search)
-  const [receipt, setReceipt] = useState<RecoveryReceipt | null>(null)
-  const [resetToken, setResetToken] = useState<string | null>(initialResetLink?.token ?? null)
-  const [resetComplete, setResetComplete] = useState(false)
-  const [resetVersion, setResetVersion] = useState(0)
-
-  useEffect(() => { initialResetLink = null }, [])
-  const logout = async () => {
-    await auth.logout()
-    navigate('/login', true)
-  }
-
+  const route = readRoute(hash)
+  const [recovery, setRecovery] = useState<'idle' | 'phone' | 'verified' | 'complete'>('idle')
+  const startDemoSession = import.meta.env.DEV ? async () => {
+    if (await auth.startMockSession()) navigate(route.returnTo, true)
+  } : undefined
+  const logout = async () => { await auth.logout(); navigate('#/login', true) }
   useEffect(() => {
-    const onLocationChange = () => {
-
-      // A reset email opened in this tab may change only the fragment, not the path.
-
-      const incoming = takeResetLink()
-      if (incoming) {
-        setResetToken(incoming.token)
-        setResetComplete(false)
-        setResetVersion(value => value + 1)
-      }
-      const next = { pathname: location.pathname, search: location.search }
-      setLocation(next)
-      const path = readRoute(next.pathname, next.search).path
-      if (path !== '/check-email') setReceipt(null)
-      if (path !== '/reset-password') {
-        setResetToken(null)
-        setResetComplete(false)
-      }
+    const onHashChange = () => {
+      const next = location.hash
+      setHash(next)
+      if (!['#/verify-code', '#/reset-password'].includes(readRoute(next).path)) setRecovery('idle')
     }
-    addEventListener('popstate', onLocationChange)
-    addEventListener('hashchange', onLocationChange)
-    document.addEventListener('click', handleLinkClick)
-    return () => {
-      removeEventListener('popstate', onLocationChange)
-      removeEventListener('hashchange', onLocationChange)
-      document.removeEventListener('click', handleLinkClick)
-    }
+    addEventListener('hashchange', onHashChange)
+    return () => removeEventListener('hashchange', onHashChange)
   }, [])
-
   useEffect(() => {
-
-    // The protected destination, not the alias itself, decides whether login is required.
-
-    if (route.path === '/home' || route.path === '/recent') {
-      navigate(route.path === '/home' ? '/app/home' : '/app/recent', true)
-    }
+    if (import.meta.env.DEV && (route.path === '#/home' || route.path === '#/recent')) navigate(route.path === '#/home' ? '#/preview/home' : '#/preview/recent', true)
   }, [route.path])
   useEffect(() => {
     document.title = `GovAI | ${pageTitle(route.path)}`
   }, [route.path])
-
-  // The site root opens login; recovery progression never creates a session.
-
-  if (route.path === '/login') {
-    return <LoginPage onSuccess={() => navigate(route.returnTo, true)} expired={route.expired} />
+  // Empty URL preserves the original login preview and its regression harness.
+  if (route.path === '#/login') return <LoginPage onDemoSuccess={startDemoSession} expired={route.expired} />
+  if (route.path === '#/verify-code') return recovery === 'phone' ? <VerificationCodePage onVerified={() => { setRecovery('verified'); location.hash = '#/reset-password'; setHash('#/reset-password') }} /> : <RecoveryRequiredPage />
+  if (route.path === '#/reset-password') return recovery === 'verified' || recovery === 'complete' ? <ResetPasswordPage onComplete={() => setRecovery('complete')} /> : <RecoveryRequiredPage />
+  if (route.path === '#/register') return <RegistrationPage />
+  if (route.path === '#/forgot-password') return <ForgotPasswordPage onPhoneRecovery={() => { setRecovery('phone'); location.hash = '#/verify-code'; setHash('#/verify-code') }} />
+  if (route.path === '#/check-email') return <ResetEmailConfirmationPage />
+  if (route.path === '#/app/home' || route.path === '#/app/recent') return <ProtectedRoute destination={route.path}><ApplicationPageLayout page={route.path === '#/app/recent' ? 'recent' : 'home'} protectedDemo onDemoLogout={() => void logout()}>{route.path === '#/app/recent' ? <RecentPage protectedDemo /> : <HomePage />}</ApplicationPageLayout></ProtectedRoute>
+  if (['#/preview/home', '#/preview/recent', '#/home', '#/recent'].includes(route.path)) {
+    if (!import.meta.env.DEV) return <UnavailablePage developmentOnly />
+    return <ApplicationPageLayout page={route.path.endsWith('/recent') ? 'recent' : 'home'}>{route.path.endsWith('/recent') ? <RecentPage /> : <HomePage />}</ApplicationPageLayout>
   }
-  if (route.path === '/verify-code') return <RecoveryRequiredPage />
-  if (route.path === '/reset-password') {
-    return resetToken || resetComplete ? (
-      <ResetPasswordPage
-        key={resetVersion}
-        token={resetToken ?? ''}
-        onComplete={() => {
-          setResetToken(null)
-          setResetComplete(true)
-        }}
-      />
-    ) : <RecoveryRequiredPage />
-  }
-  if (route.path === '/register') return <RegistrationPage />
-  if (route.path === '/forgot-password') {
-    return <ForgotPasswordPage onReceived={value => {
-      setReceipt(value)
-      navigate('/check-email')
-    }} />
-  }
-  if (route.path === '/check-email') {
-    return <ResetEmailConfirmationPage receipt={receipt} onReceived={setReceipt} />
-  }
-  if (
-    route.path === '/app/home' ||
-    route.path === '/app/recent' ||
-    route.path === '/app/chat'
-  ) {
-    return <ApplicationRoutes path={route.path} onLogout={() => void logout()} />
-  }
-  if (route.path === '/home' || route.path === '/recent') return null
   return <UnavailablePage />
 }

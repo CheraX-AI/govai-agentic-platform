@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from app.embeddings.models import Chunk, DocumentEmbeddingResult, DocumentEmbeddings, Embedder, FailedBatch
-from tests.helpers import DIMENSION, TEST_MODEL, make_document_embeddings, make_settings
+from app.embeddings.models import Chunk, Embedder, EmbeddingFile, EmbeddingFileResult, FailedBatch
+from tests.helpers import DIMENSION, TEST_MODEL, make_settings
 
 
 # Chunks
@@ -20,47 +20,47 @@ def test_chunk_rejects_empty_fields(field):
         Chunk(**values)
 
 
-# Document embeddings
+# Embeddings files
 
-def test_document_embeddings_reject_zero_dimension():
+def test_embedding_file_rejects_zero_dimension():
 
     with pytest.raises(ValidationError):
-        DocumentEmbeddings(document_id="doc001", model=TEST_MODEL, dimension=0, records=[])
+        EmbeddingFile(document_id="doc001", model=TEST_MODEL, dimension=0, records=[])
 
 
-def test_document_embeddings_ignore_unknown_fields():
+def test_embedding_file_ignores_the_old_provider_field():
 
-    # An old "provider" field is ignored
-    document_embeddings = DocumentEmbeddings.model_validate(
+    # Files saved before the NVIDIA-only change have a "provider" field
+    embedding_file = EmbeddingFile.model_validate(
         {"document_id": "doc001", "provider": "nvidia", "model": TEST_MODEL, "dimension": DIMENSION, "records": []}
     )
 
-    assert document_embeddings.model == TEST_MODEL
+    assert embedding_file.model == TEST_MODEL
 
 
 # Results
 
-def test_embedded_count_is_the_number_of_records():
+def test_failed_chunk_ids_combines_every_failed_batch():
 
-    records = make_document_embeddings(3).records
-    result = DocumentEmbeddingResult(
+    # The IDs of all failed batches are listed in order
+    result = EmbeddingFileResult(
         document_id="doc001",
-        embeddings=DocumentEmbeddings(document_id="doc001", model=TEST_MODEL, dimension=DIMENSION, records=records),
+        embedded_count=1,
+        reused_count=0,
+        failed=[
+            FailedBatch(chunk_ids=["doc001:1", "doc001:2"], error_type="Exception", message="[400] Bad Request"),
+            FailedBatch(chunk_ids=["doc001:5"], error_type="Exception", message="[400] Bad Request"),
+        ],
     )
 
-    assert result.embedded_count == 3
+    assert result.failed_chunk_ids == ["doc001:1", "doc001:2", "doc001:5"]
 
 
-def test_embedded_count_is_zero_without_embeddings():
+def test_failed_chunk_ids_is_empty_without_failures():
 
-    # Every chunk failed: there are no embeddings, only the failed batches
-    result = DocumentEmbeddingResult(
-        document_id="doc001",
-        failed=[FailedBatch(chunk_ids=["doc001:0"], error_type="Exception", message="[400] Bad Request")],
-    )
+    result = EmbeddingFileResult(document_id="doc001", embedded_count=3, reused_count=0)
 
-    assert result.embeddings is None
-    assert result.embedded_count == 0
+    assert result.failed_chunk_ids == []
 
 
 # Embedder

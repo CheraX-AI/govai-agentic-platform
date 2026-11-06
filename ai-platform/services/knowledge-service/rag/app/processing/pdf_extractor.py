@@ -195,6 +195,24 @@ def to_langchain_documents(document):
     return langchain_documents
 
 
+def save_extracted_document(document, output_dir):
+
+    # Create output directory
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create JSON file path
+    output_path = output_dir / f"{document.document_id}.json"
+
+    # Save extracted document as JSON
+    output_path.write_text(
+        document.model_dump_json(indent=2),
+        encoding="utf-8"
+    )
+
+    return output_path
+
+
 def normalize_page_text(text):
 
     # Use one consistent Unicode form

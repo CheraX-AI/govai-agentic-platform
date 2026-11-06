@@ -3,23 +3,24 @@
 import numpy as np
 import pytest
 
-from app.embeddings.exceptions import InvalidChunkError, InvalidEmbeddingError
+from app.embeddings.exceptions import ChunkFileError, InvalidEmbeddingError
 from app.embeddings.models import Chunk
 from app.embeddings.validators import (
     is_number,
     validate_chunks,
+    validate_embedding_file,
     validate_vectors,
 )
-from tests.helpers import DIMENSION, chunk_ids, make_chunk_records
+from tests.helpers import DIMENSION, chunk_ids, make_chunk_records, make_embedding_file
 
-DOCUMENT_NAME = "tin_guide.pdf"
+FILE_NAME = "doc001.chunks.json"
 
 
 # Chunks
 
 def test_valid_chunks_are_returned_in_order():
 
-    chunks = validate_chunks(make_chunk_records(3), DOCUMENT_NAME)
+    chunks = validate_chunks(make_chunk_records(3), FILE_NAME)
 
     assert chunk_ids(chunks) == ["doc001:0", "doc001:1", "doc001:2"]
     assert isinstance(chunks[0], Chunk)
@@ -78,10 +79,10 @@ def invalid_chunk_data():
         return make_chunk_records(1, "doc001") + make_chunk_records(1, "doc002")
 
     return [
-        ({"chunk_id": "doc001:0"}, "must be a list"),
+        ({"chunk_id": "doc001:0"}, "must contain a list of chunks"),
         ([], "has no chunks"),
-        (missing_chunk_id(), "Chunk 0 of tin_guide.pdf is invalid"),
-        (empty_text(), "Chunk 1 of tin_guide.pdf is invalid"),
+        (missing_chunk_id(), "Chunk 0 in doc001.chunks.json is invalid"),
+        (empty_text(), "Chunk 1 in doc001.chunks.json is invalid"),
         (whitespace_text(), "empty text"),
         (duplicate_id(), "Duplicate chunk ID"),
         (wrong_document(), "does not match its document ID"),
@@ -97,8 +98,8 @@ def invalid_chunk_data():
 def test_invalid_chunks_are_rejected(data, expected_message):
 
     # Bad chunk data is rejected with a message that names the problem
-    with pytest.raises(InvalidChunkError, match=expected_message):
-        validate_chunks(data, DOCUMENT_NAME)
+    with pytest.raises(ChunkFileError, match=expected_message):
+        validate_chunks(data, FILE_NAME)
 
 
 # Vectors
@@ -166,3 +167,19 @@ def test_values_numpy_would_convert_are_rejected(bad_value):
     # np.array would turn True into 1.0 and "0.1" into 0.1, so these are checked first
     with pytest.raises(InvalidEmbeddingError, match="not a number"):
         validate_vectors([[0.1, bad_value, 0.3]], 1, None)
+
+
+# Embeddings files
+
+def test_embedding_file_with_matching_dimensions_passes():
+    validate_embedding_file(make_embedding_file(3), "doc001.embeddings.json")
+
+
+def test_embedding_file_with_a_wrong_dimension_is_rejected():
+
+    # One record whose vector does not match the recorded dimension
+    embedding_file = make_embedding_file(3)
+    embedding_file.records[1].embedding = [0.1, 0.2]
+
+    with pytest.raises(InvalidEmbeddingError, match="doc001:1 in doc001.embeddings.json has the wrong dimension"):
+        validate_embedding_file(embedding_file, "doc001.embeddings.json")

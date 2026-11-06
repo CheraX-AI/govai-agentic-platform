@@ -1,3 +1,3 @@
-export default function UnavailablePage() {
-  return <main className="unknown-preview"><h1>Page not found</h1><p>This page does not exist.</p><a href="/login">Back to Login</a></main>
+export default function UnavailablePage({ developmentOnly = false }: { developmentOnly?: boolean }) {
+  return <main className="unknown-preview"><h1>{developmentOnly ? 'Development preview unavailable' : 'Preview unavailable'}</h1><p>{developmentOnly ? 'Static development previews are disabled in production.' : 'This destination is not implemented.'}</p><a href="#/login">Back to Login</a></main>
 }

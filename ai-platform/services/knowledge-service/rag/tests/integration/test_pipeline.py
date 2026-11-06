@@ -1,12 +1,14 @@
-"""Integration tests: real PDF files through extraction, chunking, and embedding, in memory."""
+"""Integration tests: real PDF files through extraction, chunking, and saving."""
 
 import io
+import json
 
 from pypdf import PdfWriter
 
+from app.embeddings import load_embeddings
 from app.processing.pdf_extractor import DocumentSource, DocumentType
 from app.processing.pipeline import process_document, process_documents
-from tests.helpers import TOO_LONG_TEXT, make_embedder, make_fake_embedder, make_invalid_key_embedder
+from tests.helpers import TOO_LONG_TEXT, make_embedder, make_invalid_key_embedder
 
 
 SERVICE_SOURCE = DocumentSource(
@@ -99,36 +101,54 @@ def write_blank_pdf(pdf_path, password=None):
     return pdf_path
 
 
+def read_json(path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 # Tests
 
-def test_service_guideline_is_extracted_chunked_and_embedded(tmp_path):
+def test_service_guideline_is_extracted_and_chunked(tmp_path):
 
-    # Process a two-page service guideline with a fake embedder (no NVIDIA call)
+    # Process a two-page service guideline
     pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES, PAGE_TWO_LINES])
 
-    result = process_document(pdf_path, SERVICE_SOURCE, chunk_size=300, chunk_overlap=50, embedder=make_fake_embedder())
+    result = process_document(
+        pdf_path,
+        SERVICE_SOURCE,
+        tmp_path / "output",
+        chunk_size=300,
+        chunk_overlap=50
+    )
 
     assert result.source_file == "tin_guide.pdf"
     assert result.total_pages == 2
     assert result.needs_ocr is False
     assert result.chunk_count > 2
-    assert result.embedded_chunk_count == result.chunk_count
 
-    # Every chunk keeps the metadata, points to the right page, and is in chunk order
-    records = result.embeddings.records
+    # Each page is saved separately with the document's ownership metadata
+    extracted = read_json(result.extracted_path)
 
-    assert len(records) == result.chunk_count
-    for index, record in enumerate(records):
-        assert record.chunk_id == f"{result.document_id}:{index}"
-        assert record.metadata["department_id"] == "IRD"
-        assert record.metadata["service_id"] == "TIN_REGISTRATION"
-        assert record.metadata["document_type"] == "service_guideline"
-        assert len(record.text) <= 300
+    assert result.extracted_path.name == f"{result.document_id}.json"
+    assert extracted["source"]["department_id"] == "IRD"
+    assert extracted["source"]["service_id"] == "TIN_REGISTRATION"
+    assert [page["page_number"] for page in extracted["pages"]] == [1, 2]
+    assert "TIN registration is required" in extracted["pages"][0]["text"]
+    assert "five working days" in extracted["pages"][1]["text"]
 
-    assert records[0].metadata["page_number"] == 1
-    assert records[-1].metadata["page_number"] == 2
-    assert "TIN registration is required" in records[0].text
-    assert "five working days" in records[-1].text
+    # Every chunk keeps the metadata and points to the right page
+    chunks = read_json(result.chunks_path)
+
+    assert len(chunks) == result.chunk_count
+    for index, chunk in enumerate(chunks):
+        assert chunk["chunk_id"] == f"{result.document_id}:{index}"
+        assert chunk["metadata"]["department_id"] == "IRD"
+        assert chunk["metadata"]["service_id"] == "TIN_REGISTRATION"
+        assert chunk["metadata"]["document_type"] == "service_guideline"
+        assert len(chunk["text"]) <= 300
+
+    assert chunks[0]["metadata"]["page_number"] == 1
+    assert chunks[-1]["metadata"]["page_number"] == 2
+    assert "five working days" in chunks[-1]["text"]
 
 
 def test_department_guideline_has_no_service_id(tmp_path):
@@ -136,59 +156,40 @@ def test_department_guideline_has_no_service_id(tmp_path):
     # Department guidelines are not tied to a service
     pdf_path = write_text_pdf(tmp_path / "ird_policy.pdf", [PAGE_TWO_LINES])
 
-    result = process_document(pdf_path, DEPARTMENT_SOURCE, embedder=make_fake_embedder())
+    result = process_document(pdf_path, DEPARTMENT_SOURCE, tmp_path / "output")
 
-    metadata = result.embeddings.records[0].metadata
-    assert metadata["document_type"] == "department_guideline"
-    assert "service_id" not in metadata
+    chunks = read_json(result.chunks_path)
 
-
-def test_nothing_is_written_to_disk(tmp_path):
-
-    # The pipeline works in memory: the folder holds only the PDF afterwards
-    pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES])
-
-    process_document(pdf_path, SERVICE_SOURCE, embedder=make_fake_embedder())
-
-    assert [path.name for path in tmp_path.iterdir()] == ["tin_guide.pdf"]
+    assert chunks[0]["metadata"]["document_type"] == "department_guideline"
+    assert "service_id" not in chunks[0]["metadata"]
 
 
 def test_scanned_pdf_is_flagged_and_not_chunked(tmp_path):
 
-    # A PDF without text produces no chunks and nothing to embed
+    # A PDF without text is saved for review but produces no chunks
     pdf_path = write_blank_pdf(tmp_path / "scanned.pdf")
 
-    result = process_document(pdf_path, DEPARTMENT_SOURCE, embedder=make_fake_embedder())
+    result = process_document(pdf_path, DEPARTMENT_SOURCE, tmp_path / "output")
 
     assert result.needs_ocr is True
     assert result.chunk_count == 0
-    assert result.embeddings is None
+    assert result.chunks_path is None
+    assert result.extracted_path.exists()
+    assert not (tmp_path / "output" / "chunks").exists()
 
 
-def test_reprocessing_gives_the_same_ids(tmp_path):
+def test_reprocessing_overwrites_instead_of_duplicating(tmp_path):
 
-    # The same PDF always gets the same document and chunk IDs, so ChromaDB updates instead of duplicating
+    # Processing the same PDF twice gives the same ID and the same files
     pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES])
+    output_dir = tmp_path / "output"
 
-    first = process_document(pdf_path, SERVICE_SOURCE, embedder=make_fake_embedder())
-    second = process_document(pdf_path, SERVICE_SOURCE, embedder=make_fake_embedder())
+    first = process_document(pdf_path, SERVICE_SOURCE, output_dir)
+    second = process_document(pdf_path, SERVICE_SOURCE, output_dir)
 
-    first_ids = [record.chunk_id for record in first.embeddings.records]
-    second_ids = [record.chunk_id for record in second.embeddings.records]
     assert first.document_id == second.document_id
-    assert first_ids == second_ids
-
-
-def test_dry_run_chunks_without_embedding(tmp_path):
-
-    # Without an embedder the PDF is only extracted and chunked
-    pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES])
-
-    result = process_document(pdf_path, SERVICE_SOURCE)
-
-    assert result.chunk_count > 0
-    assert result.embeddings is None
-    assert result.embedded_chunk_count == 0
+    assert len(list((output_dir / "extracted").iterdir())) == 1
+    assert len(list((output_dir / "chunks").iterdir())) == 1
 
 
 def test_batch_continues_after_failed_documents(tmp_path):
@@ -206,7 +207,8 @@ def test_batch_continues_after_failed_documents(tmp_path):
             (not_a_pdf, SERVICE_SOURCE),
             (valid_pdf, SERVICE_SOURCE),
             (locked_pdf, DEPARTMENT_SOURCE),
-        ]
+        ],
+        tmp_path / "output"
     )
 
     # The valid PDF is processed even though it comes after a failure
@@ -231,6 +233,7 @@ def test_pipeline_embeds_every_chunk(tmp_path):
     result = process_document(
         pdf_path,
         SERVICE_SOURCE,
+        tmp_path / "output",
         chunk_size=300,
         chunk_overlap=50,
         embedder=make_embedder(batch_size=3),
@@ -238,11 +241,29 @@ def test_pipeline_embeds_every_chunk(tmp_path):
 
     assert result.embedded_chunk_count == result.chunk_count
     assert result.failed_chunk_ids == []
+    assert result.embeddings_path == tmp_path / "output" / "embeddings" / f"{result.document_id}.embeddings.json"
 
-    # Every vector has the document's dimension
-    embeddings = result.embeddings
-    for record in embeddings.records:
+    # Each embedding matches a saved chunk and keeps its metadata
+    chunks = read_json(result.chunks_path)
+    embeddings = load_embeddings(result.embeddings_path)
+
+    assert [record.chunk_id for record in embeddings.records] == [chunk["chunk_id"] for chunk in chunks]
+    for record, chunk in zip(embeddings.records, chunks):
+        assert record.text == chunk["text"]
+        assert record.metadata == chunk["metadata"]
         assert len(record.embedding) == embeddings.dimension
+
+
+def test_pipeline_without_embedder_writes_no_embeddings(tmp_path):
+
+    # Embedding is optional; extraction and chunking work on their own
+    pdf_path = write_text_pdf(tmp_path / "tin_guide.pdf", [PAGE_ONE_LINES])
+
+    result = process_document(pdf_path, SERVICE_SOURCE, tmp_path / "output")
+
+    assert result.chunks_path is not None
+    assert result.embeddings_path is None
+    assert not (tmp_path / "output" / "embeddings").exists()
 
 
 def test_scanned_pdf_is_not_sent_for_embedding(tmp_path):
@@ -250,10 +271,14 @@ def test_scanned_pdf_is_not_sent_for_embedding(tmp_path):
     # A PDF without text has no chunks; with a key NVIDIA rejects, any call would fail
     pdf_path = write_blank_pdf(tmp_path / "scanned.pdf")
 
-    report = process_documents([(pdf_path, DEPARTMENT_SOURCE)], embedder=make_invalid_key_embedder())
+    report = process_documents(
+        [(pdf_path, DEPARTMENT_SOURCE)],
+        tmp_path / "output",
+        embedder=make_invalid_key_embedder(),
+    )
 
     assert report.failed == []
-    assert report.processed[0].embeddings is None
+    assert report.processed[0].embeddings_path is None
 
 
 def test_rejected_chunks_are_reported_per_document(tmp_path):
@@ -263,6 +288,7 @@ def test_rejected_chunks_are_reported_per_document(tmp_path):
 
     report = process_documents(
         [(pdf_path, SERVICE_SOURCE)],
+        tmp_path / "output",
         chunk_size=100_000,
         chunk_overlap=0,
         embedder=make_embedder(),
@@ -272,8 +298,8 @@ def test_rejected_chunks_are_reported_per_document(tmp_path):
     document = report.processed[0]
 
     assert report.failed == []
+    assert document.chunks_path.exists()
     assert document.chunk_count == 1
-    assert document.embeddings is None
     assert len(document.failed_chunk_ids) == 1
     assert report.failed_chunk_count == 1
 
@@ -286,6 +312,7 @@ def test_rejected_key_stops_embedding_but_keeps_chunking(tmp_path):
 
     report = process_documents(
         [(first_pdf, SERVICE_SOURCE), (second_pdf, SERVICE_SOURCE)],
+        tmp_path / "output",
         embedder=make_invalid_key_embedder(),
     )
 
@@ -293,5 +320,5 @@ def test_rejected_key_stops_embedding_but_keeps_chunking(tmp_path):
     assert report.embedding_stopped is True
     assert [failure.error_type for failure in report.failed] == ["EmbeddingAuthError"]
     assert [document.source_file for document in report.processed] == ["tin_faq.pdf"]
-    assert report.processed[0].chunk_count > 0
-    assert report.processed[0].embeddings is None
+    assert report.processed[0].chunks_path.exists()
+    assert report.processed[0].embeddings_path is None

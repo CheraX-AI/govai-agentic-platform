@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,24 +16,16 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 )
 
 func TestRefreshLive(t *testing.T) {
 	if os.Getenv("GA50_REFRESH_LIVE") != "1" {
 		t.Skip("refresh live opt-in disabled")
 	}
-
 	state := os.Getenv("GA50_REFRESH_STATE_DIR")
 	if state == "" {
 		t.Fatal("REFRESH_STATE BLOCKED")
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	if err := guardedCombined(func() error {
@@ -40,37 +37,17 @@ func TestRefreshLive(t *testing.T) {
 	}
 }
 
-func (l *lab) refreshScenario(
-	ctx context.Context,
-	caFile string,
-	store *postgres.Store,
-	issuer, clientID, secret, email, password string,
-) error {
+func (l *lab) refreshScenario(ctx context.Context, caFile string, store *postgres.Store, issuer, clientID, secret, email, password string) error {
 	p := "/admin/realms/" + l.realm
 	// Only the disposable test realm is changed. Existing GovAI is untouched.
 	l.must(ctx, "PUT", p, object{"revokeRefreshToken": true, "refreshTokenMaxReuse": 0}, 204)
 	client := decode[object](l.must(ctx, "GET", p+"/clients/"+clientID, nil, 200))
 	client["attributes"] = object{"use.refresh.tokens": "true", "access.token.lifespan": "300"}
 	l.must(ctx, "PUT", p+"/clients/"+clientID, client, 204)
-	h, sessions, closeLogin, err := application.LoginWithSessions(
-		config.Login{
-			Enabled: true,
-			Provider: login.KeycloakConfig{
-				Issuer:        issuer,
-				ClientID:      "lab-login-mobile",
-				ClientSecret:  secret,
-				Audience:      "govai-api",
-				EnableRefresh: true,
-			},
-			RateKey: freshKey(),
-			CAFile:  caFile,
-		},
-		store,
-	)
+	h, sessions, closeLogin, err := application.LoginWithSessions(config.Login{Enabled: true, Provider: login.KeycloakConfig{Issuer: issuer, ClientID: "lab-login-mobile", ClientSecret: secret, Audience: "govai-api", EnableRefresh: true}, RateKey: freshKey(), CAFile: caFile}, store)
 	if err != nil {
 		return errSafe
 	}
-
 	defer closeLogin()
 	server := httptest.NewTLSServer(handler.NewRouterWithSessions(nil, h, nil, sessions))
 	defer server.Close()
@@ -83,27 +60,20 @@ func (l *lab) refreshScenario(
 		if e != nil {
 			panic(errSafe)
 		}
-
 		req.Header.Set("Content-Type", "application/json")
 		r, e := httpClient.Do(req)
 		if e != nil {
 			panic(errSafe)
 		}
-
 		defer r.Body.Close()
 		b, e := io.ReadAll(io.LimitReader(r.Body, 65537))
-		if e != nil ||
-			len(b) > 65536 ||
-			r.Header.Get("Cache-Control") != "no-store" ||
-			len(r.Cookies()) != 0 {
+		if e != nil || len(b) > 65536 || r.Header.Get("Cache-Control") != "no-store" || len(r.Cookies()) != 0 {
 			panic(errSafe)
 		}
-
 		result := map[string]json.RawMessage{}
 		if len(b) > 0 && json.Unmarshal(b, &result) != nil {
 			panic(errSafe)
 		}
-
 		return r.StatusCode, result
 	}
 	token := func(m map[string]json.RawMessage, key string) string {
@@ -116,13 +86,7 @@ func (l *lab) refreshScenario(
 	l.lifeCheck("REFRESH_LOGIN_ISSUANCE", status == 200 && first != "" && len(initial["id_token"]) == 0)
 	status, next := post("/api/v1/auth/refresh", map[string]string{"refresh_token": first})
 	second := token(next, "refresh_token")
-	l.lifeCheck(
-		"REFRESH_ROTATES",
-		status == 200 &&
-			second != "" &&
-			second != first &&
-			token(next, "access_token") != "",
-	)
+	l.lifeCheck("REFRESH_ROTATES", status == 200 && second != "" && second != first && token(next, "access_token") != "")
 	status, _ = post("/api/v1/auth/refresh", map[string]string{"refresh_token": first})
 	l.lifeCheck("REFRESH_REUSE_REJECTED", status == 401)
 	// A fresh independent login avoids relying on reuse-detection session effects.

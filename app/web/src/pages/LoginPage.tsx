@@ -4,65 +4,67 @@ import { Icon } from '../components/Icon'
 import { AuthLayout } from '../components/auth/AuthLayout'
 import { Button } from '../components/Button'
 import { LoginCredentials } from '../components/auth/LoginCredentials'
+import { LoginMethodSwitch } from '../components/auth/LoginMethodSwitch'
+import type { LoginMethod } from '../components/auth/LoginMethodSwitch'
+import { Checkbox } from '../components/Checkbox'
 import { StatusMessage } from '../components/StatusMessage'
-import { validateNicEmailLogin } from '../validation/loginValidation'
+import { validateLogin, validateNicEmailLogin } from '../validation/loginValidation'
+import { submitMockLogin } from '../services/mockLoginService'
 import { useAuth } from '../auth/AuthContext'
+import type { MockOutcome } from '../services/mockLoginService'
 
-export default function LoginPage({ onSuccess, expired = false }: {
-  onSuccess?: () => void
-  expired?: boolean
-}) {
+export default function LoginPage({ onDemoSuccess, expired = false }: { onDemoSuccess?: () => Promise<void>; expired?: boolean }) {
   const auth = useAuth()
+  const [method, setMethod] = useState<LoginMethod>('phone')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
-  const [touched, setTouched] = useState({ identifier: false, password: false })
-  const [failure, setFailure] = useState('')
-  const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
+  const [humanCheck, setHumanCheck] = useState(false)
+  const [touched, setTouched] = useState({ identifier: false, password: false, humanCheck: false })
+  const [outcome, setOutcome] = useState<MockOutcome>('success')
+  const [status, setStatus] = useState<'idle' | 'pending' | MockOutcome>('idle')
   const submitting = useRef(false)
   const form = useRef<HTMLFormElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const mounted = useRef(false)
+  useEffect(() => { mounted.current = true; heading.current?.focus(); return () => { mounted.current = false } }, [])
+  const phoneErrors = validateLogin(identifier, password, humanCheck)
+  const errors = method === 'phone' ? { identifier: phoneErrors.phone, password: phoneErrors.password, humanCheck: phoneErrors.humanCheck }
+    : validateNicEmailLogin(identifier, password, humanCheck)
 
-  useEffect(() => {
-    mounted.current = true
-    heading.current?.focus()
-    return () => { mounted.current = false }
-  }, [])
-  const errors = validateNicEmailLogin(identifier, password)
-
-  // A failed session check still leaves normal login available; checking does not.
-
+  function changeMethod(next: LoginMethod) {
+    if (submitting.current || next === method) return
+    setMethod(next)
+    setIdentifier('')
+    setPassword('')
+    setHumanCheck(false)
+    setTouched({ identifier: false, password: false, humanCheck: false })
+    setStatus('idle')
+  }
   const pending = status === 'pending' || auth.state.status === 'checking'
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submitting.current) return
-    setTouched({ identifier: true, password: true })
+    setTouched({ identifier: true, password: true, humanCheck: true })
     setStatus('idle')
-    if (errors.identifier || errors.password) {
-      form.current?.querySelector<HTMLInputElement>(
-        errors.identifier ? '#identifier' : '#password',
-      )?.focus()
+    if (Object.values(errors).some(Boolean)) {
+      const firstInvalid = errors.identifier ? (method === 'phone' ? '#phone' : '#identifier') : errors.password ? '#password' : '#human-check'
+      form.current?.querySelector<HTMLInputElement>(firstInvalid)?.focus()
       return
     }
-    setIdentifier(identifier.trim())
+    if (method === 'nic-email') setIdentifier(identifier.trim())
     submitting.current = true
     setStatus('pending')
     try {
-      if (await auth.login(identifier.trim(), password)) {
-
-        // Navigation may have unmounted the form while authentication was pending.
-
-        if (mounted.current) {
-          setStatus('success')
-          onSuccess?.()
+      const result = await submitMockLogin(outcome)
+      if (mounted.current) {
+        setStatus(result)
+        if (result === 'success') {
+          if (import.meta.env.DEV) await onDemoSuccess?.()
         }
       }
-    } catch (error) {
-      if (mounted.current) {
-        setFailure(error instanceof Error ? error.message : 'Login unavailable.')
-        setStatus('error')
-      }
+    } catch {
+      if (mounted.current) setStatus('error')
     } finally {
       if (mounted.current) {
         setPassword('')
@@ -72,62 +74,34 @@ export default function LoginPage({ onSuccess, expired = false }: {
     }
   }
 
-  return (
-    <AuthLayout
-      headingId="login-heading"
-      formProps={{ ref: form, onSubmit: submit, noValidate: true }}
-      banner="University prototype. Use test details only."
-      footerControls={<p>Log in with your email or NIC number.</p>}
-    >
-      <div className="heading">
-        <h1 id="login-heading" tabIndex={-1} ref={heading}>Welcome back</h1>
-        <p>Log in to use government services with GovAI.</p>
-      </div>
-      {expired && (
-        <StatusMessage kind="error">Your session expired. Please log in again.</StatusMessage>
-      )}
-      {auth.state.status === 'error' && (
-        <div>
-          <StatusMessage kind="error">
-            Session check failed. No authentication was confirmed.
-          </StatusMessage>
-        </div>
-      )}
-      <LoginCredentials
-        identifier={identifier}
-        password={password}
-        pending={pending}
-        identifierError={touched.identifier ? errors.identifier : undefined}
-        passwordError={touched.password ? errors.password : undefined}
-        onIdentifierBlur={() => {
-          setIdentifier(identifier.trim())
-          setTouched(previous => ({ ...previous, identifier: true }))
-        }}
-        onIdentifierChange={value => {
-          setIdentifier(value)
-          setStatus('idle')
-        }}
-        onPasswordBlur={() => setTouched(previous => ({ ...previous, password: true }))}
-        onPasswordChange={value => {
-          setPassword(value)
-          setStatus('idle')
-        }}
-      />
-      <div className="options login-recovery-link">
-        <a href="/forgot-password">Forgot password?</a>
-      </div>
-      <Button type="submit" pending={pending}>
-        {pending ? 'Logging in…' : 'Log in'}
-        {!pending && <Icon name="login-arrow-right" />}
-      </Button>
-      {status === 'pending' && (
-        <StatusMessage kind="pending">Signing in securely…</StatusMessage>
-      )}
-      {status === 'success' && (
-        <StatusMessage kind="success">Signed in successfully.</StatusMessage>
-      )}
-      {status === 'error' && <StatusMessage kind="error">{failure}</StatusMessage>}
-      <p className="create-account">New to GovAI? <a href="/register">Create an account</a></p>
-    </AuthLayout>
-  )
+  return <AuthLayout headingId="login-heading" formProps={{ ref: form, onSubmit: submit, noValidate: true }}
+    footerControls={<details className="demo-options"><summary>Demo response controls</summary><label htmlFor="outcome">Simulated result</label><select id="outcome" disabled={pending} value={outcome} onChange={(event) => { setOutcome(event.target.value === 'error' ? 'error' : 'success'); setStatus('idle') }}><option value="success">Success</option><option value="error">Error</option></select></details>}>
+          <div className="heading"><h1 id="login-heading" tabIndex={-1} ref={heading}>Welcome back</h1><p>Log in to use government services with GovAI.</p></div>
+          {import.meta.env.DEV && <p className="create-account">Demo login success starts a synthetic mock session in this tab for 15 minutes. No real account is authenticated.</p>}
+          {expired && <StatusMessage kind="error">Mock session expired. Log in to start another demo session.</StatusMessage>}
+          {auth.state.status === 'error' && <div><StatusMessage kind="error">Session check failed. No authentication was confirmed.</StatusMessage><button type="button" onClick={() => void auth.retry()}>Retry session check</button></div>}
+          <LoginMethodSwitch method={method} disabled={pending} onChange={changeMethod} />
+          <LoginCredentials method={method} identifier={identifier} password={password} pending={pending}
+            identifierError={touched.identifier ? errors.identifier : undefined} passwordError={touched.password ? errors.password : undefined}
+            onIdentifierBlur={() => { if (method === 'nic-email') setIdentifier(identifier.trim()); setTouched(previous => ({ ...previous, identifier: true })) }}
+            onIdentifierChange={value => { setIdentifier(value); setStatus('idle') }}
+            onPasswordBlur={() => setTouched(previous => ({ ...previous, password: true }))}
+            onPasswordChange={value => { setPassword(value); setStatus('idle') }} />
+          <div className="options"><Checkbox disabled>Remember me <small>(unavailable)</small></Checkbox><a href="#/forgot-password">Forgot password?</a></div>
+          <div className="human-check">
+            <Checkbox id="human-check" checked={humanCheck} disabled={pending}
+              aria-invalid={touched.humanCheck && errors.humanCheck ? true : undefined}
+              aria-describedby={touched.humanCheck && errors.humanCheck ? 'human-note human-error' : 'human-note'}
+              onChange={(event) => { setHumanCheck(event.target.checked); setStatus('idle') }}>I’m not a robot</Checkbox>
+            <div className="security-badge"><Icon name="shield-check" /><span>Demo check</span></div>
+          </div>
+          <p className="helper" id="human-note">Simulated checkbox only - no security verification.</p>
+          {touched.humanCheck && errors.humanCheck && <p id="human-error" className="field-error">{errors.humanCheck}</p>}
+          <Button type="submit" pending={pending}>{pending ? 'Simulating…' : 'Log in'}{!pending && <Icon name="login-arrow-right" />}</Button>
+          {status === 'pending' && <StatusMessage kind="pending">Simulating a response…</StatusMessage>}
+          {status === 'success' && <StatusMessage kind="success">Demo submission successful. You are not signed in.</StatusMessage>}
+          {status === 'error' && <StatusMessage kind="error">Demo login failed. Please try again.</StatusMessage>}
+          <p className="create-account">New to GovAI? <a href="#/register">Create an account (demo)</a></p>
+
+  </AuthLayout>
 }

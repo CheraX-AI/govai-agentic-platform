@@ -23,7 +23,6 @@ func smtpFixture(t *testing.T, secure bool) (SMTPConfig, <-chan string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	t.Cleanup(func() { _ = listener.Close() })
 	certServer := httptest.NewTLSServer(http.NotFoundHandler())
 	t.Cleanup(certServer.Close)
@@ -35,7 +34,6 @@ func smtpFixture(t *testing.T, secure bool) (SMTPConfig, <-chan string) {
 		if err != nil {
 			return
 		}
-
 		defer conn.Close()
 		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 		_, _ = io.WriteString(conn, "220 synthetic SMTP\r\n")
@@ -45,7 +43,6 @@ func smtpFixture(t *testing.T, secure bool) (SMTPConfig, <-chan string) {
 			if e != nil {
 				return
 			}
-
 			command := strings.ToUpper(strings.SplitN(line, " ", 2)[0])
 			switch command {
 			case "EHLO", "HELO":
@@ -82,16 +79,8 @@ func smtpFixture(t *testing.T, secure bool) (SMTPConfig, <-chan string) {
 	}()
 	_, port, _ := net.SplitHostPort(listener.Addr().String())
 	number, _ := strconv.Atoi(port)
-	return SMTPConfig{
-		Host:                 "127.0.0.1",
-		Port:                 number,
-		From:                 "noreply@govai.test",
-		Timeout:              2 * time.Second,
-		DevelopmentPlaintext: !secure,
-		RootCAs:              roots,
-	}, messages
+	return SMTPConfig{Host: "127.0.0.1", Port: number, From: "noreply@govai.test", Timeout: 2 * time.Second, DevelopmentPlaintext: !secure, RootCAs: roots}, messages
 }
-
 func TestSMTPDelivery(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		t.Run(strconv.FormatBool(secure), func(t *testing.T) {
@@ -100,16 +89,11 @@ func TestSMTPDelivery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-
 			token, _ := NewToken()
 			link := "https://app.example.test/reset#token=" + token.Reveal()
-			if err = sender.Send(
-				context.Background(),
-				Delivery{Recipient: "citizen@govai.test", Link: link, Lifetime: 15 * time.Minute},
-			); err != nil {
+			if err = sender.Send(context.Background(), Delivery{Recipient: "citizen@govai.test", Link: link, Lifetime: 15 * time.Minute}); err != nil {
 				t.Fatal("SMTP submission failed")
 			}
-
 			select {
 			case message := <-messages:
 				parts := strings.SplitN(message, "\n\n", 2)
@@ -117,10 +101,7 @@ func TestSMTPDelivery(t *testing.T) {
 					t.Fatal("missing MIME body")
 				}
 				decoded, err := io.ReadAll(quotedprintable.NewReader(strings.NewReader(parts[1])))
-				if err != nil ||
-					!strings.Contains(string(decoded), link) ||
-					!strings.Contains(string(decoded), "15 minutes") ||
-					!strings.Contains(message, "To: citizen@govai.test") {
+				if err != nil || !strings.Contains(string(decoded), link) || !strings.Contains(string(decoded), "15 minutes") || !strings.Contains(message, "To: citizen@govai.test") {
 					t.Fatal("incorrect mail content")
 				}
 			case <-time.After(time.Second):
@@ -129,7 +110,6 @@ func TestSMTPDelivery(t *testing.T) {
 		})
 	}
 }
-
 func TestSMTPRejectsUntrustedTLS(t *testing.T) {
 	cfg, messages := smtpFixture(t, true)
 	cfg.RootCAs = nil
@@ -137,68 +117,31 @@ func TestSMTPRejectsUntrustedTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	token, _ := NewToken()
-	if sender.Send(
-		context.Background(),
-		Delivery{
-			Recipient: "citizen@govai.test",
-			Link:      "https://app.test/reset#token=" + token.Reveal(),
-			Lifetime:  time.Minute,
-		},
-	) == nil {
+	if sender.Send(context.Background(), Delivery{Recipient: "citizen@govai.test", Link: "https://app.test/reset#token=" + token.Reveal(), Lifetime: time.Minute}) == nil {
 		t.Fatal("untrusted SMTP certificate accepted")
 	}
-
 	select {
 	case <-messages:
 		t.Fatal("sent before TLS verification")
 	default:
 	}
 }
-
 func TestSMTPRejectsUnsafeInputs(t *testing.T) {
 	for _, cfg := range []SMTPConfig{
-		{
-			Host:                 "smtp.example.test",
-			Port:                 25,
-			From:                 "noreply@govai.test",
-			Timeout:              time.Second,
-			DevelopmentPlaintext: true,
-		},
-		{
-			Host:                 "127.0.0.1",
-			Port:                 25,
-			From:                 "noreply@govai.test",
-			Timeout:              time.Second,
-			DevelopmentPlaintext: true,
-			Username:             "user",
-			Password:             "secret",
-		},
+		{Host: "smtp.example.test", Port: 25, From: "noreply@govai.test", Timeout: time.Second, DevelopmentPlaintext: true},
+		{Host: "127.0.0.1", Port: 25, From: "noreply@govai.test", Timeout: time.Second, DevelopmentPlaintext: true, Username: "user", Password: "secret"},
 		{Host: "127.0.0.1", Port: 25, From: "bad\r\nBcc: other@govai.test", Timeout: time.Second},
 	} {
 		if _, err := NewSMTPMailer(cfg); err == nil {
 			t.Fatal("unsafe SMTP configuration")
 		}
 	}
-
-	sender, err := NewSMTPMailer(
-		SMTPConfig{
-			Host:                 "127.0.0.1",
-			Port:                 1,
-			From:                 "noreply@govai.test",
-			Timeout:              time.Second,
-			DevelopmentPlaintext: true,
-		},
-	)
+	sender, err := NewSMTPMailer(SMTPConfig{Host: "127.0.0.1", Port: 1, From: "noreply@govai.test", Timeout: time.Second, DevelopmentPlaintext: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if sender.Send(
-		context.Background(),
-		Delivery{Recipient: "bad\r\naddress", Link: "https://app.test/", Lifetime: time.Minute},
-	) == nil {
+	if sender.Send(context.Background(), Delivery{Recipient: "bad\r\naddress", Link: "https://app.test/", Lifetime: time.Minute}) == nil {
 		t.Fatal("header injection accepted")
 	}
 }
@@ -210,32 +153,21 @@ func TestSMTPRequiresSTARTTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	token, _ := NewToken()
-	if sender.Send(
-		context.Background(),
-		Delivery{
-			Recipient: "citizen@govai.test",
-			Link:      "https://app.test/reset#token=" + token.Reveal(),
-			Lifetime:  time.Minute,
-		},
-	) == nil {
+	if sender.Send(context.Background(), Delivery{Recipient: "citizen@govai.test", Link: "https://app.test/reset#token=" + token.Reveal(), Lifetime: time.Minute}) == nil {
 		t.Fatal("STARTTLS downgrade accepted")
 	}
-
 	select {
 	case <-messages:
 		t.Fatal("sent to plaintext server")
 	default:
 	}
 }
-
 func TestSMTPCancellation(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	defer listener.Close()
 	accepted := make(chan struct{})
 	done := make(chan struct{})
@@ -245,7 +177,6 @@ func TestSMTPCancellation(t *testing.T) {
 		if err != nil {
 			return
 		}
-
 		defer conn.Close()
 		close(accepted)
 		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
@@ -254,39 +185,22 @@ func TestSMTPCancellation(t *testing.T) {
 	}()
 	_, port, _ := net.SplitHostPort(listener.Addr().String())
 	number, _ := strconv.Atoi(port)
-	sender, err := NewSMTPMailer(
-		SMTPConfig{
-			Host:                 "127.0.0.1",
-			Port:                 number,
-			From:                 "noreply@govai.test",
-			Timeout:              2 * time.Second,
-			DevelopmentPlaintext: true,
-		},
-	)
+	sender, err := NewSMTPMailer(SMTPConfig{Host: "127.0.0.1", Port: number, From: "noreply@govai.test", Timeout: 2 * time.Second, DevelopmentPlaintext: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	token, _ := NewToken()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		result <- sender.Send(
-			ctx,
-			Delivery{
-				Recipient: "citizen@govai.test",
-				Link:      "https://app.test/reset#token=" + token.Reveal(),
-				Lifetime:  time.Minute,
-			},
-		)
+		result <- sender.Send(ctx, Delivery{Recipient: "citizen@govai.test", Link: "https://app.test/reset#token=" + token.Reveal(), Lifetime: time.Minute})
 	}()
 	select {
 	case <-accepted:
 	case <-time.After(time.Second):
 		t.Fatal("connection not accepted")
 	}
-
 	cancel()
 	select {
 	case err := <-result:
@@ -296,6 +210,5 @@ func TestSMTPCancellation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("cancellation did not interrupt SMTP")
 	}
-
 	<-done
 }

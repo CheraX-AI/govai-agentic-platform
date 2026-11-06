@@ -95,21 +95,21 @@ class VectorStore:
         self.client = client
         self.collection = collection
 
-    def store_document(self, document_embeddings):
+    def store_document(self, embedding_file):
         """Store one document's embeddings, following the three rules in the module docstring."""
 
-        document_id = document_embeddings.document_id
+        document_id = embedding_file.document_id
 
         # An empty file has nothing to store
-        if not document_embeddings.records:
+        if not embedding_file.records:
             result = StoreResult(document_id=document_id, stored_count=0)
             return result
 
         # Vectors from another model cannot be compared with the stored ones
-        self.check_embedding_model(document_embeddings.model, document_embeddings.dimension)
+        self.check_embedding_model(embedding_file.model, embedding_file.dimension)
 
         # Rule 1: write the records, updating any with the same chunk_id
-        batch = to_vector_store_batch(document_embeddings)
+        batch = to_vector_store_batch(embedding_file)
         self.upsert(batch)
 
         # Rule 2: remove this document's chunks that were not produced this time

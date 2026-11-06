@@ -21,46 +21,37 @@ func TestRegistrationLimiterBoundsAndExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	p, _, err := l.Acquire(context.Background(), "one")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if _, err = p.CheckEmail(context.Background(), "one@example.test"); err != nil {
 		t.Fatal(err)
 	}
-
 	if _, err = p.CheckEmail(context.Background(), "one@example.test"); err != nil {
 		t.Fatal("same permit charged twice")
 	}
-
 	if _, _, err = l.Acquire(context.Background(), "two"); !errors.Is(err, ErrRegistrationLimited) {
 		t.Fatal("capacity bypass")
 	}
-
 	if _, _, err = l.Acquire(context.Background(), "one"); !errors.Is(err, ErrRegistrationLimited) {
 		t.Fatal("inflight bypass")
 	}
-
 	p.Release()
 	p.Release()
 	if l.inflight != 0 || len(l.ips) != 1 || len(l.emails) != 1 {
 		t.Fatal("unbounded state or bad release")
 	}
-
 	now = now.Add(time.Hour)
 	p, _, err = l.Acquire(context.Background(), "two")
 	if err != nil {
 		t.Fatal("expired source not reclaimed")
 	}
-
 	defer p.Release()
 	if _, err = p.CheckEmail(context.Background(), "two@example.test"); err != nil {
 		t.Fatal("expired email not reclaimed")
 	}
 }
-
 func TestRegistrationLimiterConcurrent(t *testing.T) {
 	cfg := limitConfig()
 	cfg.IPAttempts = 7
@@ -84,20 +75,17 @@ func TestRegistrationLimiterConcurrent(t *testing.T) {
 			}
 		}()
 	}
-
 	wg.Wait()
 	if admitted != 7 {
 		t.Fatalf("admitted %d", admitted)
 	}
 }
-
 func TestRegistrationLimiterCancellationAndConfig(t *testing.T) {
 	cfg := limitConfig()
 	cfg.Key = nil
 	if _, err := NewLocalRegistrationLimiter(cfg); err == nil {
 		t.Fatal("unsafe config accepted")
 	}
-
 	cfg = limitConfig()
 	l, _ := NewLocalRegistrationLimiter(cfg)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -105,7 +93,6 @@ func TestRegistrationLimiterCancellationAndConfig(t *testing.T) {
 	if _, _, err := l.Acquire(ctx, "source"); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation ignored")
 	}
-
 	if fmt.Sprintf("%+v", cfg) != "[REDACTED]" || fmt.Sprintf("%+v", l) != "[REDACTED]" {
 		t.Fatal("unsafe formatting")
 	}

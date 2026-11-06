@@ -27,11 +27,9 @@ type Identity struct {
 	EmailVerified bool
 }
 
-func (Identity) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
-
+func (Identity) Format(s fmt.State, _ rune)   { _, _ = io.WriteString(s, "[REDACTED]") }
 func (Identity) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
-
-func (Identity) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+func (Identity) LogValue() slog.Value         { return slog.StringValue("[REDACTED]") }
 
 type AdminCode string
 

@@ -1,36 +1,13 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { ApplicationLayout } from './ApplicationLayout'
-import type { ApplicationPage } from './Sidebar'
+import type { LayoutPreview } from './Sidebar'
 
-export function ApplicationPageLayout({
-  page,
-  onLogout,
-  children,
-  onNewChat,
-  conversationAvailable,
-}: {
-  page: ApplicationPage
-  onLogout: () => void
-  children: ReactNode
-  onNewChat?: () => void
-  conversationAvailable?: boolean
-}) {
-
-  // Path navigation does not reload the document, so move focus to its new content.
-
-  useEffect(() => {
-    document.getElementById('application-content')?.focus()
-  }, [page])
-
-  return (
-    <ApplicationLayout
-      page={page}
-      onLogout={onLogout}
-      onNewChat={onNewChat}
-      conversationAvailable={conversationAvailable}
-    >
-      {children}
-    </ApplicationLayout>
-  )
+export type ApplicationPageProps = { protectedDemo?: boolean; onDemoLogout?: () => void }
+export function ApplicationPageLayout({ page, protectedDemo = false, onDemoLogout, children }: ApplicationPageProps & { page: LayoutPreview; children: ReactNode }) {
+  useEffect(() => { if (protectedDemo) document.getElementById('application-content')?.focus() }, [protectedDemo])
+  return <ApplicationLayout page={page} protectedDemo={protectedDemo} onDemoLogout={protectedDemo ? onDemoLogout : undefined}>
+    {protectedDemo && <div className="demo-session-notice"><p role="status">Mock session - no real authentication. Synthetic user details only.</p><button type="button" onClick={onDemoLogout}>Demo logout</button></div>}
+    {children}
+  </ApplicationLayout>
 }

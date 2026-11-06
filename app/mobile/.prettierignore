@@ -1,0 +1,13 @@
+node_modules/
+.cache/
+.expo/
+.npm-cache/
+dist/
+assets/
+email-previews/
+AGENTS.md
+package-lock.json
+app.json
+scripts/check-*.cjs
+scripts/verify-served-recovery.cjs
+scripts/historical-paths.cjs

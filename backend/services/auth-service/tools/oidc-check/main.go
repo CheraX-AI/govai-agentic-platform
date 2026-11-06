@@ -14,12 +14,10 @@ func run() error {
 	if err := config.LoadLocalEnv(".env"); err != nil {
 		return err
 	}
-
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-
 	return oidccheck.Check(context.Background(), cfg.OIDCIssuerURL, cfg.OIDCCheckTimeout)
 }
 
@@ -28,8 +26,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	fmt.Println(
-		"OIDC connectivity check passed: discovery issuer matched and nonempty JWKS retrieved (not token validation)",
-	)
+	fmt.Println("OIDC connectivity check passed: discovery issuer matched and nonempty JWKS retrieved (not token validation)")
 }

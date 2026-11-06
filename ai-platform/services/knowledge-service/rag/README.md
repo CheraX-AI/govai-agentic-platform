@@ -1,20 +1,14 @@
 # Knowledge Service RAG
 
-LangChain-based document processing and retrieval for the GovAI knowledge service.
-It reads PDFs from SeaweedFS, extracts their text, splits it into chunks, embeds them
-with NVIDIA, and stores them in ChromaDB, all in memory: no document text is written to
-disk. The agent searches them through the internal retrieval API.
-
-For the everyday commands (start, process documents, search, test), see
-[ai-platform/README.md](../../../README.md).
+LangChain-based document processing for the GovAI knowledge service. It reads PDF
+documents, extracts their text, splits it into chunks, and creates embeddings ready
+for the vector database.
 
 ## Folder structure
 
 ```text
 rag/
 ├── app/
-│   ├── api/
-│   │   └── main.py               # Internal retrieval API for agent-service (POST /api/v1/retrieve)
 │   ├── processing/
 │   │   ├── pdf_extractor.py      # Extracts text from PDF pages
 │   │   ├── chunker.py            # Splits extracted text into chunks
@@ -24,8 +18,8 @@ rag/
 │   │   ├── exceptions.py         # Errors and NVIDIA API error classification
 │   │   ├── models.py             # Pydantic models
 │   │   ├── validators.py         # Chunk, metadata, and vector checks
-│   │   ├── storage.py            # Vector-store input (to_vector_store_batch)
-│   │   └── embedding_service.py  # NVIDIA client, batching, retries, embed_document()
+│   │   ├── storage.py            # Chunk and embeddings files, vector-store output
+│   │   └── embedding_service.py  # NVIDIA client, batching, retries, re-run reuse
 │   ├── storage/
 │   │   ├── config.py             # SeaweedFS settings read from .env
 │   │   ├── exceptions.py         # Storage errors
@@ -34,6 +28,9 @@ rag/
 │       ├── config.py             # ChromaDB settings read from .env
 │       ├── exceptions.py         # Vector database errors
 │       └── vector_store.py       # VectorStore: store, read, delete, search chunks in ChromaDB
+├── data/
+│   ├── input/                    # Only for the GA-73 validation tests
+│   └── output/                   # Generated chunks and embeddings
 ├── scripts/
 │   ├── upload_documents.py       # Uploads PDF files to SeaweedFS
 │   ├── process_documents.py      # SeaweedFS PDFs → chunks → embeddings → ChromaDB
@@ -41,9 +38,8 @@ rag/
 ├── tests/
 │   ├── unit/                     # Unit tests (embedding tests call the real NVIDIA API)
 │   ├── integration/              # Real SeaweedFS, ChromaDB, and NVIDIA; the scripts end to end
+│   ├── validation/               # GA-73: real documents from data/input, report in data/output/reports
 ├── .env.example                  # Template for .env (NVIDIA, SeaweedFS, ChromaDB settings, empty secrets)
-├── Dockerfile                    # Image for the internal retrieval API (and the scripts)
-├── .dockerignore                 # Keeps .env, .venv, tests, and caches out of the image
 ├── pytest.ini
 └── requirements.txt
 ```
@@ -61,7 +57,6 @@ rag/
 | `numpy` | Vector checks (NaN and infinity) and similarity maths |
 | `boto3`, `botocore` | S3 client for the SeaweedFS object storage |
 | `chromadb-client` | HTTP client for the ChromaDB vector database |
-| `fastapi`, `uvicorn` | Internal retrieval API for agent-service |
 | `python-dotenv` | Loads embedding, storage, and ChromaDB settings from `.env` |
 | `pytest` | Running tests |
 
@@ -133,9 +128,8 @@ deactivate
 ## Documents
 
 The original PDFs are stored in SeaweedFS (see [Document storage](#document-storage-seaweedfs)),
-and processing reads them only from there. Processing keeps everything in memory and
-stores the result in ChromaDB, so no extracted text, chunks, or vectors are saved to disk.
-Do not commit government documents to Git.
+and processing reads them only from there. Generated output is written to
+`data/output/`. Do not commit government documents or generated output to Git.
 
 ## Embedding settings
 
@@ -178,8 +172,8 @@ All embedding settings, including the NVIDIA API key and every model detail, liv
 - Only `.env.example`, with an empty key, is committed.
 
 Every chunk is sent to NVIDIA's cloud. Use it only with documents that are approved
-for that. Changing the model means every document must be embedded again; every stored
-chunk records its model, so vectors are never mixed.
+for that. Changing the model means every document must be embedded again; each
+embeddings file records its model so vectors are never mixed.
 
 ## Document storage (SeaweedFS)
 
@@ -188,7 +182,7 @@ Docker. `process_documents.py` reads PDFs only from SeaweedFS, so every document
 be uploaded first.
 
 ```text
-PDF on your computer ──upload_documents.py──► SeaweedFS ──process_documents.py──► ChromaDB
+PDF on your computer ──upload_documents.py──► SeaweedFS ──process_documents.py──► data/output/
 ```
 
 ### Start SeaweedFS
@@ -445,8 +439,6 @@ script:
 4. embeds the chunks with NVIDIA;
 5. stores the fully embedded documents in ChromaDB.
 
-All steps run in memory; nothing but the temporary PDF is written to disk.
-
 It checks SeaweedFS, the NVIDIA settings, and ChromaDB before downloading anything, so a
 missing setting or a stopped container fails fast.
 
@@ -454,11 +446,12 @@ missing setting or a stopped container fails fast.
 | --- | --- |
 | `--department-id` | Department that owns the documents (required) |
 | `--service-id` | Service the documents belong to (required for `service_guideline`) |
-| `--title` | Document title, e.g. `"Obtaining a Taxpayer Identification Number (TIN)"`. Each chunk is embedded with the title in front, so chunks that never repeat the topic are still found; the stored text is unchanged. |
+| `--title` | Document title, e.g. `"Obtaining a Taxpayer Identification Number (TIN)"`. Each chunk is embedded with the title in front, so chunks that never repeat the topic are still found; the saved text is unchanged. |
 | `--document-type` | `service_guideline` or `department_guideline` (required) |
-| `--status` | `published` (default) or `draft`; only published documents can be found |
+| `--output-dir` | Default `data/output` |
 | `--env-file` | Settings file, default `rag/.env` |
-| `--dry-run` | Only extract and chunk, and print the counts (no NVIDIA, no ChromaDB) |
+| `--skip-embeddings` | Only extract and chunk (no NVIDIA, no ChromaDB) |
+| `--skip-vector-store` | Extract, chunk, and embed, but do not store in ChromaDB |
 
 The summary ends with the ChromaDB result:
 
@@ -466,21 +459,28 @@ The summary ends with the ChromaDB result:
 Processed PDFs:  1
 Failed PDFs:     0
 Model:           nvidia / nvidia/llama-nemotron-embed-vl-1b-v2
-Chunks embedded: 9
+Chunks embedded: 9 (reused 0)
 Chunks failed:   0
 ChromaDB:        1 documents, 9 chunks stored
 Old versions:    0 removed
 Collection size: 9 chunks
 ```
 
+Output in `data/output/`:
+
+| Folder | Content |
+| --- | --- |
+| `extracted/` | `<document_id>.json`, page text and metadata |
+| `chunks/` | `<document_id>.chunks.json`, chunks with `chunk_id` and metadata |
+| `embeddings/` | `<document_id>.embeddings.json`, model, dimension, and one record per chunk |
+
 Exit codes: `0` success, `1` some PDFs, chunks, or ChromaDB storage failed, `2` invalid
 options, settings, SeaweedFS, or ChromaDB.
 
-A document is stored only when every chunk was embedded. A failed batch is reported,
-and that document is not stored, so a partly embedded version never replaces a complete
-one; run the script again to embed and store it. Every run embeds all chunks again;
-ChromaDB updates the records by `chunk_id`, so nothing is duplicated. If NVIDIA rejects
-the API key, embedding stops, but the remaining PDFs are still extracted and chunked.
+Failures do not lose finished work. A failed batch is reported and the other batches are
+saved. Running the script again embeds only the chunks that are new, changed, or failed
+before, and then stores the document. If NVIDIA rejects the API key, embedding stops, but
+the remaining PDFs are still extracted and chunked.
 
 ## Searching documents
 
@@ -499,76 +499,6 @@ with their distance (smaller is closer, 0 to 2), file, page, chunk ID, and Seawe
 | `--top-k` | Number of results, 1–50, default 5 |
 | `--department-id`, `--service-id` | Only search these documents |
 | `--env-file` | Settings file, default `rag/.env` |
-
-## Retrieval API (internal)
-
-agent-service reaches the RAG through this API. Citizens and the frontend never call
-it; they talk to the agent, and the agent calls this API when it answers a question.
-
-```text
-Client ──► agent-service (Knowledge Agent) ──► POST /api/v1/retrieve ──► Retriever ──► NVIDIA + ChromaDB
-```
-
-### Start it
-
-Start ChromaDB first (see [Start ChromaDB](#start-chromadb)), then from the `rag` folder:
-
-```powershell
-uvicorn app.api.main:app --host 127.0.0.1 --port 8020
-```
-
-- Always use `--host 127.0.0.1`: the API is only for agent-service on the same machine.
-  It has no CORS settings, so a browser cannot call it.
-- The `Retriever` is created at startup from `rag/.env`, so a missing setting or a stopped
-  ChromaDB stops the startup with a clear message.
-- Use the port that `KNOWLEDGE_SERVICE_URL` in `agent-service/.env` points to (8020 in
-  the examples; ChromaDB already uses 8001).
-
-Check it: `curl http://127.0.0.1:8020/health` returns `{"status":"ok"}`.
-
-### Run it in Docker
-
-The `Dockerfile` in this folder builds the `govai-knowledge-service` image, and
-`ai-platform/docker-compose.ai.yml` runs it as the `knowledge-service` service together
-with the agent. All commands are in [ai-platform/README.md](../../../README.md).
-
-- Settings come from `rag/.env` at runtime (never copied into the image); compose sets
-  `CHROMA_HOST=chromadb`, `CHROMA_PORT=8000`, and `OBJECT_STORAGE_ENDPOINT=http://seaweedfs:8333`.
-- The port is not published: in Docker, only the agent container can call the API.
-- The scripts run in the same image, e.g. after setting `COMPOSE_FILE` (see ai-platform/README.md):
-
-  ```powershell
-  docker compose run --rm knowledge-service python scripts/search_documents.py "How do I register for a TIN?" --top-k 3
-  ```
-
-### Endpoints
-
-| Method and path | Purpose |
-| --- | --- |
-| `GET /health` | `{"status": "ok"}` when the API is running |
-| `POST /api/v1/retrieve` | The chunks of published documents that best match a question |
-
-Request (only `question` is required; the others default to the `Retriever` defaults):
-
-```json
-{ "question": "How do I register for a TIN?", "top_k": 5, "department_id": null, "service_id": null, "max_distance": null }
-```
-
-The response is the `RetrievalResponse` described in [Searching documents](#searching-documents):
-the cleaned question, the options used, and `results` with each chunk's text, title,
-file, page, IDs, distance, and similarity, best first. No match is an empty `results` list.
-
-An `X-Request-ID` header from agent-service is logged with the request, so one question
-can be followed through both services. The question itself is never logged.
-
-| Error | Status | `detail` example |
-| --- | --- | --- |
-| `InvalidQueryError` | 422 | `question: Value error, question is empty` |
-| `QueryEmbeddingError` | 503 | `NVIDIA rejected the API key` |
-| `RetrievalUnavailableError` | 503 | `ChromaDB is not reachable` |
-| `RetrievalConfigError` and others | 500 | `Documents were embedded with ..., but queries use ...` |
-
-Every error body is `{"detail": "<short message>"}`, without the question or a stack trace.
 
 ## Tests
 
@@ -594,7 +524,7 @@ running container they are skipped, and `pytest -rs` shows why.
 
 | Test file | Needs |
 | --- | --- |
-| `tests/unit/*` | Nothing (embedding service tests need the NVIDIA key; `test_api.py` uses a fake Retriever) |
+| `tests/unit/*` | Nothing (embedding service tests need the NVIDIA key) |
 | `tests/integration/test_seaweedfs.py` | SeaweedFS |
 | `tests/integration/test_chromadb.py` | ChromaDB (synthetic vectors, no NVIDIA) |
 | `tests/integration/test_process_documents_script.py` | SeaweedFS, ChromaDB, NVIDIA |
@@ -610,3 +540,32 @@ running container they are skipped, and `pytest -rs` shows why.
 | Scripts end to end | `pytest tests/integration/test_process_documents_script.py tests/integration/test_search_script.py` |
 | One file | `pytest tests/unit/test_embedding_service.py` |
 | Show skipped tests and why | `pytest -rs` |
+
+## Validating documents (GA-73)
+
+`tests/validation/` runs real documents through extraction, chunking, and the real NVIDIA
+API, saves everything to `data/output/`, and writes a report.
+
+1. Copy the PDF into `data/input/`.
+2. Add it to `tests/validation/documents.json` with its source details, title, key phrases
+   (with the page each is on), and a few questions with the page that answers them.
+3. Run:
+
+   ```powershell
+   pytest tests/validation -v
+   ```
+
+4. Read `data/output/reports/validation_report.md`.
+
+| Acceptance criterion | What is checked |
+| --- | --- |
+| Meaningful chunks | Every page has text and is chunked, chunks are 1–1000 characters, no PDF bullet glyphs |
+| Information preserved | No page text is lost between chunks, overlap is at most 200 characters, every key phrase is whole in a chunk from its page |
+| Identifiers and metadata | Chunk IDs are unique and in order; every chunk has its document ID, title, file, department, service, type, and page |
+| Embeddings generated | One embedding per chunk, none failed, saved to `data/output/embeddings/` |
+| Valid vectors | One dimension for all vectors, finite non-zero values, re-embedding gives the same vector (cosine ≥ 0.99), ready for ChromaDB |
+| Errors handled | Blank, empty, non-PDF, and password-protected files; an over-long chunk; a rejected key; a damaged chunk file |
+| Pipeline validated | Each question's closest chunk comes from the page that answers it |
+
+The documents and the report stay in `data/`, which Git ignores. The document text is sent to
+NVIDIA's cloud. A re-run reuses the saved vectors, so the document is sent only once.

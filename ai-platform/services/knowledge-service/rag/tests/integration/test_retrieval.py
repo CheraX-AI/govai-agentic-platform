@@ -24,11 +24,11 @@ MISSING_COLLECTION = "govai_knowledge_missing_test"
 def make_status_document(document_id, status="published", **options):
     """A synthetic document whose chunks carry a publication status, as the pipeline now stores them."""
 
-    document_embeddings = make_document(document_id, **options)
-    for record in document_embeddings.records:
+    embedding_file = make_document(document_id, **options)
+    for record in embedding_file.records:
         record.metadata["publication_status"] = status
 
-    return document_embeddings
+    return embedding_file
 
 
 def make_retriever(vector_store, query_axis):

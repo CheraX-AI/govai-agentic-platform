@@ -12,12 +12,11 @@ teammate-owned Python AI services.
 
 - Authentication: custom registration, email/NIC password login, email verification,
   browser sessions, native refresh/revoke and NIC-based email password recovery.
-- Chat: browser → auth-service (`/api/v1/web/chat`, session cookie) → core-service
-  (`/api/chat/message`, Keycloak access token) → agent-api (`/api/v1/chat`) →
-  knowledge-service (RAG). Answers carry numbered sources (`number`, `title`,
-  optional `page`/`url`); no generated answers are fabricated when a service is down.
-- Web: registration, login, session, logout and chat use the real backend (no
-  mocks). Mobile integration remains to be verified.
+- Chat: separate Go core-service, authenticated message endpoint, configurable
+  HTTP agent adapter and synthetic tests. Real agent integration and browser
+  session forwarding remain pending; no generated answers are fabricated.
+- Actual frontend/mobile integration remains to be verified. Postman results are
+  backend evidence, not browser/mobile end-to-end evidence.
 - Catalogue, KYC and notification service directories remain placeholders.
 
 ## Technology and folders
@@ -75,19 +74,10 @@ HTTPS port 5002. See its README before running it.
 
 ### Web
 
-Follow [web guide](app/web/README.md). Open the app at `https://localhost:5173`
-(not `127.0.0.1`: the session cookie only works on the same site as the API).
-Either run it on your machine (from `app/web`: `npm ci`, then `npm run dev`) or in
-Docker from the repository root:
-
-```powershell
-docker compose up -d --build web                          # Vite dev server, live reload
-docker compose --profile prod up -d --build web-prod      # production build on nginx
-```
-
-`web` also starts with a plain `docker compose up -d`. Only one of `web`,
-`web-prod` and `npm run dev` can use port 5173 at a time. The browser calls
-auth-service on the host (`https://localhost:5001`).
+Follow [web guide](app/web/README.md). From `app/web`, `npm ci` installs locked
+dependencies and `npm run dev` starts Vite. Use the actual URL shown by Vite.
+`localhost` and `127.0.0.1` are distinct origins; agree exact origin and HTTPS/cookie
+settings with the backend owner before browser integration.
 
 ### AI services
 

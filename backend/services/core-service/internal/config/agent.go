@@ -1,10 +1,9 @@
 package config
 
 import (
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
 	"os"
 	"time"
-
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
 )
 
 type Agent struct {
@@ -13,7 +12,6 @@ type Agent struct {
 	CAFile  string
 }
 
-// LoadAgent validates the optional Knowledge Agent connection.
 func LoadAgent(requestTimeout time.Duration) (Agent, error) {
 	var c Agent
 	switch os.Getenv("KNOWLEDGE_AGENT_ENABLED") {
@@ -24,7 +22,6 @@ func LoadAgent(requestTimeout time.Duration) (Agent, error) {
 	default:
 		return c, ErrConfig
 	}
-
 	timeout := 20 * time.Second
 	if value := os.Getenv("KNOWLEDGE_AGENT_TIMEOUT"); value != "" {
 		var err error
@@ -33,11 +30,9 @@ func LoadAgent(requestTimeout time.Duration) (Agent, error) {
 			return Agent{}, ErrConfig
 		}
 	}
-
 	if timeout < time.Second || timeout >= requestTimeout {
 		return Agent{}, ErrConfig
 	}
-
 	allowHTTP := false
 	switch os.Getenv("KNOWLEDGE_AGENT_ALLOW_LOOPBACK_HTTP") {
 	case "", "false":
@@ -46,18 +41,10 @@ func LoadAgent(requestTimeout time.Duration) (Agent, error) {
 	default:
 		return Agent{}, ErrConfig
 	}
-
-	c.HTTP = chat.HTTPConfig{
-		URL:               os.Getenv("KNOWLEDGE_AGENT_URL"),
-		AuthMode:          os.Getenv("KNOWLEDGE_AGENT_AUTH_MODE"),
-		BearerToken:       os.Getenv("KNOWLEDGE_AGENT_BEARER_TOKEN"),
-		Timeout:           timeout,
-		AllowLoopbackHTTP: allowHTTP,
-	}
+	c.HTTP = chat.HTTPConfig{URL: os.Getenv("KNOWLEDGE_AGENT_URL"), AuthMode: os.Getenv("KNOWLEDGE_AGENT_AUTH_MODE"), BearerToken: os.Getenv("KNOWLEDGE_AGENT_BEARER_TOKEN"), Timeout: timeout, AllowLoopbackHTTP: allowHTTP}
 	c.CAFile = os.Getenv("KNOWLEDGE_AGENT_CA_FILE")
 	if chat.ValidateHTTPConfig(c.HTTP) != nil {
 		return Agent{}, ErrConfig
 	}
-
 	return c, nil
 }

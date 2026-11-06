@@ -22,8 +22,8 @@ class EmbeddingConfigError(EmbeddingError):
     """The embedding settings are missing or invalid."""
 
 
-class InvalidChunkError(EmbeddingError):
-    """The chunks of a document are invalid, e.g. a duplicate ID or metadata ChromaDB cannot store."""
+class ChunkFileError(EmbeddingError):
+    """A chunk file is missing, unreadable, or has an invalid structure."""
 
 
 class InvalidEmbeddingError(EmbeddingError):

@@ -23,28 +23,22 @@ func (s *Store) RecoveryByNIC(ctx context.Context, issuer string, nic registrati
 	if issuer == "" || len(issuer) > 2048 {
 		return RecoveryBinding{}, ErrStore
 	}
-
 	parsed, err := registration.ParseNIC(nic.NormalizedNumber())
 	if err != nil {
 		return RecoveryBinding{}, ErrRecoveryUnavailable
 	}
-
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	var result RecoveryBinding
 	err = s.pool.QueryRow(ctx, `SELECT p.issuer,p.subject,p.operation_id
  FROM auth.citizen_profiles p JOIN auth.registration_operations o
  ON p.operation_id=o.operation_id AND p.issuer=o.issuer AND p.subject=o.subject AND p.nic_digest=o.nic_digest
- WHERE p.issuer=$1 AND p.nic_digest=$2 AND o.phase IN ('enabled','email_sending','completed','attention')`,
-		issuer,
-		s.crypt.digest(parsed)).Scan(&result.Issuer, &result.Subject, &result.OperationID)
+ WHERE p.issuer=$1 AND p.nic_digest=$2 AND o.phase IN ('enabled','email_sending','completed','attention')`, issuer, s.crypt.digest(parsed)).Scan(&result.Issuer, &result.Subject, &result.OperationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RecoveryBinding{}, ErrRecoveryUnavailable
 	}
-
 	if err != nil {
 		return RecoveryBinding{}, ErrStore
 	}
-
 	return result, nil
 }

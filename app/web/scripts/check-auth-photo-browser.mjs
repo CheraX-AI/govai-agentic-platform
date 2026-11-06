@@ -1,4 +1,3 @@
-import { installAuthFixtures } from './integration/authFixtures.mjs'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -53,21 +52,19 @@ try {
   }
   await send('Runtime.enable')
   await send('Network.enable')
-  const fixture = await installAuthFixtures(socket, send)
 
 
   const phase=process.argv[2]||'after',measurements=[]
   for(const page of ['login','register','forgot-password','check-email'])for(const [width,height] of [[1440,820],[1366,768],[1920,1080],[1024,768],[901,600],[1440,600],[375,667]]){
     await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false})
     for(const state of ['initial','errors','expanded','errors+expanded']){
-      await send('Page.navigate',{url:'https://localhost:5173/#/'+page});await delay(150);await send('Page.reload');await delay(250);for(let ready=0;ready<60;ready++){if(await evaluate('Boolean(document.querySelector(".login-photo")?.naturalWidth)'))break;await delay(100)}
+      await send('Page.navigate',{url:'http://127.0.0.1:5173/#/'+page});await delay(150);await send('Page.reload');await delay(350)
       if(state.includes('errors')) {
-        if(page==='check-email'){await evaluate('document.querySelector(".recovery-resend").click()')}
+        if(page==='check-email'){await evaluate('const s=document.querySelector("#resend-outcome");s.value="error";s.dispatchEvent(new Event("change",{bubbles:true}));document.querySelector(".recovery-resend").click()');await delay(950)}
         else await evaluate('document.querySelector("button[type=submit]").click()')
       }
-      if(state.includes('expanded'))await evaluate('document.querySelector("details summary")?.click()')
+      if(state.includes('expanded'))await evaluate('document.querySelector("details summary").click()')
       await evaluate('scrollTo(0,0)')
-      if(!await evaluate('Boolean(document.querySelector(".login-photo"))')) throw Error('Photo page not ready: '+page+' '+state+' '+width)
       const m=await evaluate(`(() => {const p=document.querySelector('.photo-panel'),i=document.querySelector('.login-photo'),c=document.querySelector('.login-card'),s=getComputedStyle(i),r=e=>{const b=e.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height,bottom:b.bottom}},ir=r(i),pr=r(p);const scale=Math.max(ir.w/i.naturalWidth,ir.h/i.naturalHeight);return {panel:pr,imageBox:ir,natural:[i.naturalWidth,i.naturalHeight],objectFit:s.objectFit,objectPosition:s.objectPosition,offsets:[s.left,s.top],scale,rendered:[i.naturalWidth*scale,i.naturalHeight*scale],caption:r(document.querySelector('.slide-caption')),badge:r(document.querySelector('.help-badge')),form:r(c),vertical:document.documentElement.scrollHeight-innerHeight,horizontal:document.documentElement.scrollWidth-document.documentElement.clientWidth,visible:getComputedStyle(p).display!=='none'}})()`)
       assert.equal(m.horizontal,0)
       assert.deepEqual(m.natural,[985,977])
@@ -87,7 +84,6 @@ try {
   }
   await writeFile('node_modules/.tmp/auth-photo-'+phase+'.json',JSON.stringify(measurements,null,2))
   console.log('PASS: '+measurements.length+' auth-photo '+phase+' cases; natural dimensions/crop/fit recorded; form scroll reachable'+(phase==='after'?'; viewport photo and nonoverlapping overlays verified':''))
-  assert.deepEqual(fixture.errors,[])
   await send('Browser.close')
 } finally {
   for (const call of pending.values()) clearTimeout(call.timer)

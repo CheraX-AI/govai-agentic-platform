@@ -57,7 +57,3 @@ footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-i
   .login-method { flex-wrap: wrap; justify-content: center; }
   .human-check { flex-wrap: wrap; }
 }
-
-/* Login recovery link stays separate from the verification control. */
-.login-recovery-link { justify-content: flex-end; margin-bottom: 16px; }
-.login-recovery-link a { font-size: 12px; line-height: 1.5; }

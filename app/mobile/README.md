@@ -1,13 +1,21 @@
 # GovAI mobile
 
+## PR #22 conflict resolution - November 6, 2026
+
+The GA-55 feature folders, transparent artwork, logo positioning, authentication
+layout and natural registration scrolling are retained. Main's live native-session,
+registration, recovery-link and authenticated chat integrations now use the relocated
+authentication screens. Configure services using `.env.example`. Connected and
+standalone development demos remain separately guarded. Older dated UI-only and
+disconnected descriptions below record historical behavior.
+
 ## Repository availability
 
-The frontend screens, navigation, original Figma assets and guarded development
-launchers are included in the repository. Authentication, account recovery and
-chat still contain explicitly labelled development-only simulations; they do not
-authenticate users, send recovery messages or contact an AI service. Real
-backend/API integration, verified identity data, secure sessions and production
-chat behavior are still required.
+The repository includes the mobile screens, navigation, original Figma assets,
+guarded development demos and live authentication, registration, recovery and chat
+service integrations. Live flows require the configured backend services; demo
+flows remain explicitly simulated. Static checks do not verify backend availability
+or physical Android behavior.
 
 Optional mock regression and served-bundle diagnostic scripts are kept only in
 the development maintainer's local checkout and are excluded from Git. A GitHub
@@ -17,13 +25,107 @@ below; it should not expect the historical local checker commands to exist.
 
 ## GA-20 and GA-22 integration — November 5, 2026
 
-All screen components live directly in `pages/`; reusable presentation stays in
-`components/`, while entry points, configuration and shared layout helpers remain
-at the app root. The integration preserves the GA-20 authentication, registration,
-onboarding and Email/Phone recovery screens together with the GA-22 Chat Home,
-drawer and local conversation experience.
+Screens are grouped by feature in `pages/`. Shared layout, onboarding decoration,
+and authentication presentation are grouped separately in `components/`. Entry
+points, configuration and shared layout helpers remain at the app root. Login retains the approved GA-55 design. Live authentication, recovery, registration,
+and chat integrations from main are retained alongside the guarded development demos.
 
-Normal authentication, recovery and chat remain honestly disconnected. With both
+```text
+app/mobile/
+├── App.tsx                         # Existing startup and screen navigation
+├── index.ts                        # Expo entry point
+├── layout.ts                       # Shared layout and typography values
+├── pages/
+│   ├── onboarding/
+│   │   ├── WelcomeScreen.tsx
+│   │   ├── OnboardingMeetScreen.tsx
+│   │   ├── OnboardingDiscoverScreen.tsx
+│   │   ├── OnboardingAskScreen.tsx
+│   │   ├── OnboardingTrackScreen.tsx
+│   │   └── OnboardingPayScreen.tsx
+│   └── auth/
+│       ├── LoginScreen.tsx
+│       ├── registration/
+│       │   ├── RegisterScreen.tsx
+│       │   └── AccountCreatedPreviewScreen.tsx
+│       └── password-recovery/
+│           ├── ForgotPasswordScreen.tsx
+│           ├── CheckEmailPreviewScreen.tsx
+│           ├── CheckPhoneDemoScreen.tsx
+│           ├── ResetPasswordPreviewScreen.tsx
+│           └── PasswordUpdatedPreviewScreen.tsx
+├── components/
+│   ├── common/
+│   │   └── Screen.tsx
+│   ├── onboarding/
+│   │   └── OnboardingProgress.tsx
+│   └── auth/
+│       ├── AccountCreatedContent.tsx
+│       └── CheckEmailContent.tsx
+├── assets/                         # Original assets and provenance documentation
+├── email-previews/                 # Existing standalone email preview
+├── scripts/                        # Existing Expo and development launchers
+├── eslint.config.cjs
+└── .prettierrc.json
+```
+
+The GA-55 screens and components retain their original filenames and exports.
+Chat Home screens and shared chat components from main are retained alongside them.
+Only their parent folders changed. `App.tsx` imports and development-only
+`require`/type-import references point to the new locations. Relative component,
+layout and asset paths were updated in each moved module. Assets remain in place.
+Direct imports are retained without adding barrel files or changing preview guards.
+Authentication presentations still reuse the existing Login and Register asset
+exports; this cleanup does not extract or change those assets.
+
+### Source formatting and checks
+
+Run commands from `app/mobile` in Windows PowerShell:
+
+```powershell
+npm.cmd run format
+npm.cmd run format:check
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run export:android
+```
+
+Prettier uses two-space indentation, single quotes, LF line endings and a preferred
+100-character width. Long JSX props, statements and style objects are formatted
+consistently. Package imports precede relative imports, retaining order within each
+group. Concise comments explain keyboard/layout coordination, local validation,
+form clearing and development guards. Existing useful comments are preserved.
+
+ESLint uses the recommended JavaScript and TypeScript rules, with Node globals for
+launchers and React Native development globals for app code. Static asset requires
+and guarded preview requires remain allowed for Metro. Unused callback arguments
+remain allowed; unused variables are reported as warnings. Formatting and lint
+checks exclude generated output, caches and existing Git-ignored local diagnostics.
+`app.json` is excluded from formatting to preserve its original configuration file.
+
+The only dependency additions are development tools: ESLint, its recommended
+JavaScript config, TypeScript ESLint, Prettier and global-name definitions. Runtime
+dependencies and Expo/build configuration are unchanged.
+
+Verification of this structural cleanup on November 5, 2026: TypeScript, ESLint
+(zero warnings), Prettier and Git whitespace checks passed. A local reference audit
+resolved all 135 relative module/type/asset references with exact casing, including
+64 asset references, and found no local import cycles. A comparison of emitted
+syntax trees before and after cleanup preserved executable statements, JSX text,
+style values, navigation expressions and preview guards after normalizing module
+locations, import grouping and formatting parentheses. Existing locked package
+versions and integrity hashes were unchanged.
+
+The existing Android export completed with Hermes bytecode: 667 modules and 45
+assets in `dist/android`. The sandbox initially denied compiler execution; rerunning
+the same command with execution permission succeeded without build configuration
+changes. Metro emitted only color-environment warnings. This is an Expo bundle
+export, not a native APK build or physical-device test. There is no shared test
+command. The existing Git-ignored `scripts/check-phone-demo.cjs` was attempted but
+cannot run because its `check-register.cjs` helper is absent; local historical
+diagnostics remain untouched and may assume the previous folder structure.
+
+The connected development demo keeps authentication, recovery and chat simulated. With both
 `__DEV__` and `EXPO_PUBLIC_CONNECTED_UI_DEMO=1`, locally validated Login opens Chat
 Home, Register opens Account Created, and Forgot Password opens Check Email or
 Check Phone according to the selected method. Standalone previews keep their own

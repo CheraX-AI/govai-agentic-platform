@@ -5,6 +5,8 @@ these tests upload synthetic PDFs to the real test bucket first and store into
 the test collection (see conftest.py). Tests that embed call the real NVIDIA API.
 """
 
+import json
+
 import pytest
 
 from app.processing.pdf_extractor import DocumentSource, DocumentType
@@ -45,7 +47,7 @@ def folders(tmp_path, monkeypatch):
     pdf_dir = tmp_path / "pdfs"
     pdf_dir.mkdir()
 
-    return {"pdfs": pdf_dir, "env": tmp_path / ".env"}
+    return {"pdfs": pdf_dir, "output": tmp_path / "output", "env": tmp_path / ".env"}
 
 
 # Helper functions
@@ -58,6 +60,7 @@ def run_script(folders, *extra):
             "--department-id", "IRD",
             "--service-id", "TIN_REGISTRATION",
             "--document-type", "service_guideline",
+            "--output-dir", str(folders["output"]),
             "--env-file", str(folders["env"]),
             *extra,
         ]
@@ -117,6 +120,7 @@ def test_missing_key_fails_before_any_processing(store, test_settings, folders, 
 
     assert exit_code == script.EXIT_INVALID_INPUT
     assert "NVIDIA_API_KEY is required" in capsys.readouterr().err
+    assert not folders["output"].exists()
 
 
 def test_invalid_key_is_not_printed(store, test_settings, folders, capsys):
@@ -134,11 +138,11 @@ def test_invalid_key_is_not_printed(store, test_settings, folders, capsys):
     assert "sk-secret-value-123456" not in output.out + output.err
 
 
-def test_settings_come_from_the_env_file(store, test_settings, vector_store, chroma_settings, folders, monkeypatch):
+def test_settings_come_from_the_env_file(store, test_settings, folders, monkeypatch):
 
     # The script reads the model details from the --env-file it is given
     upload_pdf(store, folders, "tin_guide.pdf")
-    write_full_env(folders, test_settings, chroma_settings, EMBEDDING_BATCH_SIZE="7")
+    write_real_env_file(folders["env"], EMBEDDING_BATCH_SIZE="7", **storage_env_values(test_settings))
 
     # Record the settings passed to the real create_embedder
     received = []
@@ -150,25 +154,23 @@ def test_settings_come_from_the_env_file(store, test_settings, vector_store, chr
 
     monkeypatch.setattr(script, "create_embedder", recording_create_embedder)
 
-    assert run_script(folders) == script.EXIT_OK
+    assert run_script(folders, "--skip-vector-store") == script.EXIT_OK
     assert received[0].batch_size == 7
 
 
 # Processing
 
-def test_dry_run_only_extracts_and_chunks(store, test_settings, folders, capsys):
+def test_skip_embeddings_only_extracts_and_chunks(store, test_settings, folders):
 
-    # No NVIDIA key and no ChromaDB are needed for a dry run
+    # No NVIDIA key is needed when embedding is skipped
     upload_pdf(store, folders, "tin_guide.pdf")
     write_storage_only_env(folders, test_settings)
 
-    exit_code = run_script(folders, "--dry-run")
+    exit_code = run_script(folders, "--skip-embeddings")
 
-    output = capsys.readouterr().out
     assert exit_code == script.EXIT_OK
-    assert "Processed PDFs:  1" in output
-    assert "Model:" not in output
-    assert "ChromaDB:" not in output
+    assert len(list((folders["output"] / "chunks").iterdir())) == 1
+    assert not (folders["output"] / "embeddings").exists()
 
 
 def test_full_run_embeds_and_stores_every_stored_pdf(
@@ -184,6 +186,7 @@ def test_full_run_embeds_and_stores_every_stored_pdf(
 
     output = capsys.readouterr().out
     assert exit_code == script.EXIT_OK
+    assert len(list((folders["output"] / "embeddings").glob("*.embeddings.json"))) == 2
     assert "Chunks failed:   0" in output
     assert "ChromaDB:        2 documents" in output
     assert stored_document_ids(vector_store) == {first.document_id, second.document_id}
@@ -218,7 +221,7 @@ def test_documents_are_stored_as_published_by_default(store, test_settings, vect
         assert chunk.metadata["publication_status"] == "published"
 
 
-def test_status_change_updates_the_records(
+def test_status_change_updates_the_records_without_re_embedding(
     store, test_settings, vector_store, chroma_settings, folders, capsys
 ):
 
@@ -228,10 +231,12 @@ def test_status_change_updates_the_records(
     first_count = vector_store.count()
     capsys.readouterr()
 
-    # Mark the same document as a draft; the same chunk IDs are updated, not added
+    # Mark the same document as a draft; the text is unchanged, so its vectors are reused
     exit_code = run_script(folders, "--status", "draft")
 
+    output = capsys.readouterr().out
     assert exit_code == script.EXIT_OK
+    assert "Chunks embedded: 0" in output
     assert vector_store.count() == first_count
     for chunk in vector_store.get_document_chunks(stored.document_id):
         assert chunk.metadata["publication_status"] == "draft"
@@ -248,7 +253,7 @@ def test_unknown_status_is_rejected(folders, capsys):
 
 def test_running_again_creates_no_duplicates(store, test_settings, vector_store, chroma_settings, folders):
 
-    # The second run embeds again and upserts the same chunk IDs
+    # The second run reuses the saved embeddings and upserts the same chunk IDs
     upload_pdf(store, folders, "tin_guide.pdf")
     write_full_env(folders, test_settings, chroma_settings)
 
@@ -279,13 +284,43 @@ def test_revised_pdf_replaces_the_old_version(store, test_settings, vector_store
     assert first.object_key in store.list_documents(SERVICE_SOURCE)
 
 
-def test_rejected_key_gives_exit_code_one(store, test_settings, vector_store, chroma_settings, folders, capsys):
+def test_skip_vector_store_needs_no_chromadb(store, test_settings, folders, capsys):
+
+    # Real NVIDIA and storage settings, but no ChromaDB settings at all
+    upload_pdf(store, folders, "tin_guide.pdf")
+    write_real_env_file(folders["env"], **storage_env_values(test_settings))
+
+    exit_code = run_script(folders, "--skip-vector-store")
+
+    assert exit_code == script.EXIT_OK
+    assert "ChromaDB:" not in capsys.readouterr().out
+
+
+def test_every_chunk_points_to_its_stored_pdf(store, test_settings, folders):
+
+    stored = upload_pdf(store, folders, "tin_guide.pdf")
+    write_storage_only_env(folders, test_settings)
+
+    exit_code = run_script(folders, "--skip-embeddings")
+
+    with open(folders["output"] / "chunks" / f"{stored.document_id}.chunks.json", "r", encoding="utf-8") as file:
+        chunks = json.load(file)
+
+    # The object_key links each chunk (and later each ChromaDB record) to the original PDF
+    assert exit_code == script.EXIT_OK
+    assert chunks
+    for chunk in chunks:
+        assert chunk["metadata"]["object_key"] == stored.object_key
+        assert chunk["metadata"]["source_file"] == "tin_guide.pdf"
+
+
+def test_rejected_key_gives_exit_code_one(store, test_settings, folders, capsys):
 
     # NVIDIA rejects the key in the .env file
     upload_pdf(store, folders, "tin_guide.pdf")
-    write_full_env(folders, test_settings, chroma_settings, NVIDIA_API_KEY=TEST_NVIDIA_KEY)
+    write_real_env_file(folders["env"], NVIDIA_API_KEY=TEST_NVIDIA_KEY, **storage_env_values(test_settings))
 
-    exit_code = run_script(folders)
+    exit_code = run_script(folders, "--skip-vector-store")
 
     output = capsys.readouterr().out
     assert exit_code == script.EXIT_FAILURES
@@ -301,6 +336,7 @@ def test_no_stored_pdfs_does_nothing(store, test_settings, folders, capsys):
 
     assert exit_code == script.EXIT_OK
     assert "No stored PDF files found" in capsys.readouterr().out
+    assert not folders["output"].exists()
 
 
 # Invalid input and storage problems
@@ -313,7 +349,7 @@ def test_service_guideline_needs_service_id(folders, capsys):
             "--department-id", "IRD",
             "--document-type", "service_guideline",
             "--env-file", str(folders["env"]),
-            "--dry-run",
+            "--skip-embeddings",
         ]
     )
 
@@ -325,7 +361,7 @@ def test_missing_storage_settings_are_reported(folders, capsys):
 
     folders["env"].write_text("", encoding="utf-8")
 
-    exit_code = run_script(folders, "--dry-run")
+    exit_code = run_script(folders, "--skip-embeddings")
 
     assert exit_code == script.EXIT_INVALID_INPUT
     assert "OBJECT_STORAGE_ENDPOINT is required" in capsys.readouterr().err
@@ -341,6 +377,7 @@ def test_missing_chromadb_settings_are_reported(store, test_settings, folders, c
 
     assert exit_code == script.EXIT_INVALID_INPUT
     assert "CHROMA_HOST is required" in capsys.readouterr().err
+    assert not folders["output"].exists()
 
 
 def test_unreachable_chromadb_is_reported(store, test_settings, chroma_settings, folders, capsys):
@@ -353,13 +390,14 @@ def test_unreachable_chromadb_is_reported(store, test_settings, chroma_settings,
 
     assert exit_code == script.EXIT_INVALID_INPUT
     assert "ChromaDB is not reachable" in capsys.readouterr().err
+    assert not folders["output"].exists()
 
 
 def test_unreachable_storage_is_reported(test_settings, folders, capsys):
 
     write_storage_only_env(folders, test_settings, OBJECT_STORAGE_ENDPOINT=UNREACHABLE_ENDPOINT)
 
-    exit_code = run_script(folders, "--dry-run")
+    exit_code = run_script(folders, "--skip-embeddings")
 
     assert exit_code == script.EXIT_INVALID_INPUT
     assert "not reachable" in capsys.readouterr().err

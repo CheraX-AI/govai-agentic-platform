@@ -16,8 +16,7 @@ an alias or the Knowledge Agent integration. Use the core URL for this contract.
   cannot be supplied in the payload. Unsupported media/encodings are rejected.
 - Injected `chat.Agent` port; only the question is passed to the agent, without
   browser headers, access/refresh tokens, NIC, email or caller-selected identity.
-- JSON `{ "answer": "...", "sources": [{ "number": 1, "title": "...", "page": 3 }] }`;
-  `number` matches the `[n]` citation, `page` and `url` (HTTPS only) are optional;
+- JSON `{ "answer": "...", "sources": [{ "title": "...", "url": "..." }] }`;
   absent sources become `[]`. Returned content comes only from the agent. Basic
   empty/size/HTTPS-source bounds fail closed. These checks do not establish source
   truth or government authority. Detailed transport processing belongs to GA-66/67.
@@ -46,20 +45,12 @@ The real Python agent is not ready and its contract is not confirmed. By default
 **503 chat_unavailable**. No government answer or citation is fabricated.
 GA-66 live integration and GA-23 completion remain pending.
 
-## GA-66 agent transport configuration
+## GA-66 provisional transport configuration
 
-The agent is the agent-service chat API (`ai-platform/services/agent-service`,
-section "Chat API for core-service"): `POST /api/v1/chat`. The upstream payload is
-exactly `{"message":"..."}` and the response is
-`{"answer":"...","sources":[{"number":1,"title":"...","page":3,"url":"https://..."}]}`.
-
-- `number` (1-100, unique) and `title` are required; `page` (1-100000) and `url`
-  are optional and may be absent or null. A present `url` must be HTTPS. The agent
-  does not send `url` yet because its documents have no public citizen address.
-- Any other field, a missing number, or a non-integer number/page returns 502.
-- Missing/null sources normalize to `[]`.
-- The core request ID is sent upstream as `X-Request-ID`, so one question can be
-  followed through core, agent and knowledge-service logs.
+The proposed upstream POST payload is exactly `{"message":"..."}` and the response
+is `{"answer":"...","sources":[{"title":"...","url":"https://..."}]}`.
+Missing/null sources normalize to `[]`. Confirm these fields and the exact endpoint
+with the Python owner before enabling; no Python files were changed.
 
 - `CHAT_REQUEST_TIMEOUT`: total handler budget, default 30s (1s to 1m).
 - `KNOWLEDGE_AGENT_ENABLED`: false by default; true enables the adapter.

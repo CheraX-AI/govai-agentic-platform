@@ -13,13 +13,11 @@ func TestRecoveryRuntimeRoutesAndCORS(t *testing.T) {
 	if response := sendRecovery(disabled, "/api/v1/auth/forgot-password", `{"nic":"000000001V"}`); response.Code != 404 {
 		t.Fatal("disabled route registered")
 	}
-
 	router := NewRouterWithRecovery(nil, nil, nil, nil, nil, h)
 	response := sendRecovery(router, "/api/v1/auth/forgot-password", `{"nic":"000000001V"}`)
 	if response.Code != 202 || response.Header().Get("X-Request-ID") == "" {
 		t.Fatal("enabled route failed")
 	}
-
 	for _, tc := range []struct {
 		origin, method, header string
 		status                 int
@@ -38,11 +36,7 @@ func TestRecoveryRuntimeRoutesAndCORS(t *testing.T) {
 		if recorder.Code != tc.status {
 			t.Fatal("preflight status mismatch")
 		}
-
-		if tc.status == 204 &&
-			(recorder.Header().Get("Access-Control-Allow-Origin") != tc.origin ||
-				recorder.Header().Get("Access-Control-Allow-Credentials") != "" ||
-				!strings.Contains(recorder.Header().Get("Access-Control-Expose-Headers"), "Retry-After")) {
+		if tc.status == 204 && (recorder.Header().Get("Access-Control-Allow-Origin") != tc.origin || recorder.Header().Get("Access-Control-Allow-Credentials") != "" || !strings.Contains(recorder.Header().Get("Access-Control-Expose-Headers"), "Retry-After")) {
 			t.Fatal("incorrect recovery CORS policy")
 		}
 	}

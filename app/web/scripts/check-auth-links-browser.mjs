@@ -1,4 +1,3 @@
-import { installAuthFixtures } from './integration/authFixtures.mjs'
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -53,7 +52,6 @@ try {
   }
   await send('Runtime.enable')
   await send('Network.enable')
-  const fixture = await installAuthFixtures(socket, send)
 
 
   await send('DOM.enable');await send('CSS.enable')
@@ -61,7 +59,7 @@ try {
   assert.ok(contrast([163,15,45],[255,255,255])>=4.5);assert.ok(contrast([128,4,15],[255,255,255])>=4.5)
   const evidence=[]
   for(const [hash,selector,destination] of [['#/login','a[href="#/forgot-password"]','#/forgot-password'],['#/login','a[href="#/register"]','#/register'],['#/register','.create-account a','#/login'],['#/forgot-password','.recovery-back','#/login']]){
-    await send('Page.navigate',{url:'https://localhost:5173/'+hash});await delay(150);await send('Page.reload');await delay(350);await evaluate('document.fonts.ready')
+    await send('Page.navigate',{url:'http://127.0.0.1:5173/'+hash});await delay(150);await send('Page.reload');await delay(350);await evaluate('document.fonts.ready')
     const {root}=await send('DOM.getDocument');const {nodeId}=await send('DOM.querySelector',{nodeId:root.nodeId,selector})
     const styles=()=>evaluate('(()=>{const e=document.querySelector('+JSON.stringify(selector)+'),s=getComputedStyle(e);return {color:s.color,offset:s.textUnderlineOffset,thickness:s.textDecorationThickness,skip:s.textDecorationSkipInk,line:s.textDecorationLine,size:s.fontSize,outline:s.outlineStyle,width:s.outlineWidth,href:e.hash}})()')
     const normal=await styles();assert.equal(normal.color,'rgb(163, 15, 45)');assert.equal(normal.skip,'auto');assert.equal(normal.line,'underline');assert.equal(normal.href,destination);assert.ok(Math.abs(parseFloat(normal.offset)-parseFloat(normal.size)*.2)<.01);assert.ok(Math.abs(parseFloat(normal.thickness)-parseFloat(normal.size)*.08)<.01)
@@ -78,8 +76,8 @@ try {
     assert.ok(await evaluate('[...document.styleSheets].some(sheet=>[...sheet.cssRules].some(rule=>rule.selectorText===".login-layout a:not(.primary-button):visited"&&rule.style.color==="var(--brand)"))'),'explicit visited rule, same accessible brand colour; browser hides visited computed-state distinctions')
     evidence.push({hash,selector,normal,focused,visited})
   }
-  await send('Page.navigate',{url:'https://localhost:5173/#/check-email'});await delay(350);assert.equal(await evaluate('document.querySelector(".recovery-back").hash'),'#/login','confirmation primary action destination preserved')
-  assert.ok(apiRequests.every(url=>/^https:\/\/localhost:5001\/api\/v1\/web\/(session|csrf|refresh)$/.test(url)));assert.deepEqual(fixture.errors,[]);assert.deepEqual(exceptions,[])
+  await send('Page.navigate',{url:'http://127.0.0.1:5173/#/check-email'});await delay(350);assert.equal(await evaluate('document.querySelector(".recovery-back").hash'),'#/login','confirmation primary action destination preserved')
+  assert.deepEqual(apiRequests,[]);assert.deepEqual(exceptions,[])
   await writeFile('node_modules/.tmp/auth-link-states.json',JSON.stringify({normalContrast:contrast([163,15,45],[255,255,255]),hoverContrast:contrast([128,4,15],[255,255,255]),evidence},null,2))
   console.log('PASS: auth text-link normal/visited/hover/keyboard-focus styles, .2em offset/.08em thickness/skip-ink, >=4.5:1 contrast, Enter activation/destinations/history unchanged; primary action preserved')
   await send('Browser.close')

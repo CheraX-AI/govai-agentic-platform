@@ -14,7 +14,6 @@ type Authorization struct {
 
 var ErrAuthorizationConfig = errors.New("invalid authorization runtime configuration")
 
-// LoadAuthorization validates the trusted issuer, audience and clients.
 func LoadAuthorization() (Authorization, error) {
 	var c Authorization
 	switch os.Getenv("API_AUTH_ENABLED") {
@@ -25,13 +24,9 @@ func LoadAuthorization() (Authorization, error) {
 	default:
 		return c, ErrAuthorizationConfig
 	}
-
-	if os.Getenv("DATABASE_URL") == "" ||
-		os.Getenv("API_TLS_CERT_FILE") == "" ||
-		os.Getenv("API_TLS_KEY_FILE") == "" {
+	if os.Getenv("DATABASE_URL") == "" || os.Getenv("API_TLS_CERT_FILE") == "" || os.Getenv("API_TLS_KEY_FILE") == "" {
 		return Authorization{}, ErrAuthorizationConfig
 	}
-
 	c.Issuer = os.Getenv("API_AUTH_ISSUER")
 	c.Audience = os.Getenv("API_AUTH_AUDIENCE")
 	c.CAFile = os.Getenv("API_AUTH_CA_FILE")
@@ -41,13 +36,10 @@ func LoadAuthorization() (Authorization, error) {
 		if id == "" {
 			return Authorization{}, ErrAuthorizationConfig
 		}
-
 		c.Clients = append(c.Clients, id)
 	}
-
 	if c.Issuer == "" || c.Audience == "" {
 		return Authorization{}, ErrAuthorizationConfig
 	}
-
 	return c, nil
 }
