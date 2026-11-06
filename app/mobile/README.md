@@ -17,11 +17,105 @@ below; it should not expect the historical local checker commands to exist.
 
 ## GA-20 page organization and recovery flows — November 5, 2026
 
-All screen components now live directly in `pages/`; reusable presentation stays
-in `components/`, while entry points, configuration and shared layout helpers
-remain at the app root. The move changes only relative module and asset paths for
-existing screens. Login retains the approved GA-55 design and disconnected normal
-mode. No GA-22 Chat Home screen, route or Login-to-Chat behavior is included.
+Screens are grouped by feature in `pages/`. Shared layout, onboarding decoration,
+and authentication presentation are grouped separately in `components/`. Entry
+points, configuration and shared layout helpers remain at the app root. Login
+retains the approved GA-55 design and disconnected normal mode. No GA-22 Chat Home
+screen, route or Login-to-Chat behavior is included.
+
+```text
+app/mobile/
+├── App.tsx                         # Existing startup and screen navigation
+├── index.ts                        # Expo entry point
+├── layout.ts                       # Shared layout and typography values
+├── pages/
+│   ├── onboarding/
+│   │   ├── WelcomeScreen.tsx
+│   │   ├── OnboardingMeetScreen.tsx
+│   │   ├── OnboardingDiscoverScreen.tsx
+│   │   ├── OnboardingAskScreen.tsx
+│   │   ├── OnboardingTrackScreen.tsx
+│   │   └── OnboardingPayScreen.tsx
+│   └── auth/
+│       ├── LoginScreen.tsx
+│       ├── registration/
+│       │   ├── RegisterScreen.tsx
+│       │   └── AccountCreatedPreviewScreen.tsx
+│       └── password-recovery/
+│           ├── ForgotPasswordScreen.tsx
+│           ├── CheckEmailPreviewScreen.tsx
+│           ├── CheckPhoneDemoScreen.tsx
+│           ├── ResetPasswordPreviewScreen.tsx
+│           └── PasswordUpdatedPreviewScreen.tsx
+├── components/
+│   ├── common/
+│   │   └── Screen.tsx
+│   ├── onboarding/
+│   │   └── OnboardingProgress.tsx
+│   └── auth/
+│       ├── AccountCreatedContent.tsx
+│       └── CheckEmailContent.tsx
+├── assets/                         # Original assets and provenance documentation
+├── email-previews/                 # Existing standalone email preview
+├── scripts/                        # Existing Expo and development launchers
+├── eslint.config.cjs
+└── .prettierrc.json
+```
+
+All 14 screens and four components retain their original filenames and exports.
+Only their parent folders changed. `App.tsx` imports and development-only
+`require`/type-import references point to the new locations. Relative component,
+layout and asset paths were updated in each moved module. Assets remain in place.
+Direct imports are retained without adding barrel files or changing preview guards.
+Authentication presentations still reuse the existing Login and Register asset
+exports; this cleanup does not extract or change those assets.
+
+### Source formatting and checks
+
+Run commands from `app/mobile` in Windows PowerShell:
+
+```powershell
+npm.cmd run format
+npm.cmd run format:check
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run export:android
+```
+
+Prettier uses two-space indentation, single quotes, LF line endings and a preferred
+100-character width. Long JSX props, statements and style objects are formatted
+consistently. Package imports precede relative imports, retaining order within each
+group. Concise comments explain keyboard/layout coordination, local validation,
+form clearing and development guards. Existing useful comments are preserved.
+
+ESLint uses the recommended JavaScript and TypeScript rules, with Node globals for
+launchers and React Native development globals for app code. Static asset requires
+and guarded preview requires remain allowed for Metro. Unused callback arguments
+remain allowed; unused variables are reported as warnings. Formatting and lint
+checks exclude generated output, caches and existing Git-ignored local diagnostics.
+`app.json` is excluded from formatting to preserve its original configuration file.
+
+The only dependency additions are development tools: ESLint, its recommended
+JavaScript config, TypeScript ESLint, Prettier and global-name definitions. Runtime
+dependencies and Expo/build configuration are unchanged.
+
+Verification of this structural cleanup on November 5, 2026: TypeScript, ESLint
+(zero warnings), Prettier and Git whitespace checks passed. A local reference audit
+resolved all 135 relative module/type/asset references with exact casing, including
+64 asset references, and found no local import cycles. A comparison of emitted
+syntax trees before and after cleanup preserved executable statements, JSX text,
+style values, navigation expressions and preview guards after normalizing module
+locations, import grouping and formatting parentheses. Existing locked package
+versions and integrity hashes were unchanged.
+
+The existing Android export completed with Hermes bytecode: 667 modules and 45
+assets in `dist/android`. The sandbox initially denied compiler execution; rerunning
+the same command with execution permission succeeded without build configuration
+changes. Metro emitted only color-environment warnings. This is an Expo bundle
+export, not a native APK build or physical-device test. There is no shared test
+command. The existing Git-ignored `scripts/check-phone-demo.cjs` was attempted but
+cannot run because its `check-register.cjs` helper is absent; local historical
+diagnostics remain untouched and may assume the previous folder structure.
 
 Forgot Password now offers mutually exclusive Email and Phone choices, requires a
 nonblank NIC plus the explicitly simulated checkbox, and keeps normal mode honest

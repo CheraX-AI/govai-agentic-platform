@@ -1,7 +1,8 @@
 import type { PropsWithChildren } from 'react';
 import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { layout } from '../layout';
+
+import { layout } from '../../layout';
 
 type Props = PropsWithChildren<{
   scroll?: boolean;
@@ -10,8 +11,15 @@ type Props = PropsWithChildren<{
 }>;
 
 // Owns all content insets. Full-bleed backgrounds belong outside this component.
+
 // Forms should choose keyboard handling when implemented, not inherit it blindly.
-export function Screen({ children, scroll = true, horizontalPadding = layout.gutter, contentStyle }: Props) {
+
+export function Screen({
+  children,
+  scroll = true,
+  horizontalPadding = layout.gutter,
+  contentStyle,
+}: Props) {
   const insets = useSafeAreaInsets();
   const padding = {
     paddingTop: insets.top + 22,
@@ -24,7 +32,9 @@ export function Screen({ children, scroll = true, horizontalPadding = layout.gut
     <ScrollView style={styles.root} contentContainerStyle={[styles.container, padding]}>
       {content}
     </ScrollView>
-  ) : <View style={[styles.root, padding]}>{content}</View>;
+  ) : (
+    <View style={[styles.root, padding]}>{content}</View>
+  );
 }
 
 const styles = StyleSheet.create({

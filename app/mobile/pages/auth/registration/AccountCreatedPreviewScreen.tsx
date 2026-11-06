@@ -1,4 +1,4 @@
-import { AccountCreatedContent } from '../components/AccountCreatedContent';
+import { AccountCreatedContent } from '../../../components/auth/AccountCreatedContent';
 
 export function AccountCreatedPreviewScreen({ onExit }: { onExit: () => void }) {
   if (!__DEV__ || process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW !== '1') return null;
