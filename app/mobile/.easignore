@@ -52,4 +52,35 @@ dist/
 *.tgz
 *.log
 
+# Git history
+.git/
 
+# Expo and Metro caches
+.expo-shared/
+.metro-cache/
+
+# Android generated files
+android/.gradle/
+android/app/build/
+android/build/
+
+# iOS generated files
+ios/Pods/
+ios/build/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.old
+*.backup
+
+# Test reports
+test-results/
+playwright-report/
+
+# Large local cache
+.cache/

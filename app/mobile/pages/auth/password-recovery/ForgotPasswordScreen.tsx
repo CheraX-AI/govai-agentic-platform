@@ -1,3 +1,5 @@
+import { loadMobileApiConfig } from '../../../services/apiConfig';
+import { requestRecovery, type RecoveryReceipt } from '../../../services/recoveryApi';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -24,8 +26,6 @@ export const forgotPasswordAssets = {
   info: require('../../../assets/figma/forgot-password/info.png'),
 };
 const description = 'Enter your NIC number and choose a recovery method.';
-const disconnectedNotice =
-  'Password recovery is not connected. No request was sent and no password was changed.';
 type Viewport = { width: number; height: number };
 
 // Center the complete alpha-visible artwork, including the tagline, within the existing slot.
@@ -40,11 +40,21 @@ const logoArtworkCenter = {
 export function ForgotPasswordScreen({
   onLogin,
   onDemoValidated,
+  onRecoveryRequested,
 }: {
+  onRecoveryRequested?: (receipt: RecoveryReceipt) => void;
   onLogin: () => void;
   onDemoValidated?: (method: 'email' | 'phone') => void;
 }) {
   const transitioning = useRef(false);
+  const mounted = useRef(true);
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [nic, setNic] = useState('');
   const [method, setMethod] = useState<'email' | 'phone'>('email');
   const [submitted, setSubmitted] = useState(false);
@@ -250,6 +260,7 @@ export function ForgotPasswordScreen({
   // Clear local form values and dismiss the keyboard before leaving the screen.
 
   function leave() {
+    if (transitioning.current) return;
     input.current?.clear();
     setNic('');
     setMethod('email');
@@ -262,9 +273,9 @@ export function ForgotPasswordScreen({
     onLogin();
   }
 
-  // Require a NIC before the guarded recovery demo transition.
+  // Require a NIC before requesting recovery or opening the guarded demo.
 
-  function submit() {
+  async function submit() {
     if (transitioning.current) return;
     setSubmitted(true);
     if (!nic.trim()) {
@@ -286,12 +297,26 @@ export function ForgotPasswordScreen({
       onDemoValidated(method);
       return;
     }
+    if (method === 'phone') {
+      setNotice('Phone recovery is unavailable. Choose email.');
+      return;
+    }
+    transitioning.current = true;
+    setPending(true);
     Keyboard.dismiss();
-    setNotice(
-      method === 'phone'
-        ? 'Phone recovery preview is not available. No SMS was sent.'
-        : disconnectedNotice,
-    );
+    try {
+      const receipt = await requestRecovery(loadMobileApiConfig().authBaseUrl, nic);
+      if (mounted.current) {
+        setNotice('Request received. Check your registered email for a reset link.');
+        onRecoveryRequested?.(receipt);
+      }
+    } catch (error) {
+      if (mounted.current)
+        setNotice(error instanceof Error ? error.message : 'Recovery is unavailable.');
+    } finally {
+      transitioning.current = false;
+      if (mounted.current) setPending(false);
+    }
   }
   return (
     <View style={styles.root}>
@@ -433,6 +458,11 @@ export function ForgotPasswordScreen({
                       accessibilityRole="radio"
                       accessibilityLabel={option === 'email' ? 'Email' : 'Phone'}
                       accessibilityState={{ checked: method === option }}
+                      disabled={
+                        pending ||
+                        (option === 'phone' &&
+                          !(__DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1'))
+                      }
                       onPress={() => {
                         setMethod(option);
                         setNotice('');
@@ -460,6 +490,7 @@ export function ForgotPasswordScreen({
                   />
                   <TextInput
                     ref={input}
+                    editable={!pending}
                     value={nic}
                     onChangeText={setNic}
                     placeholder="Enter your NIC number"
@@ -490,12 +521,16 @@ export function ForgotPasswordScreen({
               )}
               <Pressable
                 onPress={submit}
+                disabled={pending}
+                accessibilityState={{ disabled: pending, busy: pending }}
                 accessibilityRole="button"
                 accessibilityLabel="Continue"
-                accessibilityHint="Checks the sample NIC. Recovery is disconnected."
+                accessibilityHint="Requests an email reset link."
                 style={styles.primary}
               >
-                <Text style={[typography.action, styles.primaryText]}>Continue</Text>
+                <Text style={[typography.action, styles.primaryText]}>
+                  {pending ? 'Sending...' : 'Continue'}
+                </Text>
               </Pressable>
               <View style={styles.loginRow}>
                 <Pressable

@@ -1,3 +1,4 @@
+import type { RecoveryReceipt } from '../../services/recoveryApi';
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -25,20 +26,31 @@ export function CheckEmailContent({
   onBack,
   onDifferentNic,
   onLogin,
+  receipt,
 }: {
-  mode: 'standalone' | 'demo';
+  receipt?: RecoveryReceipt;
+  mode: 'standalone' | 'demo' | 'live';
   onBack: () => void;
   onDifferentNic: () => void;
   onLogin: () => void;
 }) {
   if (
-    !__DEV__ ||
-    (mode === 'demo'
-      ? process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1'
-      : process.env.EXPO_PUBLIC_CHECK_EMAIL_PREVIEW !== '1')
+    mode !== 'live' &&
+    (!__DEV__ ||
+      (mode === 'demo'
+        ? process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO !== '1'
+        : process.env.EXPO_PUBLIC_CHECK_EMAIL_PREVIEW !== '1'))
   )
     return null;
-  return <ContentBody onBack={onBack} onDifferentNic={onDifferentNic} onLogin={onLogin} />;
+  return (
+    <ContentBody
+      receipt={receipt}
+      live={mode === 'live'}
+      onBack={onBack}
+      onDifferentNic={onDifferentNic}
+      onLogin={onLogin}
+    />
+  );
 }
 
 // Fit the email preview card around safe areas without changing the original logo crop.
@@ -47,7 +59,11 @@ function ContentBody({
   onBack,
   onDifferentNic,
   onLogin,
+  receipt,
+  live,
 }: {
+  receipt?: RecoveryReceipt;
+  live?: boolean;
   onBack: () => void;
   onDifferentNic: () => void;
   onLogin: () => void;
@@ -207,9 +223,19 @@ function ContentBody({
                 <Text accessibilityRole="header" style={styles.heading}>
                   Check your email
                 </Text>
-                <Text style={styles.description}>Demo preview — no email was sent.</Text>
-                <Text style={styles.description}>Sample reset-link destination:</Text>
-                <Text style={styles.sampleEmail}>sample@example.test</Text>
+                <Text style={styles.description}>
+                  {live
+                    ? 'If an eligible account exists, a reset link will be sent to its registered email.'
+                    : 'Demo preview - no email was sent.'}
+                </Text>
+                <Text style={styles.description}>
+                  {live ? 'Registered email:' : 'Sample reset-link destination:'}
+                </Text>
+                <Text style={styles.sampleEmail}>
+                  {live
+                    ? (receipt?.maskedEmail ?? 'Check your registered email inbox.')
+                    : 'sample@example.test'}
+                </Text>
               </View>
               <View style={styles.infoPanel}>
                 <Image source={info} accessible={false} style={styles.infoIcon} />
@@ -219,7 +245,7 @@ function ContentBody({
                 onPress={onLogin}
                 accessibilityRole="button"
                 accessibilityLabel="Back to log in"
-                accessibilityHint="Returns to a fresh Login form. No email was sent."
+                accessibilityHint="Returns to the Login form."
                 style={styles.primary}
               >
                 <Text style={[typography.action, styles.primaryText]}>Back to log in</Text>
@@ -238,7 +264,11 @@ function ContentBody({
                     <Text style={styles.link}>Resend link</Text>
                   </Pressable>
                 </View>
-                <Text style={styles.caption}>Unavailable in demo</Text>
+                <Text style={styles.caption}>
+                  {live
+                    ? 'Return to Forgot Password to request another link.'
+                    : 'Unavailable in demo'}
+                </Text>
                 <View style={styles.footerActions}>
                   <Pressable
                     onPress={onDifferentNic}

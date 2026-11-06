@@ -1,3 +1,5 @@
+import { loadMobileApiConfig } from '../../../services/apiConfig';
+import { resetPassword } from '../../../services/recoveryApi';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -27,9 +29,27 @@ export function ResetPasswordPreviewScreen({ onExit }: { onExit: () => void }) {
   return <ResetPasswordForm onExit={onExit} />;
 }
 
-// Keep preview passwords local and reveal validation errors above the keyboard.
+// Keep passwords transient and reveal validation errors above the keyboard.
 
-function ResetPasswordForm({ onExit }: { onExit: () => void }) {
+export function ResetPasswordForm({
+  onExit,
+  token,
+  onComplete,
+}: {
+  onExit: () => void;
+  token?: string;
+  onComplete?: () => Promise<void>;
+}) {
+  const busy = useRef(false);
+  const mounted = useRef(true);
+  const [pending, setPending] = useState(false);
+  const [complete, setComplete] = useState(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [values, setValues] = useState(['', '']);
   const [revealed, setRevealed] = useState([false, false]);
   const [submitted, setSubmitted] = useState(false);
@@ -245,6 +265,7 @@ function ResetPasswordForm({ onExit }: { onExit: () => void }) {
   // Clear local form values and dismiss the keyboard before leaving the screen.
 
   function leave() {
+    if (busy.current) return;
     inputs.current.forEach(input => input?.clear());
     setValues(['', '']);
     setRevealed([false, false]);
@@ -266,9 +287,14 @@ function ResetPasswordForm({ onExit }: { onExit: () => void }) {
     return () => subscription.remove();
   }, [onExit]);
 
-  // Validate matching preview passwords without sending a recovery request.
+  // Validate matching passwords before submitting a live reset token.
 
-  function submit() {
+  async function submit() {
+    if (busy.current) return;
+    if (complete) {
+      leave();
+      return;
+    }
     setSubmitted(true);
     setNotice('');
     const invalid =
@@ -278,7 +304,29 @@ function ResetPasswordForm({ onExit }: { onExit: () => void }) {
       return;
     }
     Keyboard.dismiss();
-    setNotice(disconnectedNotice);
+    if (!token) {
+      setNotice(disconnectedNotice);
+      return;
+    }
+    busy.current = true;
+    setPending(true);
+    try {
+      await resetPassword(loadMobileApiConfig().authBaseUrl, token, values[0], values[1]);
+      await onComplete?.();
+      if (mounted.current) {
+        setComplete(true);
+        setValues(['', '']);
+        setSubmitted(false);
+        inputs.current.forEach(input => input?.clear());
+        setNotice('Password updated. Return to Log in with your new password.');
+      }
+    } catch (error) {
+      if (mounted.current)
+        setNotice(error instanceof Error ? error.message : 'Password reset is unavailable.');
+    } finally {
+      busy.current = false;
+      if (mounted.current) setPending(false);
+    }
   }
   return (
     <View style={styles.root}>
@@ -379,7 +427,9 @@ function ResetPasswordForm({ onExit }: { onExit: () => void }) {
               }}
             >
               <Text style={styles.previewNotice}>
-                Disconnected development preview. Use sample passwords only.
+                {token
+                  ? 'Choose your new password. This reset link can be used once.'
+                  : 'Disconnected development preview. Use sample passwords only.'}
               </Text>
               <View style={styles.cardHeader}>
                 <Text accessibilityRole="header" style={styles.heading}>
@@ -443,6 +493,7 @@ function ResetPasswordForm({ onExit }: { onExit: () => void }) {
                         ref={node => {
                           inputs.current[index] = node;
                         }}
+                        editable={!pending && !complete}
                         value={values[index]}
                         onChangeText={value => {
                           setValues(previous =>
@@ -507,11 +558,15 @@ function ResetPasswordForm({ onExit }: { onExit: () => void }) {
               )}
               <Pressable
                 onPress={submit}
+                disabled={pending}
+                accessibilityState={{ disabled: pending, busy: pending }}
                 accessibilityRole="button"
-                accessibilityLabel="Reset password. Validate sample entries only; password recovery is disconnected."
+                accessibilityLabel={complete ? 'Return to Log in' : 'Reset password'}
                 style={styles.primary}
               >
-                <Text style={[typography.action, styles.primaryText]}>Reset password</Text>
+                <Text style={[typography.action, styles.primaryText]}>
+                  {pending ? 'Updating...' : complete ? 'Return to Log in' : 'Reset password'}
+                </Text>
               </Pressable>
             </View>
             <Text style={styles.country}>SRI LANKA</Text>

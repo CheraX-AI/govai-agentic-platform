@@ -1,3 +1,6 @@
+import { randomUUID } from 'expo-crypto';
+import { loadMobileApiConfig } from '../../../services/apiConfig';
+import { registerCitizen } from '../../../services/registrationApi';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -84,14 +87,24 @@ export function RegisterScreen({
   onDemoValidated?: () => void;
 }) {
   const transitioning = useRef(false);
-  // UI-only values stay in this mounted screen. No storage, logs or requests.
+  const mounted = useRef(true);
+  const operation = useRef<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [received, setReceived] = useState(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // Credentials remain transient in this mounted screen.
 
   const [values, setValues] = useState<Values>(emptyValues);
   const [submitted, setSubmitted] = useState(false);
   const [agreement, setAgreement] = useState(false);
   const [revealed, setRevealed] = useState({ password: false, confirmPassword: false });
   const [notice, setNotice] = useState(
-    'Registration is not connected yet. No account will be created.',
+    'Use your email and an international phone number, including country code.',
   );
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [formHeight, setFormHeight] = useState(0);
@@ -256,6 +269,7 @@ export function RegisterScreen({
   // Clear local form values and dismiss the keyboard before leaving the screen.
 
   function leave() {
+    if (transitioning.current) return;
     Object.values(inputRefs.current).forEach(input => input?.clear());
     setValues(emptyValues());
     setSubmitted(false);
@@ -265,10 +279,14 @@ export function RegisterScreen({
     onLogin();
   }
 
-  // Validate required fields and matching passwords before the guarded demo transition.
+  // Validate required fields before registration or the guarded demo.
 
-  function submit() {
+  async function submit() {
     if (transitioning.current) return;
+    if (received) {
+      leave();
+      return;
+    }
     setSubmitted(true);
     const invalid = fields.find(field =>
       field.key === 'password' || field.key === 'confirmPassword'
@@ -298,10 +316,39 @@ export function RegisterScreen({
     }
     // Agreement is optional: approved Terms and consent validation are pending.
 
+    transitioning.current = true;
+    setPending(true);
     Keyboard.dismiss();
-    setNotice(
-      'Registration is not connected yet. No registration request was sent. No account was created.',
-    );
+    try {
+      const config = loadMobileApiConfig();
+      operation.current ??= randomUUID();
+      await registerCitizen(
+        config.authBaseUrl,
+        {
+          full_name: values.fullName.trim(),
+          nic: values.nic.trim(),
+          mobile_number: values.phone.trim(),
+          email: values.email.trim(),
+          password: values.password,
+        },
+        operation.current,
+      );
+      if (mounted.current) {
+        setReceived(true);
+        setNotice(
+          'Request received. If eligible, check your email for the verification link, then return to Log in.',
+        );
+        setValues(emptyValues());
+        setSubmitted(false);
+        Object.values(inputRefs.current).forEach(input => input?.clear());
+      }
+    } catch (error) {
+      if (mounted.current)
+        setNotice(error instanceof Error ? error.message : 'Registration is unavailable.');
+    } finally {
+      transitioning.current = false;
+      if (mounted.current) setPending(false);
+    }
   }
 
   return (
@@ -452,10 +499,12 @@ export function RegisterScreen({
                             if (node) inputRefs.current[field.key] = node;
                             else delete inputRefs.current[field.key];
                           }}
+                          editable={!pending && !received}
                           value={values[field.key]}
-                          onChangeText={value =>
-                            setValues(previous => ({ ...previous, [field.key]: value }))
-                          }
+                          onChangeText={value => {
+                            operation.current = null;
+                            setValues(previous => ({ ...previous, [field.key]: value }));
+                          }}
                           placeholder={field.placeholder}
                           placeholderTextColor="#666666"
                           accessibilityLabel={`${field.label}. Required.${errors[field.key] ? ' ' + errors[field.key] : ''}`}
@@ -552,10 +601,14 @@ export function RegisterScreen({
                 <Pressable
                   onPress={submit}
                   accessibilityRole="button"
-                  accessibilityLabel="Sign up. Checks entries only; registration is not connected."
+                  disabled={pending}
+                  accessibilityState={{ disabled: pending, busy: pending }}
+                  accessibilityLabel={received ? 'Return to Log in' : 'Sign up'}
                   style={styles.primary}
                 >
-                  <Text style={[typography.action, styles.primaryText]}>Sign up</Text>
+                  <Text style={[typography.action, styles.primaryText]}>
+                    {pending ? 'Submitting...' : received ? 'Return to Log in' : 'Sign up'}
+                  </Text>
                   <Image source={registerAssets.next} accessible={false} style={styles.nextIcon} />
                 </Pressable>
                 <View style={styles.loginRow}>
