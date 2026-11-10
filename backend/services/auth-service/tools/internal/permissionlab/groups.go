@@ -397,11 +397,12 @@ func (l *lab) groupExperiment(ctx context.Context) error {
 		panic(errSafe)
 	}
 
-	if status == 200 {
+	switch status {
+	case 200:
 		l.result("GROUP_OTHER_OPERATION_READ", "FAIL_UNSAFE")
-	} else if status == 403 {
+	case 403:
 		l.result("GROUP_OTHER_OPERATION_READ", "PASS")
-	} else {
+	default:
 		panic(errSafe)
 	}
 
@@ -449,11 +450,12 @@ func (l *lab) groupInvisible(ctx context.Context, id, token, subject, name strin
 		panic(errSafe)
 	}
 
-	if status == 403 {
+	switch status {
+	case 403:
 		l.result(id+"_READ", "PASS")
-	} else if status == 200 {
+	case 200:
 		l.result(id+"_READ", "FAIL_UNSAFE")
-	} else {
+	default:
 		panic(errSafe)
 	}
 

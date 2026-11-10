@@ -13,11 +13,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
 )
 
-func question(t *testing.T) Question {
+func question(t *testing.T) chatcontract.Question {
 	t.Helper()
-	q, err := Parse(strings.NewReader(`{"message":"தமிழ் synthetic question"}`))
+	q, err := chatcontract.Parse(strings.NewReader(`{"message":"தமிழ் synthetic question"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +232,7 @@ func TestHTTPAgentResponseFailures(t *testing.T) {
 		{"invalid", 200, "application/json", `{"answer":`, ErrResponse},
 		{"empty", 200, "application/json", `{"answer":" "}`, ErrResponse},
 		{"duplicate", 200, "application/json", `{"answer":"a","answer":"b"}`, ErrResponse},
-		{"overflow", 200, "application/json", strings.Repeat("x", MaxResponseBytes+1), ErrResponse},
+		{"overflow", 200, "application/json", strings.Repeat("x", chatcontract.MaxResponseBytes+1), ErrResponse},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var count atomic.Int32
@@ -256,57 +258,5 @@ func TestHTTPAgentResponseFailures(t *testing.T) {
 				t.Fatal("response failure not safely handled")
 			}
 		})
-	}
-}
-
-func TestDecodeReplyContract(t *testing.T) {
-	for _, value := range []string{
-		`{"answer":"synthetic"}`,
-		`{"answer":"synthetic","sources":null}`,
-		`{"answer":"synthetic","sources":[]}`,
-	} {
-		reply, err := DecodeReply([]byte(value))
-		if err != nil || reply.Sources == nil || len(reply.Sources) != 0 {
-			t.Fatal("optional sources failed")
-		}
-	}
-	// The shape agent-service sends: number and title, page when known, no URL yet.
-	reply, err := DecodeReply(
-		[]byte(
-			`{"answer":"synthetic [2]","sources":[{"number":2,"title":"Synthetic guide","page":3},{"number":4,"title":"Other","page":null,"url":null}]}`,
-		),
-	)
-	if err != nil ||
-		len(reply.Sources) != 2 ||
-		reply.Sources[0] != (Source{Number: 2, Title: "Synthetic guide", Page: 3}) ||
-		reply.Sources[1] != (Source{Number: 4, Title: "Other"}) {
-		t.Fatal("agent-service source shape rejected or changed")
-	}
-
-	for _, value := range []string{`null`,
-		`[]`,
-		`{"Answer":"wrong case"}`,
-		`{"answer":null}`,
-		`{"answer":"synthetic","identity":"caller"}`,
-		`{"answer":"synthetic","sources":{}}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a","url":"https://source.test","url":"https://other.test"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a","url":"http://source.test"}]}`,
-		`{"answer":"synthetic","sources":[{"title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1}]}`,
-		`{"answer":"synthetic","sources":[{"number":0,"title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":-1,"title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1.5,"title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1e1,"title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":"1","title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":101,"title":"a"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a"},{"number":1,"title":"b"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a","page":0}]}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a","page":"3"}]}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a","url":""}]}`,
-		`{"answer":"synthetic","sources":[{"number":1,"title":"a","document_title":"extra"}]}`,
-		`{"answer":"\ud800"}`, `{"answer":"synthetic"}{}`} {
-		if _, err := DecodeReply([]byte(value)); !errors.Is(err, ErrResponse) {
-			t.Fatal("invalid agent contract accepted")
-		}
 	}
 }

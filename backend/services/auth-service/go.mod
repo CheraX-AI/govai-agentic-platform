@@ -3,6 +3,7 @@ module github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service
 go 1.26.0
 
 require (
+	github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract v0.0.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.7.6
@@ -50,3 +51,5 @@ require (
 )
 
 replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn => ../../pkg/authn
+
+replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract => ../../pkg/chatcontract

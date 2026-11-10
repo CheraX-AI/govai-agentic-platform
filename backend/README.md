@@ -7,6 +7,9 @@ The [core service](services/core-service/README.md) now provides the GA-65 HTTPS
 Reusable JWT/Gin authorization is in [pkg/authn](pkg/authn/README.md). Run its tests
 separately from the auth-service module; the service uses a local module replace.
 
+Both Go services use [pkg/chatcontract](pkg/chatcontract) for chat JSON and
+validation. Run its tests from that directory with `go test ./...`.
+
 Authentication PostgreSQL setup: [local database guide](../infrastructure/postgres/auth/README.md).
 It uses an isolated database, encrypted profiles, versioned migrations and a
 restricted runtime user. [Design and verification](services/auth-service/docs/GA-48-postgresql.md).

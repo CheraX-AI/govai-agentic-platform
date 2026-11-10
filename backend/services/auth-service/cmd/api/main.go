@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -145,7 +145,7 @@ func run() error {
 		}
 
 		var closeIdentifiers func()
-		identifierResolver, closeIdentifiers, err = application.NICLogin(regCfg, store)
+		identifierResolver, closeIdentifiers, err = wiring.NICLogin(regCfg, store)
 		if err != nil {
 			return err
 		}
@@ -154,10 +154,10 @@ func run() error {
 	}
 
 	// Build each enabled feature with its required dependencies.
-	var registrationHandler *handler.RegistrationHandler
+	var registrationHandler *httpapi.RegistrationHandler
 	if regCfg.Enabled {
 		var closeRegistration func()
-		registrationHandler, closeRegistration, err = application.Registration(regCfg, store)
+		registrationHandler, closeRegistration, err = wiring.Registration(regCfg, store)
 		if err != nil {
 			return err
 		}
@@ -166,11 +166,11 @@ func run() error {
 		slog.Info("registration route enabled with HTTPS")
 	}
 
-	var loginHandler *handler.LoginHandler
-	var sessionHandler *handler.NativeSessionHandler
+	var loginHandler *httpapi.LoginHandler
+	var sessionHandler *httpapi.NativeSessionHandler
 	if loginCfg.Enabled {
 		var closeLogin func()
-		loginHandler, sessionHandler, closeLogin, err = application.LoginWithSessions(loginCfg, store, identifierResolver)
+		loginHandler, sessionHandler, closeLogin, err = wiring.LoginWithSessions(loginCfg, store, identifierResolver)
 		if err != nil {
 			return err
 		}
@@ -179,10 +179,10 @@ func run() error {
 		slog.Info("mobile login route enabled with HTTPS")
 	}
 
-	var protected *handler.Protected
+	var protected *httpapi.Protected
 	if authorizationCfg.Enabled {
 		var closeAuthorization func()
-		protected, closeAuthorization, err = application.Authorization(authorizationCfg, store)
+		protected, closeAuthorization, err = wiring.Authorization(authorizationCfg, store)
 		if err != nil {
 			return err
 		}
@@ -191,7 +191,7 @@ func run() error {
 		slog.Info("JWT authorization routes enabled with HTTPS")
 	}
 
-	var webHandler *handler.WebSessionHandler
+	var webHandler *httpapi.WebSessionHandler
 	if webCfg.Enabled {
 		var closeWeb func()
 		var fenceKeys [][]byte
@@ -199,7 +199,7 @@ func run() error {
 			fenceKeys = append(fenceKeys, recoveryCfg.FenceKey)
 		}
 
-		webHandler, closeWeb, err = application.WebWithIdentifiers(ctx, webCfg, pool, store, identifierResolver, fenceKeys...)
+		webHandler, closeWeb, err = wiring.WebWithIdentifiers(ctx, webCfg, pool, store, identifierResolver, fenceKeys...)
 		if err != nil {
 			return err
 		}
@@ -213,16 +213,16 @@ func run() error {
 		return err
 	}
 
-	closeChat, err := application.WebChat(chatCfg, webHandler)
+	closeChat, err := wiring.WebChat(chatCfg, webHandler)
 	if err != nil {
 		return err
 	}
 
 	defer closeChat()
-	var recoveryHandler *handler.RecoveryHandler
+	var recoveryHandler *httpapi.RecoveryHandler
 	if recoveryCfg.Enabled {
 		var closeRecovery func()
-		recoveryHandler, closeRecovery, err = application.Recovery(ctx, recoveryCfg, regCfg, webCfg, pool, store)
+		recoveryHandler, closeRecovery, err = wiring.Recovery(ctx, recoveryCfg, regCfg, webCfg, pool, store)
 		if err != nil {
 			return err
 		}
@@ -232,7 +232,15 @@ func run() error {
 	}
 
 	// Mount the configured routes and database readiness check.
-	router := handler.NewRouterWithRecovery(registrationHandler, loginHandler, protected, sessionHandler, webHandler, recoveryHandler, cfg.CORSOrigins...)
+	router := httpapi.NewRouter(httpapi.RouterOptions{
+		CORSOrigins:    cfg.CORSOrigins,
+		Registration:   registrationHandler,
+		Login:          loginHandler,
+		Protected:      protected,
+		NativeSessions: sessionHandler,
+		WebSessions:    webHandler,
+		Recovery:       recoveryHandler,
+	})
 	if pool != nil {
 		router.GET("/api/ready", func(c *gin.Context) {
 			c.Header("Cache-Control", "no-store")

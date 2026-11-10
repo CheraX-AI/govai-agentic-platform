@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn v0.0.0
+	github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/joho/godotenv v1.5.1
 )
@@ -44,3 +45,5 @@ require (
 )
 
 replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn => ../../pkg/authn
+
+replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract => ../../pkg/chatcontract

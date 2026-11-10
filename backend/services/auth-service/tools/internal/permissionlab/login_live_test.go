@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
 	"github.com/gin-gonic/gin"
 )
 
@@ -168,7 +168,7 @@ func (l *lab) loginScenarioWithSessions(ctx context.Context, caFile string, sess
 			client["standardFlowEnabled"] == false &&
 			client["directAccessGrantsEnabled"] == true,
 	)
-	h, closeLogin, e := application.Login(
+	h, closeLogin, e := wiring.Login(
 		config.Login{
 			Enabled:  true,
 			Provider: login.KeycloakConfig{Issuer: issuer, ClientID: "lab-login-mobile", ClientSecret: secret, Audience: "govai-api"},
@@ -182,7 +182,7 @@ func (l *lab) loginScenarioWithSessions(ctx context.Context, caFile string, sess
 	}
 
 	defer closeLogin()
-	protected, closeAuthorization, e := application.Authorization(
+	protected, closeAuthorization, e := wiring.Authorization(
 		config.Authorization{
 			Enabled:  true,
 			Issuer:   issuer,
@@ -200,7 +200,7 @@ func (l *lab) loginScenarioWithSessions(ctx context.Context, caFile string, sess
 	previous := gin.Mode()
 	gin.SetMode(gin.ReleaseMode)
 	defer gin.SetMode(previous)
-	server := httptest.NewTLSServer(handler.NewRouterWithProtected(nil, h, protected))
+	server := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{Login: h, Protected: protected}))
 	defer server.Close()
 	httpClient := server.Client()
 	httpClient.Timeout = 10 * time.Second
