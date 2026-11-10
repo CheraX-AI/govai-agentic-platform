@@ -15,6 +15,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
 )
 
 // HTTPConfig is server-owned. URL is the exact POST endpoint, not client input.
@@ -155,23 +157,23 @@ func (*HTTPAgent) LogValue() slog.Value { return slog.StringValue("[REDACTED]") 
 
 func (a *HTTPAgent) Close() { a.transport.CloseIdleConnections() }
 
-func (a *HTTPAgent) Ask(ctx context.Context, q Question) (Reply, error) {
+func (a *HTTPAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontract.Reply, error) {
 	// The injected port can be called independently of HTTP validation.
 	encoded, err := json.Marshal(map[string]string{"message": q.Text()})
 	if err != nil {
-		return Reply{}, ErrInvalid
+		return chatcontract.Reply{}, chatcontract.ErrInvalid
 	}
 
-	canonical, err := Parse(bytes.NewReader(encoded))
+	canonical, err := chatcontract.Parse(bytes.NewReader(encoded))
 	if err != nil || canonical.Text() != q.Text() {
-		return Reply{}, ErrInvalid
+		return chatcontract.Reply{}, chatcontract.ErrInvalid
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, a.cfg.Timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.cfg.URL, bytes.NewReader(encoded))
 	if err != nil {
-		return Reply{}, ErrUnavailable
+		return chatcontract.Reply{}, ErrUnavailable
 	}
 
 	req.GetBody = nil
@@ -188,19 +190,19 @@ func (a *HTTPAgent) Ask(ctx context.Context, q Question) (Reply, error) {
 	response, err := a.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return Reply{}, ctx.Err()
+			return chatcontract.Reply{}, ctx.Err()
 		}
 
-		return Reply{}, ErrUnavailable
+		return chatcontract.Reply{}, ErrUnavailable
 	}
 
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		if response.StatusCode == 429 || response.StatusCode >= 500 {
-			return Reply{}, ErrUnavailable
+			return chatcontract.Reply{}, ErrUnavailable
 		}
 
-		return Reply{}, ErrResponse
+		return chatcontract.Reply{}, ErrResponse
 	}
 
 	media, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
@@ -208,28 +210,33 @@ func (a *HTTPAgent) Ask(ctx context.Context, q Question) (Reply, error) {
 		media != "application/json" ||
 		len(response.Header.Values("Content-Type")) != 1 ||
 		response.Header.Get("Content-Encoding") != "" ||
-		response.ContentLength > MaxResponseBytes {
-		return Reply{}, ErrResponse
+		response.ContentLength > chatcontract.MaxResponseBytes {
+		return chatcontract.Reply{}, ErrResponse
 	}
 
 	for key, value := range params {
 		if key != "charset" || !strings.EqualFold(value, "utf-8") {
-			return Reply{}, ErrResponse
+			return chatcontract.Reply{}, ErrResponse
 		}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, chatcontract.MaxResponseBytes+1))
 	if err != nil {
 		if ctx.Err() != nil {
-			return Reply{}, ctx.Err()
+			return chatcontract.Reply{}, ctx.Err()
 		}
 
-		return Reply{}, ErrUnavailable
+		return chatcontract.Reply{}, ErrUnavailable
 	}
 
-	if len(body) > MaxResponseBytes {
-		return Reply{}, ErrResponse
+	if len(body) > chatcontract.MaxResponseBytes {
+		return chatcontract.Reply{}, ErrResponse
 	}
 
-	return DecodeReply(body)
+	reply, err := chatcontract.DecodeReply(body)
+	if err != nil {
+		return chatcontract.Reply{}, ErrResponse
+	}
+
+	return reply, nil
 }

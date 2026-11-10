@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
 	"github.com/gin-gonic/gin"
 )
@@ -197,9 +198,9 @@ func NewRouter(
 			}
 
 			defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
-			question, err := chat.Parse(c.Request.Body)
+			question, err := chatcontract.Parse(c.Request.Body)
 			if err != nil {
-				if errors.Is(err, chat.ErrTooLarge) {
+				if errors.Is(err, chatcontract.ErrTooLarge) {
 					fail(c, 413, "request_too_large", "Question exceeds the request limit.")
 				} else {
 					fail(c, 400, "invalid_message", "Provide a nonempty message of at most 4000 characters.")
@@ -227,7 +228,7 @@ func NewRouter(
 				return
 			}
 
-			encoded, err := chat.Encode(reply)
+			encoded, err := chatcontract.Encode(reply)
 			if err != nil {
 				fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")
 				return

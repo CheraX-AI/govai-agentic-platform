@@ -911,11 +911,12 @@ func (l *lab) experiment(ctx context.Context) error {
 				panic(errSafe)
 			}
 
-			if status == 201 {
+			switch status {
+			case 201:
 				l.result("SCOPED_CREATE", "PASS")
-			} else if status == 403 {
+			case 403:
 				l.result("SCOPED_CREATE", "FAIL_REQUIRED")
-			} else {
+			default:
 				panic(errSafe)
 			}
 
