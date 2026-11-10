@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
 )
 
 func TestRefreshLive(t *testing.T) {
@@ -52,7 +52,7 @@ func (l *lab) refreshScenario(
 	client := decode[object](l.must(ctx, "GET", p+"/clients/"+clientID, nil, 200))
 	client["attributes"] = object{"use.refresh.tokens": "true", "access.token.lifespan": "300"}
 	l.must(ctx, "PUT", p+"/clients/"+clientID, client, 204)
-	h, sessions, closeLogin, err := application.LoginWithSessions(
+	h, sessions, closeLogin, err := wiring.LoginWithSessions(
 		config.Login{
 			Enabled: true,
 			Provider: login.KeycloakConfig{
@@ -72,7 +72,7 @@ func (l *lab) refreshScenario(
 	}
 
 	defer closeLogin()
-	server := httptest.NewTLSServer(handler.NewRouterWithSessions(nil, h, nil, sessions))
+	server := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{Login: h, NativeSessions: sessions}))
 	defer server.Close()
 	httpClient := server.Client()
 	httpClient.Timeout = 10 * time.Second

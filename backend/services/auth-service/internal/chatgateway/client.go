@@ -16,6 +16,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
 )
 
 var ErrUnavailable = errors.New("chat_gateway_unavailable")
@@ -33,7 +35,7 @@ type Client struct {
 }
 
 // Payload is untrusted upstream JSON. The HTTP adapter must validate its schema
-// before returning it to the browser. No route uses this transport yet.
+// before returning it to the browser.
 type Payload struct{ body []byte }
 
 func (Payload) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
@@ -89,7 +91,7 @@ func (c *Client) Ask(ctx context.Context, access string, body []byte) (Payload, 
 	if access == "" ||
 		len(access) > 16384 ||
 		strings.ContainsAny(access, " \t\r\n") ||
-		len(body) > 16<<10 ||
+		len(body) > chatcontract.MaxRequestBytes ||
 		!json.Valid(body) {
 		return Payload{}, ErrUnavailable
 	}
@@ -129,14 +131,14 @@ func (c *Client) Ask(ctx context.Context, access string, body []byte) (Payload, 
 		return Payload{}, ErrResponse
 	}
 
-	b, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+	b, err := io.ReadAll(io.LimitReader(response.Body, chatcontract.MaxResponseBytes+1))
 	if err != nil &&
 		(errors.Is(err, context.DeadlineExceeded) ||
 			errors.Is(ctx.Err(), context.DeadlineExceeded)) {
 		return Payload{}, ErrTimeout
 	}
 
-	if err != nil || len(b) > 64<<10 || !json.Valid(b) {
+	if err != nil || len(b) > chatcontract.MaxResponseBytes || !json.Valid(b) {
 		return Payload{}, ErrResponse
 	}
 

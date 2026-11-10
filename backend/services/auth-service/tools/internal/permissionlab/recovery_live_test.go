@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/keycloak"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/recovery"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
 	"github.com/gin-gonic/gin"
 )
 
@@ -299,7 +299,7 @@ func (l *lab) recoveryScenario(ctx context.Context, caFile string) error {
 		RateKey:  freshKey(),
 		Origin:   webConfig.Origin,
 	}
-	h, closeRecovery, err := application.Recovery(
+	h, closeRecovery, err := wiring.Recovery(
 		ctx,
 		recoveryRuntime,
 		config.Registration{Enabled: true, Admin: cfg, CAFile: caFile},
@@ -312,7 +312,7 @@ func (l *lab) recoveryScenario(ctx context.Context, caFile string) error {
 	}
 
 	defer closeRecovery()
-	if _, closeUnguarded, err := application.Web(ctx, webConfig, d.pool, d.store); err == nil {
+	if _, closeUnguarded, err := wiring.Web(ctx, webConfig, d.pool, d.store); err == nil {
 		if closeUnguarded != nil {
 			closeUnguarded()
 		}
@@ -320,7 +320,7 @@ func (l *lab) recoveryScenario(ctx context.Context, caFile string) error {
 		return errSafe
 	}
 
-	_, closeGuardedWeb, err := application.Web(ctx, webConfig, d.pool, d.store, fenceKey)
+	_, closeGuardedWeb, err := wiring.Web(ctx, webConfig, d.pool, d.store, fenceKey)
 	if err != nil {
 		return errSafe
 	}

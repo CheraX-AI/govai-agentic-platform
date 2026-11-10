@@ -422,10 +422,11 @@ Keycloak outage manipulation was performed. No identity configuration changed.
 | Location | Purpose |
 | --- | --- |
 | `cmd/api/main.go` | Start the authentication API; command remains `go run ./cmd/api`. |
-| `internal/http/handlers/router.go` | Gin routes and shared HTTP request policies. |
-| `internal/http/handlers/` | Registration, login, reset and session request handlers. |
+| `internal/httpapi/router.go` | Gin routes and shared HTTP request policies. |
+| `internal/httpapi/` | Registration, login, reset and session request handlers. |
+| `internal/httpapi/test/` | Public HTTP contract tests with fake dependencies. |
 | `internal/config/` | Environment settings and validation. |
-| `internal/application/` | Assemble feature dependencies. |
+| `internal/wiring/` | Assemble feature dependencies. |
 | `internal/registration/`, `login/`, `recovery/`, `websession/` | Feature rules and workflows. |
 | `internal/keycloak/` | Keycloak communication. |
 | `internal/postgres/` | Application database operations. |

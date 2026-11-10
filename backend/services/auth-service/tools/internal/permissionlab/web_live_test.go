@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
 )
 
 func TestWebSessionLive(t *testing.T) {
@@ -98,13 +98,13 @@ func (l *lab) webScenario(
 		RateKey:  freshKey(),
 		Lifetime: 30 * time.Minute,
 	}
-	h, closeWeb, err := application.Web(ctx, cfg, d.pool, d.store)
+	h, closeWeb, err := wiring.Web(ctx, cfg, d.pool, d.store)
 	if err != nil {
 		return errSafe
 	}
 
 	defer closeWeb()
-	server := httptest.NewTLSServer(handler.NewRouterWithWeb(nil, nil, nil, nil, h))
+	server := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{WebSessions: h}))
 	defer server.Close()
 	client := server.Client()
 	client.Timeout = 10 * time.Second
@@ -237,12 +237,12 @@ func (l *lab) webScenario(
 		return errSafe
 	}
 	// Independent service/provider reconstruction demonstrates persisted custody.
-	second, closeSecond, e := application.Web(ctx, cfg, d.pool, d.store)
+	second, closeSecond, e := wiring.Web(ctx, cfg, d.pool, d.store)
 	if e != nil {
 		return errSafe
 	}
 
-	secondServer := httptest.NewTLSServer(handler.NewRouterWithWeb(nil, nil, nil, nil, second))
+	secondServer := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{WebSessions: second}))
 	secondClient := secondServer.Client()
 	secondClient.Timeout = 10 * time.Second
 	reloadedRequest, e := http.NewRequestWithContext(ctx, "GET", secondServer.URL+"/api/v1/web/session", nil)
@@ -252,7 +252,7 @@ func (l *lab) webScenario(
 
 	reloadedRequest.Header.Set("Origin", cfg.Origin)
 	reloadedRequest.Header.Set("X-GovAI-Web", "1")
-	reloadedRequest.AddCookie(&http.Cookie{Name: handler.WebSessionCookie, Value: cookie})
+	reloadedRequest.AddCookie(&http.Cookie{Name: httpapi.WebSessionCookie, Value: cookie})
 	reloaded, e := secondClient.Do(reloadedRequest)
 	if e != nil {
 		secondServer.Close()
@@ -278,7 +278,7 @@ func (l *lab) webScenario(
 	)
 	client.Jar.SetCookies(
 		base,
-		[]*http.Cookie{{Name: handler.WebSessionCookie, Value: cookie, Path: "/", Secure: true}},
+		[]*http.Cookie{{Name: httpapi.WebSessionCookie, Value: cookie, Path: "/", Secure: true}},
 	)
 	status, _, _ = request("GET", "/api/v1/web/session", nil, "", cfg.Origin)
 	l.lifeCheck("WEB_OLD_COOKIE_REJECTED", status == 401)
@@ -333,7 +333,7 @@ func (l *lab) webScenario(
 			queueStatus.Pending == 1 &&
 			queueStatus.Completed == 1,
 	)
-	reconciled, e := application.ReconcileWeb(ctx, cfg, d.pool)
+	reconciled, e := wiring.ReconcileWeb(ctx, cfg, d.pool)
 	l.lifeCheck(
 		"WEB_DURABLE_REVOCATION_RECONCILED",
 		e == nil &&

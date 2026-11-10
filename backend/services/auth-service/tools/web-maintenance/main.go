@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/application"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
 )
 
 func main() {
@@ -54,7 +54,7 @@ func run() error {
 
 	defer pool.Close()
 	if os.Args[1] == "status" {
-		queue, err := application.WebRecoveryQueue(ctx, c, pool)
+		queue, err := wiring.WebRecoveryQueue(ctx, c, pool)
 		if err != nil {
 			return websession.ErrUnavailable
 		}
@@ -74,7 +74,7 @@ func run() error {
 		return nil
 	}
 
-	result, err := application.ReconcileWeb(ctx, c, pool)
+	result, err := wiring.ReconcileWeb(ctx, c, pool)
 	if err != nil {
 		return websession.ErrUnavailable
 	}
