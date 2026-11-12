@@ -42,24 +42,20 @@ handlers and add each service's own ownership/business policy after it.
 
 - Only a single Authorization Bearer header over direct TLS establishes identity.
   Cookies, query tokens and forwarding/user/role headers are ignored.
-- Verifies signature/RS256, exact issuer, API audience, configured authorized
-  parties, expiry, Keycloak `typ=Bearer`, subject and bounded iat/nbf/lifetime.
-  ID/unsigned/wrong-party tokens are rejected. Roles and verified-email are checked
-  separately after authentication, giving 403 for those policy failures.
-- Claims are stored as a redacted identity; the raw token is never put in Gin
-  context. `Current` returns a copy of roles. Services must deliberately allowlist
-  any identity fields returned to the authenticated caller.
-- Fixed issuer-origin `/protocol/openid-connect/certs` only; no caller URLs,
-  discovery redirects or token introspection. TLS/redirect/header/64 KiB body
-  bounds and a five-second client timeout protect JWKS retrieval.
-- Valid keys are cached by go-oidc. Unknown-key refreshes are coalesced and limited
-  to one attempt per five seconds by default, including failed attempts. Genuine
-  rotation during this cooldown can temporarily return 401 until the next fetch
-  is eligible; existing cached signing keys continue to work. This is deliberate
-  bounded-provider-load behavior, not immediate key rotation propagation.
-- Verification has a five-second caller deadline and a 32-request per-verifier
-  concurrency cap; overload returns 503/Retry-After. Shared JWKS fetches may finish
-  after an individual caller cancels, bounded by the HTTP client timeout.
+- Verifies signature/RS256, exact issuer, API audience, expiry and not-before
+  (30 s clock skew), Keycloak `typ=Bearer`, a subject, and `azp` in the allowed
+  clients. ID/unsigned/wrong-party tokens are rejected. Roles and verified-email are
+  checked separately after authentication, giving 403 for those policy failures.
+- The raw token is never put in Gin context. `Current` returns a copy of roles.
+  Services must deliberately allowlist any identity fields returned to the caller.
+- Keys come only from the fixed `<issuer>/protocol/openid-connect/certs` URL (no
+  discovery at startup, so a service starts even while Keycloak is down). Key
+  fetches use a five-second timeout and do not follow redirects.
+- go-oidc caches the keys and fetches them again when a token uses an unknown key
+  ID, so Keycloak key rotation works without a restart. There is no rate limit on
+  those refetches: a flood of tokens with random key IDs causes extra requests to
+  Keycloak. Accepted for this prototype.
+- Verification has a five-second deadline per request.
 - Invalid credentials and failed JWKS validation fail closed with generic 401;
   this API does not distinguish malformed tokens from an unavailable key provider.
 - No live role/session/email-status introspection: a valid signed token represents
@@ -74,6 +70,17 @@ handlers and add each service's own ownership/business policy after it.
 
 From this directory: `go test ./...`, `go vet ./...`, `go test -race ./...`.
 Service-module `go test ./...` compiles this dependency but does not run its own
-tests; run both modules in CI. Tests use controlled TLS servers/signing keys for
-claims, forgery/algorithm rejection, cached keys, rotation/cooldown, missing-token
-401, role/verified-email 403, direct-TLS enforcement and context identity safety.
+tests; run both modules in CI. Tests use a fake TLS Keycloak and test signing keys
+for: valid token, bad signature, unsigned, expired, not-yet-valid, wrong issuer,
+wrong audience, wrong client, ID token, key rotation, missing/malformed token 401,
+wrong role and unverified email 403, plain HTTP 426, and unsafe configuration.
+
+## Files
+
+| File | Contents |
+| --- | --- |
+| `config.go` | `Config` and its safety checks |
+| `verifier.go` | `New`, `Verify`, `Close`: token verification with go-oidc |
+| `identity.go` | `Identity` and `Current` |
+| `middleware.go` | `Authenticate`, `RequireVerifiedEmail`, `RequireRole` |
+| `errors.go` | `ErrConfig`, `ErrToken` |
