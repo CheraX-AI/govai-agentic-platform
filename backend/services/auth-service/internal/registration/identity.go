@@ -64,11 +64,20 @@ func (n NIC) NormalizedNumber() string {
 // RestrictedOriginal is for an access-restricted, encrypted profile adapter only.
 func (n NIC) RestrictedOriginal() string { return n.original }
 
-func (NIC) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (NIC) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (NIC) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (NIC) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (NIC) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (NIC) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // NICReservations is the database teammate's required persistence contract.
 // Reserve must atomically claim NIC.NormalizedNumber() in the GovAI citizen

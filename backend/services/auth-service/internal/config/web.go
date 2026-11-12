@@ -22,11 +22,20 @@ type Web struct {
 	Lifetime         time.Duration
 }
 
-func (Web) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Web) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Web) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Web) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Web) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Web) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // LoadWeb validates browser sessions, cookie settings and trusted origin.
 func LoadWeb() (Web, error) {

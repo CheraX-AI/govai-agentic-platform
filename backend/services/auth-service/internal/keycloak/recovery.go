@@ -20,11 +20,20 @@ type RecoveryRecipient struct{ email string }
 
 func (r RecoveryRecipient) Email() string { return r.email }
 
-func (RecoveryRecipient) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (RecoveryRecipient) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (RecoveryRecipient) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (RecoveryRecipient) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (RecoveryRecipient) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (RecoveryRecipient) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // Recovery uses persisted subject/operation bindings, not email/NIC user searches.
 // This reuses accepted group-wide credentials but exposes no route or new grant.

@@ -25,11 +25,20 @@ type Recovery struct {
 	Origin            string
 }
 
-func (Recovery) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Recovery) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Recovery) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Recovery) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Recovery) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Recovery) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // LoadRecovery validates password-reset and email settings.
 func LoadRecovery(reg Registration, web Web) (Recovery, error) {

@@ -37,11 +37,20 @@ type RegistrationConfig struct {
 	TokenSkew                                  time.Duration
 }
 
-func (RegistrationConfig) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (RegistrationConfig) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (RegistrationConfig) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (RegistrationConfig) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (RegistrationConfig) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (RegistrationConfig) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 type Admin struct {
 	cfg             RegistrationConfig
@@ -56,11 +65,20 @@ type Admin struct {
 
 var _ registration.Admin = (*Admin)(nil)
 
-func (*Admin) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (*Admin) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (*Admin) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (*Admin) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (*Admin) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (*Admin) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // NewRegistrationAdmin clones the client/transport, preserving trusted roots but
 // rejecting opaque transports and TLS bypasses. No network call occurs here.

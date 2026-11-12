@@ -23,11 +23,20 @@ type Registration struct {
 	CAFile, TLSCertFile, TLSKeyFile string
 }
 
-func (Registration) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Registration) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Registration) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Registration) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Registration) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Registration) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 var registrationSegment = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 

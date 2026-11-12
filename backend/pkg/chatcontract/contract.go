@@ -30,11 +30,20 @@ type Question struct{ message string }
 
 func (q Question) Text() string { return q.message }
 
-func (Question) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Question) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Question) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Question) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Question) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Question) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // Source is a document cited in the answer. Number matches the [n] marker in
 // the answer text. Page (0 = unknown) and URL ("" = none) are optional.
@@ -50,6 +59,12 @@ type Reply struct {
 	Sources []Source `json:"sources"`
 }
 
-func (Reply) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Reply) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Reply) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Reply) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}

@@ -27,11 +27,20 @@ type HTTPConfig struct {
 	AllowLoopbackHTTP          bool
 }
 
-func (HTTPConfig) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (HTTPConfig) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (HTTPConfig) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (HTTPConfig) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (HTTPConfig) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (HTTPConfig) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 type HTTPAgent struct {
 	client    *http.Client
@@ -149,11 +158,20 @@ func NewHTTP(c HTTPConfig, client *http.Client) (*HTTPAgent, error) {
 	return &HTTPAgent{cfg: c, client: &bounded, transport: transport}, nil
 }
 
-func (*HTTPAgent) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (*HTTPAgent) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (*HTTPAgent) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (*HTTPAgent) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (*HTTPAgent) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (*HTTPAgent) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 func (a *HTTPAgent) Close() { a.transport.CloseIdleConnections() }
 

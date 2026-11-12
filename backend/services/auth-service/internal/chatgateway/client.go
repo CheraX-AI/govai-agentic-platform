@@ -38,11 +38,20 @@ type Client struct {
 // before returning it to the browser.
 type Payload struct{ body []byte }
 
-func (Payload) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Payload) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Payload) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Payload) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
-func (Payload) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Payload) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
 func (p Payload) Bytes() []byte { return bytes.Clone(p.body) }
 

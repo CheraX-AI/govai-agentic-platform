@@ -35,11 +35,20 @@ type RegistrationLimitConfig struct {
 	Now                       func() time.Time
 }
 
-func (RegistrationLimitConfig) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (RegistrationLimitConfig) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (RegistrationLimitConfig) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (RegistrationLimitConfig) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (RegistrationLimitConfig) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (RegistrationLimitConfig) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 type limitBucket struct {
 	attempts int
@@ -56,11 +65,20 @@ type LocalRegistrationLimiter struct {
 	inflight    int
 }
 
-func (*LocalRegistrationLimiter) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (*LocalRegistrationLimiter) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (*LocalRegistrationLimiter) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (*LocalRegistrationLimiter) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (*LocalRegistrationLimiter) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (*LocalRegistrationLimiter) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 func NewLocalRegistrationLimiter(cfg RegistrationLimitConfig) (*LocalRegistrationLimiter, error) {
 	if len(cfg.Key) < 32 ||
