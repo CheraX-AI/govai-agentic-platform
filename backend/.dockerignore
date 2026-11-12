@@ -1,0 +1,19 @@
+# Build context is backend/. Keep secrets, local state and build output out of images.
+**/.env
+**/.env.*
+!**/.env.example
+**/.local/
+**/.cache/
+**/test-artifacts/
+**/permissionlab-state/
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.dump
+**/*.log
+**/*.exe
+**/*.test
+**/coverage*.out
+**/.git
+**/.vscode
