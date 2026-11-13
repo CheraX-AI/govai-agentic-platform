@@ -23,17 +23,14 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 	}
 
 	service := filepath.Join(root, "..", "..", "backend", "services", "auth-service")
-	webFile := filepath.Join(service, ".env.web")
-	loginFile := filepath.Join(service, ".env.login")
-	web, e := godotenv.Read(webFile)
+	envFile := serviceEnv(root)
+	settings, e := godotenv.Read(envFile)
 	if e != nil {
 		return ErrSetup
 	}
 
-	mobileEnv, e := godotenv.Read(loginFile)
-	if e != nil {
-		return ErrSetup
-	}
+	// The web and mobile login settings live in the same file, in their own sections.
+	web, mobileEnv := settings, settings
 
 	if web["WEB_ORIGIN"] != "https://localhost:5001" ||
 		web["WEB_CLIENT_ID"] != webLoginClient ||
@@ -85,11 +82,9 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 		return ErrSetup
 	}
 
-	for _, name := range []string{".env.web", ".env.login"} {
-		data, e := os.ReadFile(filepath.Join(service, name))
-		if e != nil || writeNew(filepath.Join(backup, name+".before"), data) != nil {
-			return ErrSetup
-		}
+	data, e = os.ReadFile(envFile)
+	if e != nil || writeNew(filepath.Join(backup, ".env.before"), data) != nil {
+		return ErrSetup
 	}
 
 	fmt.Fprintln(a.out, "DEV_AUTH_SESSIONS_PRIVATE_BACKUP PASS")
@@ -189,14 +184,12 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 		return ErrSetup
 	}
 
-	mobileEnv["LOGIN_REFRESH_ENABLED"] = "true"
-	web["WEB_CLIENT_SECRET"] = secret
-	web["WEB_SESSION_ENABLED"] = "true"
-	for path, env := range map[string]map[string]string{loginFile: mobileEnv, webFile: web} {
-		text, e := godotenv.Marshal(env)
-		if e != nil || os.WriteFile(path, []byte(text+"\n"), 0600) != nil {
-			return ErrSetup
-		}
+	if updateEnv(envFile, "Web session (browser)", map[string]string{
+		"LOGIN_REFRESH_ENABLED": "true",
+		"WEB_CLIENT_SECRET":     secret,
+		"WEB_SESSION_ENABLED":   "true",
+	}) != nil {
+		return ErrSetup
 	}
 
 	fmt.Fprintln(

@@ -218,8 +218,8 @@ Runtime composition/configuration and route wiring are implemented and tested;
 the approved local rollout below applied the optional migrations and enabled the routes.
 ### Runtime rollout (approved and applied locally on 2026-11-01)
 
-`cmd/api` loads ignored `.env.recovery` before other local files. Defaults keep
-recovery disabled. Enabling it requires registration/admin and web configuration,
+`cmd/api` reads recovery settings from the service's single ignored `.env` (its
+"Password recovery" section). Defaults keep recovery disabled. Enabling it requires registration/admin and web configuration,
 the same issuer, API TLS, independent 32-byte base64 binding/fence/rate keys, an
 HTTPS reset-page URL and approved web origin, and SMTP settings. See placeholders
 in `.env.example`. Secrets are never supplied by public requests or printed.

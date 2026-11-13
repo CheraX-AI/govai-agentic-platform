@@ -45,12 +45,12 @@ func testDatabase(t *testing.T) (*Store, *Store, *pgxpool.Pool) {
 		t.Skip("opt-in: GOVAI_DB_TEST=1; requires isolated infrastructure/postgres/auth setup")
 	}
 
-	env, e := godotenv.Read("../../.env.database")
+	env, e := godotenv.Read("../../.env")
 	if e != nil {
 		t.Fatal("private local database settings required")
 	}
 
-	adminEnv, e := godotenv.Read("../../.env.database-admin")
+	adminEnv, e := godotenv.Read("../../.env.migrate")
 	if e != nil {
 		t.Fatal("private migration settings required")
 	}

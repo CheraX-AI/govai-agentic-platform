@@ -425,7 +425,7 @@ func online(ctx context.Context, base, dir string, probe bool, align bool) {
 		return
 	}
 
-	registrationEnv, e := godotenv.Read(".env.registration")
+	registrationEnv, e := godotenv.Read(".env")
 	require(e == nil, "registration_configuration")
 	cfg := keycloak.RegistrationConfig{
 		BaseURL:               base,
@@ -476,13 +476,9 @@ func online(ctx context.Context, base, dir string, probe bool, align bool) {
 		object{"emailVerified": true, "requiredActions": []string{}},
 		204,
 	)
-	for _, file := range []string{".env.login", ".env.web"} {
-		settings, e := godotenv.Read(file)
-		require(e == nil, "login_configuration")
-		prefix := "LOGIN_"
-		if file == ".env.web" {
-			prefix = "WEB_"
-		}
+	settings, e := godotenv.Read(".env")
+	require(e == nil, "login_configuration")
+	for _, prefix := range []string{"LOGIN_", "WEB_"} {
 
 		provider, e := login.NewKeycloak(
 			login.KeycloakConfig{

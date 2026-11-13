@@ -349,15 +349,12 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 		return ErrSetup
 	}
 
-	runtimeFile := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration")
-	env, e := godotenv.Read(runtimeFile)
-	if e != nil {
+	runtimeFile := serviceEnv(root)
+	if _, e := godotenv.Read(runtimeFile); e != nil {
 		return ErrSetup
 	}
 
-	env["REGISTRATION_ENABLED"] = "true"
-	text, e := godotenv.Marshal(env)
-	if e != nil || os.WriteFile(runtimeFile, []byte(text+"\n"), 0600) != nil {
+	if updateEnv(runtimeFile, "Registration", map[string]string{"REGISTRATION_ENABLED": "true"}) != nil {
 		return ErrSetup
 	}
 
@@ -584,11 +581,10 @@ func (a *localAdmin) configure(ctx context.Context, root string, realm, profile 
 		[]object{queryRole},
 		204,
 	)
-	serviceRoot := filepath.Clean(filepath.Join(root, "..", "..", "backend", "services", "auth-service"))
-	runtimeFile := filepath.Join(serviceRoot, ".env.registration")
+	runtimeFile := serviceEnv(root)
 	env, e := godotenv.Read(runtimeFile)
 	if os.IsNotExist(e) {
-		env = map[string]string{"REGISTRATION_FINGERPRINT_KEY": base64Key(), "REGISTRATION_RATE_KEY": base64Key()}
+		env = map[string]string{}
 	} else if e != nil {
 		return ErrSetup
 	}
@@ -608,17 +604,15 @@ func (a *localAdmin) configure(ctx context.Context, root string, realm, profile 
 		"API_TLS_KEY_FILE":                    filepath.ToSlash(filepath.Join(root, "tls", "api-key.pem")),
 		"OIDC_ISSUER_URL":                     base + "/realms/GovAI",
 	}
-	for key, value := range values {
-		env[key] = value
+	// Keep existing HMAC keys stable; create only the ones that are missing.
+	for _, key := range []string{"REGISTRATION_FINGERPRINT_KEY", "REGISTRATION_RATE_KEY"} {
+		if env[key] == "" {
+			values[key] = base64Key()
+		}
 	}
 
-	env["REGISTRATION_ENABLED"] = "false" // Activate only after the final checks pass.
-	text, e := godotenv.Marshal(env)
-	if e != nil {
-		return ErrSetup
-	}
-
-	if os.WriteFile(runtimeFile, []byte(text+"\n"), 0600) != nil {
+	values["REGISTRATION_ENABLED"] = "false" // Activate only after the final checks pass.
+	if updateEnv(runtimeFile, "Registration", values) != nil {
 		return ErrSetup
 	}
 

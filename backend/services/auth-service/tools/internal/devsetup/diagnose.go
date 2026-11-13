@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"path/filepath"
 
 	"github.com/joho/godotenv"
 )
 
 func (a *localAdmin) diagnose(ctx context.Context, root string) error {
-	env, e := godotenv.Read(
-		filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration"),
-	)
+	env, e := godotenv.Read(serviceEnv(root))
 	if e != nil {
 		return ErrSetup
 	}

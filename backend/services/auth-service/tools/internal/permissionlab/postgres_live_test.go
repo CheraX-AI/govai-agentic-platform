@@ -130,12 +130,12 @@ func freshKey() []byte {
 }
 
 func newDurableLab(ctx context.Context) (d *durableLab, err error) {
-	runtime, e := godotenv.Read("../../.env.database")
+	runtime, e := godotenv.Read("../../.env")
 	if e != nil {
 		return nil, errSafe
 	}
 
-	secrets, e := godotenv.Read("../../.env.database-admin")
+	secrets, e := godotenv.Read("../../.env.migrate")
 	if e != nil {
 		return nil, errSafe
 	}

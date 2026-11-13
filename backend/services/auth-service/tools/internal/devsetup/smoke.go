@@ -114,7 +114,7 @@ func (a *localAdmin) smoke(ctx context.Context, root string) error {
 		return ErrSetup
 	}
 
-	env, e := godotenv.Read(filepath.Join(serviceRoot, ".env.database"))
+	env, e := godotenv.Read(filepath.Join(serviceRoot, ".env"))
 	if e != nil {
 		return ErrSetup
 	}

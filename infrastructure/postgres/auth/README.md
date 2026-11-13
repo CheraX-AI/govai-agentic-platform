@@ -33,12 +33,13 @@ Expected responses are `status: ok` and `status: ready`. Stop an older Go server
 with Ctrl+C before starting this one if port 5000 is already used.
 
 `setup.ps1` generates independent random passwords and 32-byte AES/HMAC keys. It
-writes this directory's `.env`, the auth service's `.env.database`, and a separate
-`.env.database-admin` loaded only by the migration command. It refuses to
-overwrite existing files. All are ignored by Git. Do not paste their
-contents into chat, screenshots or commits. Existing `.env` files are preserved.
-Process environment settings take precedence, followed by `.env.database`, then
-the service `.env`. Clear an old DATABASE_URL from your shell if it points elsewhere.
+writes this directory's `.env`, adds a Database section to the auth service's
+single `.env`, and writes a separate `.env.migrate` (owner login) loaded only by
+the privileged `tools/db` commands. It refuses to run when database settings
+already exist. All are ignored by Git. Do not paste their contents into chat,
+screenshots or commits. Other settings in the service `.env` are preserved.
+Process environment settings take precedence over the service `.env`. Clear an
+old DATABASE_URL from your shell if it points elsewhere.
 
 ## Privileges
 
@@ -91,7 +92,7 @@ Back up the volume/database **and** the private settings files to restricted
 storage outside Git. Losing the data key makes encrypted profiles unrecoverable.
 Changing the NIC index key without a coordinated migration breaks uniqueness.
 No automatic key rotation, retention deletion or schema downgrade is provided.
-The API never loads `.env.database-admin`. In deployment, run migrations as a
+The API never loads `.env.migrate`. In deployment, run migrations as a
 separate job and deny the runtime OS identity access to migration secrets; local
 development files under your own Windows account do not provide that OS boundary.
 

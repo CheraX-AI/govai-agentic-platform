@@ -138,9 +138,7 @@ func (a *localAdmin) recoverySampleCheck(ctx context.Context, root string, sendV
 			return nil
 		}
 
-		settings, err := godotenv.Read(
-			filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration"),
-		)
+		settings, err := godotenv.Read(serviceEnv(root))
 		if err != nil {
 			return ErrSetup
 		}

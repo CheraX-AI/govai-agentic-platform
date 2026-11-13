@@ -38,11 +38,12 @@ func run() error {
 
 	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
 	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"
-	if isPrivileged && config.LoadLocalEnv(".env.database-admin") != nil {
+	// Only privileged commands load the owner login; the API never reads .env.migrate.
+	if isPrivileged && config.LoadLocalEnv(".env.migrate") != nil {
 		return postgres.ErrStore
 	}
 
-	if config.LoadLocalEnv(".env.database") != nil || config.LoadLocalEnv(".env") != nil {
+	if config.LoadLocalEnv(".env") != nil {
 		return postgres.ErrStore
 	}
 

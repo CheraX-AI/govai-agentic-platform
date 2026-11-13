@@ -29,10 +29,8 @@ func run() error {
 		return websession.ErrUnavailable
 	}
 
-	for _, file := range []string{".env.web", ".env.login", ".env.registration", ".env.database", ".env"} {
-		if config.LoadLocalEnv(file) != nil {
-			return websession.ErrUnavailable
-		}
+	if config.LoadLocalEnv(".env") != nil {
+		return websession.ErrUnavailable
 	}
 
 	c, err := config.LoadWeb()
