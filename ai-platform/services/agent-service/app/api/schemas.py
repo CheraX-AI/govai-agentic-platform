@@ -1,16 +1,4 @@
-"""Request and response bodies of the agent API: the contract with core-service.
-
-core-service (backend/services/core-service/internal/chat/decode.go) accepts
-exactly these fields and rejects any other, so a change here must be made there
-too:
-
-    request:  {"message": "..."}
-    response: {"answer": "...", "sources": [{"number": 1, "title": "...", "page": 3}]}
-
-number matches the [n] citation in the answer text. page is left out when it is
-unknown. url is part of the contract but not sent yet: the documents have no
-public address for citizens.
-"""
+"""Request and response models: the contract with core-service (keep in sync with core-service/internal/chat/decode.go)."""
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 

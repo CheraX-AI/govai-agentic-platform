@@ -8,9 +8,9 @@ from app.agents.knowledge_agent.prompts import (
     AVAILABLE_DOCUMENTS_SCOPE,
     INSUFFICIENT_INFORMATION_REPLY,
     PROMPT_VERSION,
-    InvalidQuestionError,
 )
 from app.agents.knowledge_agent.schemas import KnowledgeSource, ServiceScope
+from app.agents.knowledge_agent.validation import InvalidQuestionError
 from app.llm.provider import LLMProvider
 from app.tools.knowledge_rag_client import KnowledgeServiceUnavailableError
 from helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE, make_settings

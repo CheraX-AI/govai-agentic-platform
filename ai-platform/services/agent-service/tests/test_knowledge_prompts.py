@@ -5,21 +5,16 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.agents.knowledge_agent.prompts import (
     AVAILABLE_DOCUMENTS_SCOPE,
-    EMPTY_QUESTION_REPLY,
     INSUFFICIENT_INFORMATION_REPLY,
-    LONG_QUESTION_REPLY,
-    MAX_QUESTION_LENGTH,
     NO_DOCUMENTS_CONTEXT,
     PROMPT_VERSION,
-    SHORT_QUESTION_REPLY,
     SYSTEM_PROMPT,
-    InvalidQuestionError,
     build_rag_messages,
     build_trace_config,
-    clean_question,
     format_context,
 )
 from app.agents.knowledge_agent.schemas import KnowledgeSource, ServiceScope
+from app.agents.knowledge_agent.validation import InvalidQuestionError
 from helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE
 
 
@@ -116,29 +111,6 @@ def test_question_whitespace_is_cleaned():
     messages = build_rag_messages("  What   do I\n hand in?  ", [make_source()])
 
     assert "<question>\nWhat do I hand in?\n</question>" in question_text(messages)
-
-
-@pytest.mark.parametrize(
-    "question, reply",
-    [
-        ("   ", EMPTY_QUESTION_REPLY),
-        ("hi", SHORT_QUESTION_REPLY),
-        ("x" * (MAX_QUESTION_LENGTH + 1), LONG_QUESTION_REPLY),
-    ],
-)
-def test_unsearchable_questions_are_rejected_with_a_reply(question, reply):
-
-    # The error message is the reply shown to the citizen
-    with pytest.raises(InvalidQuestionError) as error:
-        clean_question(question)
-
-    assert str(error.value) == reply
-
-
-def test_question_limits_are_inclusive():
-
-    assert clean_question("abc") == "abc"
-    assert clean_question("x" * MAX_QUESTION_LENGTH) == "x" * MAX_QUESTION_LENGTH
 
 
 def test_empty_question_is_rejected_by_the_prompt_builder():

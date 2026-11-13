@@ -1,8 +1,4 @@
-"""Service token check for the agent API.
-
-Only core-service calls the API. It sends the shared token as a bearer token;
-the token is compared in constant time and never logged.
-"""
+"""Checks the service token that core-service sends."""
 
 import hmac
 

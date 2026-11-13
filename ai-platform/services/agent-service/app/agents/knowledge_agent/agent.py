@@ -1,20 +1,4 @@
-"""The Knowledge Agent: answers a citizen question from the knowledge-service documents.
-
-Steps for each question:
-
-1. Ask the knowledge service (RAG) for the chunks that match the question.
-2. No chunks: reply that the information is not available, without calling
-   the LLM, so the model can never answer from its own knowledge.
-3. Put the question and the numbered chunks into the RAG prompt and send it
-   to the NVIDIA chat model.
-4. Return the answer with only the documents it cited.
-
-Design:
-
-- Dependency injection: the agent takes the LLM provider and the RAG client,
-  so tests pass fakes and the graph shares one of each.
-- Factory: create_knowledge_agent() builds both from .env.
-"""
+"""The Knowledge Agent: retrieves documents, asks the LLM, and returns the answer with cited sources."""
 
 import logging
 import re
@@ -26,9 +10,9 @@ from app.agents.knowledge_agent.prompts import (
     PROMPT_VERSION,
     build_rag_messages,
     build_trace_config,
-    clean_question,
 )
 from app.agents.knowledge_agent.schemas import KnowledgeAnswer, SourceReference
+from app.agents.knowledge_agent.validation import clean_question
 from app.llm.provider import invoke_llm, load_llm_provider
 from app.tools.knowledge_rag_client import create_rag_client
 
@@ -59,8 +43,7 @@ class KnowledgeAgent:
         documents cannot be retrieved, and an LLMError when the model fails, so an
         answer is never made without the documents.
         """
-
-        # Check the question before any service is called
+    
         question = clean_question(question)
 
         # Find the matching chunks, limited to the scope's department and service if it has them

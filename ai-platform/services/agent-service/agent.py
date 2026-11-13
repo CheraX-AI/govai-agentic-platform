@@ -1,8 +1,4 @@
-"""LangGraph entry point, loaded by langgraph.json (`langgraph dev` and LangGraph Studio).
-
-The graph is defined in app/graph/workflow.py and built here from .env. The
-knowledge service is only called when a question is asked, not at startup.
-"""
+"""LangGraph entry point: builds the agent graph for langgraph.json (LangGraph Studio)."""
 
 from app.graph.workflow import create_graph
 

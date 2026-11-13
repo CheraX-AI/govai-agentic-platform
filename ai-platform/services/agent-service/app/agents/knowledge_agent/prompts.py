@@ -1,19 +1,9 @@
-"""Versioned prompts for the GovAI Knowledge Agent.
-
-The system prompt sets the agent's role and rules; the RAG prompt adds the
-citizen's question and the retrieved government documents. Both are generic:
-the services they cover come from a ServiceScope, so supporting another
-department means adding a scope, not a new prompt.
-
-Change PROMPT_VERSION whenever a prompt's wording changes, so every answer and
-LangSmith trace can be matched to the prompt that produced it.
-"""
-
 import re
 
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.agents.knowledge_agent.schemas import KnowledgeSource, ServiceScope
+from app.agents.knowledge_agent.validation import clean_question
 
 PROMPT_VERSION = "v1"
 
@@ -34,23 +24,8 @@ INSUFFICIENT_INFORMATION_REPLY = (
 
 NO_DOCUMENTS_CONTEXT = "No documents were found."
 
-# Question limits, the same as the knowledge service's
-MIN_QUESTION_LENGTH = 3
-MAX_QUESTION_LENGTH = 1000
-
-# Replies for questions that cannot be searched
-EMPTY_QUESTION_REPLY = "Please type a question."
-SHORT_QUESTION_REPLY = "Please ask a full question, for example: What documents do I need?"
-LONG_QUESTION_REPLY = f"Please shorten your question to at most {MAX_QUESTION_LENGTH} characters."
-
 # A document tag inside a chunk could close the real tag and smuggle in instructions
 DOCUMENT_TAG_PATTERN = re.compile(r"<\s*/?\s*document\b", re.IGNORECASE)
-
-
-# Errors
-
-class InvalidQuestionError(ValueError):
-    """The question is empty, too short, or too long. The message can be shown to the citizen."""
 
 
 # Prompts
@@ -146,28 +121,6 @@ def format_context(sources):
     context = "\n\n".join(blocks)
 
     return context
-
-
-def clean_question(question):
-    """Join runs of spaces and line breaks, then check the length.
-
-    Uses the same limits as the knowledge service, so a question it would reject
-    gets a clear reply here instead of a failed search. Raises InvalidQuestionError
-    with a message that can be shown to the citizen.
-    """
-
-    # Normalise the whitespace, so a question of only spaces counts as empty
-    question = " ".join(str(question).split())
-
-    # Check the length of the cleaned question
-    if not question:
-        raise InvalidQuestionError(EMPTY_QUESTION_REPLY)
-    if len(question) < MIN_QUESTION_LENGTH:
-        raise InvalidQuestionError(SHORT_QUESTION_REPLY)
-    if len(question) > MAX_QUESTION_LENGTH:
-        raise InvalidQuestionError(LONG_QUESTION_REPLY)
-
-    return question
 
 
 def build_trace_config(service_scope=AVAILABLE_DOCUMENTS_SCOPE):

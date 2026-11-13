@@ -1,24 +1,4 @@
-"""Internal chat API: core-service sends a citizen question, the agent graph answers it.
-
-Only core-service calls it (the "FastAPI AI API" box in the GovAI block
-diagram). Citizens reach it through core-service, which has already checked their
-Keycloak login and role. Run it with:
-
-    uvicorn app.api.main:app --host 127.0.0.1 --port 8030
-
-Design:
-
-- Factory: create_app() builds the FastAPI app. The graph and the settings
-  are built once at startup from .env, or passed in by tests (dependency injection).
-- The API calls the graph, not the Knowledge Agent, so a Coordinator Agent can
-  be added inside the graph later without changing this contract.
-- The API adds no answer logic; it turns HTTP into one graph run and the graph's
-  result into the contract in app/api/schemas.py.
-- Logs and error bodies never hold the question or the answer.
-
-FastAPI reads request bodies from parameter type hints, so the endpoint
-functions keep them; no other function here has type hints.
-"""
+"""Internal chat API that core-service calls: POST /api/v1/chat and GET /health."""
 
 import logging
 import re

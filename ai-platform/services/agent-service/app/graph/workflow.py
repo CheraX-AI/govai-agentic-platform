@@ -1,10 +1,4 @@
-"""The GovAI agent graph, used by LangGraph Studio and the local Chainlit chat.
-
-Today it has one agent: START -> knowledge_agent -> END. The Coordinator Agent
-will be added in front of it to route between agents once a second agent exists.
-
-Each question is answered on its own; earlier messages are not used yet.
-"""
+"""The agent graph: START -> knowledge_agent -> END."""
 
 import logging
 
@@ -12,7 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.agents.knowledge_agent.agent import create_knowledge_agent
-from app.agents.knowledge_agent.prompts import EMPTY_QUESTION_REPLY, InvalidQuestionError
+from app.agents.knowledge_agent.validation import EMPTY_QUESTION_REPLY, InvalidQuestionError
 from app.llm.exceptions import LLMError
 from app.tools.knowledge_rag_client import KnowledgeServiceError
 
