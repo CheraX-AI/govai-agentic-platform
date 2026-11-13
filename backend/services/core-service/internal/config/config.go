@@ -13,6 +13,7 @@ var ErrConfig = errors.New("invalid core chat server configuration")
 
 type Config struct {
 	RequestTimeout                                   time.Duration
+	MaxConcurrent                                    int // chats answered at the same time (all users)
 	Port, Certificate, Key, Issuer, Audience, CAFile string
 	Clients, Origins                                 []string
 }
@@ -34,6 +35,16 @@ func Load() (Config, error) {
 		if err != nil || c.RequestTimeout < time.Second || c.RequestTimeout > time.Minute {
 			return Config{}, ErrConfig
 		}
+	}
+
+	c.MaxConcurrent = 8
+	if value := os.Getenv("CHAT_MAX_CONCURRENT"); value != "" {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 64 || strconv.Itoa(n) != value {
+			return Config{}, ErrConfig
+		}
+
+		c.MaxConcurrent = n
 	}
 
 	if c.Port == "" {

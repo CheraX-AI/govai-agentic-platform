@@ -45,8 +45,8 @@ func LoginWithSessions(c config.Login, store *postgres.Store, resolvers ...login
 	limiter, e := httpapi.NewLocalRegistrationLimiter(
 		httpapi.RegistrationLimitConfig{
 			Key:           c.RateKey,
-			IPAttempts:    5,
-			EmailAttempts: 5,
+			IPAttempts:    orDefault(c.Limits.Login, 5),
+			EmailAttempts: orDefault(c.Limits.Login, 5),
 			IPWindow:      15 * time.Minute,
 			EmailWindow:   15 * time.Minute,
 			MaxKeys:       4096,
@@ -72,7 +72,7 @@ func LoginWithSessions(c config.Login, store *postgres.Store, resolvers ...login
 		sessionLimiter, e := httpapi.NewLocalRegistrationLimiter(
 			httpapi.RegistrationLimitConfig{
 				Key:           c.RateKey,
-				IPAttempts:    60,
+				IPAttempts:    orDefault(c.Limits.Refresh, 60),
 				EmailAttempts: 1,
 				IPWindow:      time.Minute,
 				EmailWindow:   time.Minute,

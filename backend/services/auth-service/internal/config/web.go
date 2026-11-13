@@ -20,6 +20,7 @@ type Web struct {
 	Origin, CAFile   string
 	DataKey, RateKey []byte
 	Lifetime         time.Duration
+	Limits           RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).

@@ -98,8 +98,8 @@ func newFixture(t *testing.T) *fixture {
 	router, err := httpapi.NewRouter(
 		verifier,
 		agent,
-		[]string{"https://web.example.test"},
 		slog.New(slog.NewJSONHandler(logs, nil)),
+		httpapi.Settings{Origins: []string{"https://web.example.test"}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -343,23 +343,43 @@ func (a *blockingAgent) Ask(ctx context.Context, q chatcontract.Question) (chatc
 }
 
 func TestChatBoundsConcurrentRequests(t *testing.T) {
+	t.Run("default 8", func(t *testing.T) { checkConcurrencyBound(t, httpapi.Settings{}, 8) })
+	t.Run("configured 2", func(t *testing.T) { checkConcurrencyBound(t, httpapi.Settings{MaxConcurrent: 2}, 2) })
+}
+
+func TestRouterRejectsInvalidSettings(t *testing.T) {
 	f := newFixture(t)
-	agent := &blockingAgent{started: make(chan struct{}, 8), release: make(chan struct{})}
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	for _, s := range []httpapi.Settings{
+		{MaxConcurrent: -1},
+		{MaxConcurrent: 65},
+		{Timeout: 500 * time.Millisecond},
+		{Timeout: 2 * time.Minute},
+	} {
+		if _, err := httpapi.NewRouter(f.verifier, &blockingAgent{}, logger, s); err == nil {
+			t.Fatalf("invalid settings accepted: %+v", s)
+		}
+	}
+}
+
+func checkConcurrencyBound(t *testing.T, settings httpapi.Settings, limit int) {
+	f := newFixture(t)
+	agent := &blockingAgent{started: make(chan struct{}, limit), release: make(chan struct{})}
 	var release sync.Once
 	defer release.Do(func() { close(agent.release) })
-	router, err := httpapi.NewRouter(f.verifier, agent, nil, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	router, err := httpapi.NewRouter(f.verifier, agent, slog.New(slog.NewJSONHandler(io.Discard, nil)), settings)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	f.router = router
 	token := f.token(t, nil)
-	results := make(chan int, 8)
-	for i := 0; i < 8; i++ {
+	results := make(chan int, limit)
+	for i := 0; i < limit; i++ {
 		go func() { results <- f.send(token, `{"message":"synthetic question"}`).Code }()
 	}
 
-	for i := 0; i < 8; i++ {
+	for i := 0; i < limit; i++ {
 		select {
 		case <-agent.started:
 		case <-time.After(3 * time.Second):
@@ -368,12 +388,12 @@ func TestChatBoundsConcurrentRequests(t *testing.T) {
 	}
 
 	response := f.send(token, `{"message":"synthetic question"}`)
-	if response.Code != 503 || response.Header().Get("Retry-After") != "1" || agent.calls.Load() != 8 {
+	if response.Code != 503 || response.Header().Get("Retry-After") != "1" || agent.calls.Load() != int32(limit) {
 		t.Fatal("concurrency bound failed")
 	}
 
 	release.Do(func() { close(agent.release) })
-	for i := 0; i < 8; i++ {
+	for i := 0; i < limit; i++ {
 		select {
 		case status := <-results:
 			if status != 200 {

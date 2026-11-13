@@ -25,6 +25,7 @@ type HTTPConfig struct {
 	URL, AuthMode, BearerToken string
 	Timeout                    time.Duration
 	AllowLoopbackHTTP          bool
+	MaxConns                   int // open connections to the agent (default 8, 1-64)
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
@@ -101,7 +102,7 @@ func ValidateHTTPConfig(c HTTPConfig) error {
 		return ErrUnavailable
 	}
 
-	if c.Timeout < 10*time.Millisecond || c.Timeout > time.Minute {
+	if c.Timeout < 10*time.Millisecond || c.Timeout > time.Minute || c.MaxConns < 0 || c.MaxConns > 64 {
 		return ErrUnavailable
 	}
 
@@ -147,9 +148,14 @@ func NewHTTP(c HTTPConfig, client *http.Client) (*HTTPAgent, error) {
 	transport.MaxResponseHeaderBytes = 16 << 10
 	transport.ResponseHeaderTimeout = c.Timeout
 	transport.TLSHandshakeTimeout = 5 * time.Second
-	transport.MaxConnsPerHost = 8
-	transport.MaxIdleConnsPerHost = 8
-	transport.MaxIdleConns = 8
+	conns := c.MaxConns
+	if conns == 0 {
+		conns = 8
+	}
+
+	transport.MaxConnsPerHost = conns
+	transport.MaxIdleConnsPerHost = conns
+	transport.MaxIdleConns = conns
 	bounded := *client
 	bounded.Transport = transport
 	bounded.Jar = nil

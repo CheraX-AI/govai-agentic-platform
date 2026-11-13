@@ -21,6 +21,7 @@ type Registration struct {
 	Admin                           keycloak.RegistrationConfig
 	FingerprintKey, RateKey         []byte
 	CAFile, TLSCertFile, TLSKeyFile string
+	Limits                          RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).

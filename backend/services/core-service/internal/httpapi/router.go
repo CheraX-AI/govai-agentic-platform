@@ -21,13 +21,19 @@ func fail(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": message, "code": code})
 }
 
+// Settings are the router's deploy-time limits. Zero values use the defaults.
+type Settings struct {
+	Origins       []string      // exact browser origins allowed by CORS; empty = none
+	Timeout       time.Duration // whole chat request budget (default 30s, 1s-60s)
+	MaxConcurrent int           // chats answered at the same time, all users (default 8, 1-64)
+}
+
 // NewRouter protects chat requests and applies shared request limits.
 func NewRouter(
 	verifier *authn.Verifier,
 	agent chat.Agent,
-	origins []string,
 	logger *slog.Logger,
-	budgets ...time.Duration,
+	settings Settings,
 ) (*gin.Engine, error) {
 	if verifier == nil || agent == nil {
 		return nil, errors.New("invalid chat router dependencies")
@@ -37,20 +43,25 @@ func NewRouter(
 		logger = slog.Default()
 	}
 
-	budget := 30 * time.Second
-	if len(budgets) > 1 {
-		return nil, errors.New("invalid chat timeout")
-	}
-
-	if len(budgets) == 1 {
-		budget = budgets[0]
+	budget := settings.Timeout
+	if budget == 0 {
+		budget = 30 * time.Second
 	}
 
 	if budget < time.Second || budget > time.Minute {
 		return nil, errors.New("invalid chat timeout")
 	}
 
-	origins = append([]string(nil), origins...)
+	maxConcurrent := settings.MaxConcurrent
+	if maxConcurrent == 0 {
+		maxConcurrent = 8
+	}
+
+	if maxConcurrent < 1 || maxConcurrent > 64 {
+		return nil, errors.New("invalid chat concurrency")
+	}
+
+	origins := append([]string(nil), settings.Origins...)
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
 	if router.SetTrustedProxies(nil) != nil {
@@ -150,7 +161,7 @@ func NewRouter(
 	health := func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok", "service": "govai-core"}) }
 	router.GET("/health", health)
 	router.GET("/api/health", health)
-	slots := make(chan struct{}, 8)
+	slots := make(chan struct{}, maxConcurrent)
 	router.POST("/api/chat/message",
 		verifier.Authenticate(),
 		authn.RequireVerifiedEmail(),

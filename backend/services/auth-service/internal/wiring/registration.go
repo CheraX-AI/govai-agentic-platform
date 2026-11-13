@@ -58,8 +58,8 @@ func Registration(c config.Registration, store *postgres.Store) (*httpapi.Regist
 	limiter, e := httpapi.NewLocalRegistrationLimiter(
 		httpapi.RegistrationLimitConfig{
 			Key:           c.RateKey,
-			IPAttempts:    5,
-			EmailAttempts: 3,
+			IPAttempts:    orDefault(c.Limits.RegistrationIP, 5),
+			EmailAttempts: orDefault(c.Limits.RegistrationEmail, 3),
 			IPWindow:      15 * time.Minute,
 			EmailWindow:   time.Hour,
 			MaxKeys:       4096,

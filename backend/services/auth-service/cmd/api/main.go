@@ -91,6 +91,16 @@ func run() error {
 		return err
 	}
 
+	// Optional rate-limit overrides, shared by login, web sessions and registration.
+	limits, err := config.LoadRateLimits()
+	if err != nil {
+		return err
+	}
+
+	regCfg.Limits = limits
+	loginCfg.Limits = limits
+	webCfg.Limits = limits
+
 	recoveryCfg, err := config.LoadRecovery(regCfg, webCfg)
 	if err != nil {
 		return err

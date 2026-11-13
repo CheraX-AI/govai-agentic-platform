@@ -144,7 +144,7 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 			}
 
 			defer agent.Close()
-			f.router, err = httpapi.NewRouter(f.verifier, agent, nil, slog.New(slog.NewJSONHandler(f.logs, nil)))
+			f.router, err = httpapi.NewRouter(f.verifier, agent, slog.New(slog.NewJSONHandler(f.logs, nil)), httpapi.Settings{})
 			if err != nil {
 				t.Fatal(err)
 			}

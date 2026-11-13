@@ -16,6 +16,7 @@ type Login struct {
 	Provider login.KeycloakConfig
 	RateKey  []byte
 	CAFile   string
+	Limits   RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
