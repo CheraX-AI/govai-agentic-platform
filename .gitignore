@@ -44,3 +44,6 @@ logs/
 
 # Claude Code
 CLAUDE.md
+
+# Documentation folders stay local (never pushed to GitHub)
+docs/
