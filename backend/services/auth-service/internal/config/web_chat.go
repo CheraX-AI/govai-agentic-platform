@@ -4,7 +4,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/chatgateway"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/chatgateway"
 )
 
 type WebChat struct {

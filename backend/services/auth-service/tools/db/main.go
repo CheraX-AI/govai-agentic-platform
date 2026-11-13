@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/postgres"
 )
 
 func main() {

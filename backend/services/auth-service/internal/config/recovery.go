@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/recovery"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/recovery"
 )
 
 var ErrRecoveryConfig = errors.New("invalid recovery runtime configuration")

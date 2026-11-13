@@ -86,11 +86,11 @@ proof authorizing password changes. Email-access-loss recovery stays deferred.
 
 Implemented components:
 
-- `internal/recovery`: redacted 256-bit tokens, canonical parsing, hash-only storage
+- `internal/features/recovery`: redacted 256-bit tokens, canonical parsing, hash-only storage
   boundary, transient password wrapper, masked-email helper and injected service.
-- `internal/postgres`: optional migrations 004/005/006, immutable email/operation binding and one-way atomic token claims with
+- `internal/external/postgres`: optional migrations 004/005/006, immutable email/operation binding and one-way atomic token claims with
   database expiry; HMAC NIC lookup joins saved issuer/subject/operation ownership.
-- `internal/keycloak/recovery.go`: saved-operation ownership and enabled/verified
+- `internal/external/keycloak/recovery.go`: saved-operation ownership and enabled/verified
   checks before recipient lookup, password update and separate session logout.
 
 Service request order: lookup -> verified recipient -> challenge issue -> mail.
@@ -422,17 +422,16 @@ Keycloak outage manipulation was performed. No identity configuration changed.
 
 | Location | Purpose |
 | --- | --- |
-| `cmd/api/main.go` | Start the authentication API; command remains `go run ./cmd/api`. |
-| `internal/httpapi/router.go` | Gin routes and shared HTTP request policies. |
-| `internal/httpapi/` | Registration, login, reset and session request handlers. |
-| `internal/httpapi/test/` | Public HTTP contract tests with fake dependencies. |
+| `cmd/api/main.go` | Start the authentication API (load config, build app, run); command remains `go run ./cmd/api`. |
+| `internal/app/` | Start and stop the service: load settings, build enabled features, mount routes, run and shut down the server. |
+| `internal/app/wiring/` | One builder per feature plus the shared Keycloak transport; also used by `tools/web-maintenance`. |
 | `internal/config/` | Environment settings and validation. |
-| `internal/wiring/` | Assemble feature dependencies. |
-| `internal/registration/`, `login/`, `recovery/`, `websession/` | Feature rules and workflows. |
-| `internal/keycloak/` | Keycloak communication. |
-| `internal/postgres/` | Application database operations. |
-| `internal/postgres/migrations/` | Versioned SQL schema; existing migrations unchanged. |
-| `internal/oidccheck/` | OIDC checks also used by configuration validation. |
+| `internal/http/handlers/` | Gin routes (`router.go`) and the registration, login, reset and session request handlers, with their tests. |
+| `internal/features/` | Citizen features: `registration/`, `login/`, `recovery/`, `websession/`, `chatgateway/` (rules and workflows). |
+| `internal/external/keycloak/` | Keycloak communication. |
+| `internal/external/postgres/` | Application database operations. |
+| `internal/external/postgres/migrations/` | Versioned SQL schema; existing migrations unchanged. |
+| `internal/external/oidccheck/` | OIDC checks also used by configuration validation. |
 | `tools/db/` | Explicit database checks/migrations. |
 | `tools/dev-auth/`, `tools/oidc-check/` | Local setup and connectivity commands. |
 | `tools/web-maintenance/` | Session-revocation queue maintenance. |

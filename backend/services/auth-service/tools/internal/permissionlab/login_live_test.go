@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/app/wiring"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
 	"github.com/gin-gonic/gin"
 )
 
@@ -199,7 +199,7 @@ func (l *lab) loginScenarioWithSessions(ctx context.Context, caFile string, sess
 	previous := gin.Mode()
 	gin.SetMode(gin.ReleaseMode)
 	defer gin.SetMode(previous)
-	server := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{Login: h, Protected: protected}))
+	server := httptest.NewTLSServer(handler.NewRouter(handler.RouterOptions{Login: h, Protected: protected}))
 	defer server.Close()
 	httpClient := server.Client()
 	httpClient.Timeout = 10 * time.Second

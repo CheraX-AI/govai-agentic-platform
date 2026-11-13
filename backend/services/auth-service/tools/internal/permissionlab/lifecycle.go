@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/keycloak"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/keycloak"
 )
 
 func (l *lab) lifeCheck(id string, ok bool) {

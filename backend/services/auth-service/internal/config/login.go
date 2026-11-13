@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/login"
 )
 
 type Login struct {

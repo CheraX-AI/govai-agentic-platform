@@ -33,7 +33,7 @@ func run() error {
 		return devsetup.ErrSetup
 	}
 	// Require invocation from the actual service directory, never a guessed cwd.
-	if _, e = os.Stat("internal/registration/service.go"); e != nil {
+	if _, e = os.Stat("internal/features/registration/service.go"); e != nil {
 		return devsetup.ErrSetup
 	}
 

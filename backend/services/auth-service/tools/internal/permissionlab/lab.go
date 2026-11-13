@@ -30,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/keycloak"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/keycloak"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
 )
 
 const image = "quay.io/keycloak/keycloak:26.8.1"

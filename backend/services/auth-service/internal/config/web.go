@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/websession"
 )
 
 type Web struct {

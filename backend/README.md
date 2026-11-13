@@ -45,4 +45,4 @@ core-service URLs in the environment must use addresses the container can reach,
 and the TLS certificates must be valid for those host names. Database migrations
 are not run by the API image; apply them with `go run ./tools/db` as before.
 
-Local server infrastructure is under `infrastructure/` at repository root. Authentication application schema remains in `services/auth-service/internal/postgres/migrations/`. See the infrastructure PostgreSQL README for the folder map.
+Local server infrastructure is under `infrastructure/` at repository root. Authentication application schema remains in `services/auth-service/internal/external/postgres/migrations/`. See the infrastructure PostgreSQL README for the folder map.

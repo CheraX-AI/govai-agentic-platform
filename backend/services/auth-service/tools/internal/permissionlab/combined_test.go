@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
 )
 
 func TestCombinedFailureOutputRedacted(t *testing.T) {

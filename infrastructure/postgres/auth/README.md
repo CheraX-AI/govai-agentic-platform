@@ -76,7 +76,7 @@ From the auth-service folder, after starting this database:
 
 ```powershell
 $env:GOVAI_DB_TEST = "1"
-go test ./internal/postgres -count=1 -v
+go test ./internal/external/postgres -count=1 -v
 Remove-Item Env:GOVAI_DB_TEST
 ```
 
