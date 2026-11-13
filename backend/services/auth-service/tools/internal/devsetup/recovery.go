@@ -16,8 +16,13 @@ import (
 
 // Fixed loopback API, validated by the existing local CA client. No real NIC,
 // password, reset link, token or cookie is sent, read from inbox or displayed.
-func (a *localAdmin) recoveryCheck(ctx context.Context) error {
+func (a *localAdmin) recoveryCheck(ctx context.Context, root string) error {
 	if a.check(ctx) != nil {
+		return ErrSetup
+	}
+
+	origin, err := webOrigin(root)
+	if err != nil {
 		return ErrSetup
 	}
 
@@ -46,7 +51,7 @@ func (a *localAdmin) recoveryCheck(ctx context.Context) error {
 		}
 
 		if test.method == "OPTIONS" {
-			req.Header.Set("Origin", "https://localhost:5001")
+			req.Header.Set("Origin", origin)
 			req.Header.Set("Access-Control-Request-Method", "POST")
 			req.Header.Set("Access-Control-Request-Headers", "Content-Type")
 		}
@@ -75,7 +80,7 @@ func (a *localAdmin) recoveryCheck(ctx context.Context) error {
 		}
 
 		if test.method == "OPTIONS" &&
-			(response.Header.Get("Access-Control-Allow-Origin") != "https://localhost:5001" ||
+			(response.Header.Get("Access-Control-Allow-Origin") != origin ||
 				response.Header.Get("Access-Control-Allow-Credentials") != "") {
 			return ErrSetup
 		}
@@ -138,9 +143,7 @@ func (a *localAdmin) recoverySampleCheck(ctx context.Context, root string, sendV
 			return nil
 		}
 
-		settings, err := godotenv.Read(
-			filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.registration"),
-		)
+		settings, err := godotenv.Read(serviceEnv(root))
 		if err != nil {
 			return ErrSetup
 		}

@@ -15,11 +15,22 @@ func TestConfig(t *testing.T) {
 		t.Setenv(key, value)
 	}
 
-	if c, err := Load(); err != nil || c.Port != "5002" || len(c.Clients) != 2 {
+	if c, err := Load(); err != nil || c.Port != "5002" || len(c.Clients) != 2 || c.MaxConcurrent != 8 {
 		t.Fatal("valid config rejected")
 	}
 
+	t.Run("CHAT_MAX_CONCURRENT set", func(t *testing.T) {
+		t.Setenv("CHAT_MAX_CONCURRENT", "20")
+		if c, err := Load(); err != nil || c.MaxConcurrent != 20 {
+			t.Fatal("concurrency setting ignored")
+		}
+	})
+
 	for _, tc := range []struct{ key, value string }{
+		{"CHAT_MAX_CONCURRENT", "0"},
+		{"CHAT_MAX_CONCURRENT", "65"},
+		{"CHAT_MAX_CONCURRENT", "08"},
+		{"CHAT_MAX_CONCURRENT", "many"},
 		{"CORE_PORT", "0"},
 		{"CORE_PORT", "05002"},
 		{"CORE_TLS_KEY_FILE", ""},

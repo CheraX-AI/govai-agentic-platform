@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/oidccheck"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/oidccheck"
 	"github.com/joho/godotenv"
 )
 

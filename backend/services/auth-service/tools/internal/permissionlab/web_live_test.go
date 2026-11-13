@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/app/wiring"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
 )
 
 func TestWebSessionLive(t *testing.T) {
@@ -104,7 +104,7 @@ func (l *lab) webScenario(
 	}
 
 	defer closeWeb()
-	server := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{WebSessions: h}))
+	server := httptest.NewTLSServer(handler.NewRouter(handler.RouterOptions{WebSessions: h}))
 	defer server.Close()
 	client := server.Client()
 	client.Timeout = 10 * time.Second
@@ -242,7 +242,7 @@ func (l *lab) webScenario(
 		return errSafe
 	}
 
-	secondServer := httptest.NewTLSServer(httpapi.NewRouter(httpapi.RouterOptions{WebSessions: second}))
+	secondServer := httptest.NewTLSServer(handler.NewRouter(handler.RouterOptions{WebSessions: second}))
 	secondClient := secondServer.Client()
 	secondClient.Timeout = 10 * time.Second
 	reloadedRequest, e := http.NewRequestWithContext(ctx, "GET", secondServer.URL+"/api/v1/web/session", nil)
@@ -252,7 +252,7 @@ func (l *lab) webScenario(
 
 	reloadedRequest.Header.Set("Origin", cfg.Origin)
 	reloadedRequest.Header.Set("X-GovAI-Web", "1")
-	reloadedRequest.AddCookie(&http.Cookie{Name: httpapi.WebSessionCookie, Value: cookie})
+	reloadedRequest.AddCookie(&http.Cookie{Name: handler.WebSessionCookie, Value: cookie})
 	reloaded, e := secondClient.Do(reloadedRequest)
 	if e != nil {
 		secondServer.Close()
@@ -278,7 +278,7 @@ func (l *lab) webScenario(
 	)
 	client.Jar.SetCookies(
 		base,
-		[]*http.Cookie{{Name: httpapi.WebSessionCookie, Value: cookie, Path: "/", Secure: true}},
+		[]*http.Cookie{{Name: handler.WebSessionCookie, Value: cookie, Path: "/", Secure: true}},
 	)
 	status, _, _ = request("GET", "/api/v1/web/session", nil, "", cfg.Origin)
 	l.lifeCheck("WEB_OLD_COOKIE_REJECTED", status == 401)

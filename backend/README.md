@@ -20,4 +20,29 @@ Local identity-environment setup is separate from the Go API. See
 [Keycloak development step 1](../infrastructure/keycloak/README.md) for its isolated Compose
 configuration, synthetic citizen setup, verification checklist, and runtime limits.
 
-Local server infrastructure is under `infrastructure/` at repository root. Authentication application schema remains in `services/auth-service/internal/postgres/migrations/`. See the infrastructure PostgreSQL README for the folder map.
+## Docker images
+
+Each service has its own `Dockerfile` and is deployed on its own. Build from this
+`backend/` folder, because both services compile in the shared `pkg/authn`:
+
+```powershell
+docker build -f services/auth-service/Dockerfile -t govai-auth .
+docker build -f services/core-service/Dockerfile -t govai-core .
+```
+
+Images contain only the compiled binary (distroless, non-root). `.dockerignore`
+keeps `.env` files, keys and local state out of the build. Pass settings and
+TLS files when the container starts, for example:
+
+```powershell
+docker run --env-file services/auth-service/.env -e API_TLS_CERT_FILE=/tls/api-cert.pem `
+  -e API_TLS_KEY_FILE=/tls/api-key.pem -v ${PWD}/../infrastructure/keycloak/tls:/tls:ro `
+  -p 5001:5001 govai-auth
+```
+
+Inside a container `localhost` is the container itself: Keycloak, PostgreSQL and
+core-service URLs in the environment must use addresses the container can reach,
+and the TLS certificates must be valid for those host names. Database migrations
+are not run by the API image; apply them with `go run ./tools/db` as before.
+
+Local server infrastructure is under `infrastructure/` at repository root. Authentication application schema remains in `services/auth-service/internal/external/postgres/migrations/`. See the infrastructure PostgreSQL README for the folder map.

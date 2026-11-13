@@ -1,7 +1,4 @@
-"""LLM errors and the helpers that classify NVIDIA chat API failures.
-
-Callers can catch LLMError for every failure, or a subclass to react to one kind.
-"""
+"""LLM errors and helpers to summarise them."""
 
 import re
 

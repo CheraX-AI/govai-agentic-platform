@@ -1,19 +1,4 @@
-"""Client for the knowledge-service retrieval API: the agent's only way to reach the RAG.
-
-The knowledge service is a separate service with an internal API that only
-agent-service calls. This client sends the question there and reads the
-retrieved chunks back as KnowledgeSource objects.
-
-Design:
-
-- Adapter: KnowledgeRagClient.retrieve() hides HTTP, JSON, and status codes
-  behind one method that returns KnowledgeSource objects or raises a
-  KnowledgeServiceError subclass.
-- Factory: create_rag_client() reads the settings from .env.
-- Dependency injection: tests pass an httpx client with a fake transport.
-
-Each call is traced in LangSmith as a "retriever" step inside the agent's trace.
-"""
+"""Client for the knowledge-service retrieval API."""
 
 import os
 from pathlib import Path

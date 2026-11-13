@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
 	"github.com/joho/godotenv"
 )
 
@@ -114,7 +114,7 @@ func (a *localAdmin) smoke(ctx context.Context, root string) error {
 		return ErrSetup
 	}
 
-	env, e := godotenv.Read(filepath.Join(serviceRoot, ".env.database"))
+	env, e := godotenv.Read(filepath.Join(serviceRoot, ".env"))
 	if e != nil {
 		return ErrSetup
 	}

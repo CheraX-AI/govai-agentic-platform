@@ -1,9 +1,4 @@
-"""NVIDIA chat model settings, read from the agent-service/.env file.
-
-All model settings and the API key live in .env; nothing is hardcoded here
-except the safety limits the values are checked against. Real environment
-variables override the file, which is useful in CI.
-"""
+"""NVIDIA chat model settings, read from .env."""
 
 import os
 from pathlib import Path

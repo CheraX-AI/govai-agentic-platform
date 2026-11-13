@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/oidccheck"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/oidccheck"
 )
 
 func run() error {

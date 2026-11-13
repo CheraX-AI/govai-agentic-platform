@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.agents.knowledge_agent.prompts import EMPTY_QUESTION_REPLY, SHORT_QUESTION_REPLY, InvalidQuestionError
+from app.agents.knowledge_agent.validation import EMPTY_QUESTION_REPLY, SHORT_QUESTION_REPLY, InvalidQuestionError
 from app.agents.knowledge_agent.schemas import KnowledgeAnswer, SourceReference
 from app.graph.workflow import (
     ASSISTANT_UNAVAILABLE_REPLY,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -14,6 +15,30 @@ import (
 )
 
 const webLoginClient = "govai-login-web-dev"
+
+// validOrigin accepts a bare HTTPS origin such as https://localhost:5001 or
+// https://govai.example.ac.lk: no path, query, fragment or credentials.
+func validOrigin(origin string) bool {
+	u, e := url.Parse(origin)
+	return e == nil &&
+		u.Scheme == "https" &&
+		u.Hostname() != "" &&
+		u.User == nil &&
+		u.Path == "" &&
+		u.RawQuery == "" &&
+		u.Fragment == "" &&
+		u.String() == origin
+}
+
+// webOrigin reads the browser origin (WEB_ORIGIN) from the service's .env.
+func webOrigin(root string) (string, error) {
+	settings, e := godotenv.Read(serviceEnv(root))
+	if e != nil || !validOrigin(settings["WEB_ORIGIN"]) {
+		return "", ErrSetup
+	}
+
+	return settings["WEB_ORIGIN"], nil
+}
 
 // configureSessions addresses only the approved fixed local realm. It snapshots
 // relevant settings privately before changing owned clients or rotation policy.
@@ -23,19 +48,16 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 	}
 
 	service := filepath.Join(root, "..", "..", "backend", "services", "auth-service")
-	webFile := filepath.Join(service, ".env.web")
-	loginFile := filepath.Join(service, ".env.login")
-	web, e := godotenv.Read(webFile)
+	envFile := serviceEnv(root)
+	settings, e := godotenv.Read(envFile)
 	if e != nil {
 		return ErrSetup
 	}
 
-	mobileEnv, e := godotenv.Read(loginFile)
-	if e != nil {
-		return ErrSetup
-	}
+	// The web and mobile login settings live in the same file, in their own sections.
+	web, mobileEnv := settings, settings
 
-	if web["WEB_ORIGIN"] != "https://localhost:5001" ||
+	if !validOrigin(web["WEB_ORIGIN"]) ||
 		web["WEB_CLIENT_ID"] != webLoginClient ||
 		web["WEB_ISSUER_URL"] != base+"/realms/GovAI" ||
 		len(web["WEB_CLIENT_SECRET"]) < 32 {
@@ -85,11 +107,9 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 		return ErrSetup
 	}
 
-	for _, name := range []string{".env.web", ".env.login"} {
-		data, e := os.ReadFile(filepath.Join(service, name))
-		if e != nil || writeNew(filepath.Join(backup, name+".before"), data) != nil {
-			return ErrSetup
-		}
+	data, e = os.ReadFile(envFile)
+	if e != nil || writeNew(filepath.Join(backup, ".env.before"), data) != nil {
+		return ErrSetup
 	}
 
 	fmt.Fprintln(a.out, "DEV_AUTH_SESSIONS_PRIVATE_BACKUP PASS")
@@ -189,14 +209,12 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 		return ErrSetup
 	}
 
-	mobileEnv["LOGIN_REFRESH_ENABLED"] = "true"
-	web["WEB_CLIENT_SECRET"] = secret
-	web["WEB_SESSION_ENABLED"] = "true"
-	for path, env := range map[string]map[string]string{loginFile: mobileEnv, webFile: web} {
-		text, e := godotenv.Marshal(env)
-		if e != nil || os.WriteFile(path, []byte(text+"\n"), 0600) != nil {
-			return ErrSetup
-		}
+	if updateEnv(envFile, "Web session (browser)", map[string]string{
+		"LOGIN_REFRESH_ENABLED": "true",
+		"WEB_CLIENT_SECRET":     secret,
+		"WEB_SESSION_ENABLED":   "true",
+	}) != nil {
+		return ErrSetup
 	}
 
 	fmt.Fprintln(
@@ -208,7 +226,12 @@ func (a *localAdmin) configureSessions(ctx context.Context, root string) error {
 	return nil
 }
 
-func (a *localAdmin) sessionsCheck(ctx context.Context) error {
+func (a *localAdmin) sessionsCheck(ctx context.Context, root string) error {
+	origin, e := webOrigin(root)
+	if e != nil {
+		return ErrSetup
+	}
+
 	tests := []struct {
 		method, path, origin, body string
 		want                       int
@@ -216,14 +239,14 @@ func (a *localAdmin) sessionsCheck(ctx context.Context) error {
 		{"GET", "/api/ready", "", "", 200},
 		{"POST", "/api/v1/auth/refresh", "", `{"refresh_token":"synthetic-invalid"}`, 401},
 		{"POST", "/api/v1/auth/revoke", "", `{"refresh_token":"synthetic-invalid"}`, 204},
-		{"GET", "/api/v1/web/session", "https://localhost:5001", "", 401},
-		{"GET", "/api/v1/web/csrf", "https://localhost:5001", "", 401},
-		{"POST", "/api/v1/web/refresh", "https://localhost:5001", "", 401},
+		{"GET", "/api/v1/web/session", origin, "", 401},
+		{"GET", "/api/v1/web/csrf", origin, "", 401},
+		{"POST", "/api/v1/web/refresh", origin, "", 401},
 		{"POST", "/api/v1/web/login", "https://evil.test", `{}`, 403},
 		{
 			"POST",
 			"/api/v1/web/login",
-			"https://localhost:5001",
+			origin,
 			`{"email":"absent-` + randomSecret()[:16] + `@govai.test","password":"` + randomSecret() + `"}`,
 			401,
 		},

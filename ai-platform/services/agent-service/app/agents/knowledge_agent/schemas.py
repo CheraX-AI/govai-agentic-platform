@@ -1,9 +1,4 @@
-"""Data the Knowledge Agent works with.
-
-agent-service is deployed on its own, so it does not import the knowledge-service
-models. KnowledgeSource has the same fields as the knowledge-service
-RetrievedChunk, so a retrieval result can be read straight into it.
-"""
+"""Data models used by the Knowledge Agent."""
 
 from pydantic import BaseModel, Field
 

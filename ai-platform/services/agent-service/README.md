@@ -31,7 +31,8 @@ agent-service/
 │   │   └── knowledge_agent/
 │   │       ├── agent.py            # KnowledgeAgent: retrieve, prompt, LLM, cited sources
 │   │       ├── schemas.py          # KnowledgeSource, ServiceScope, SourceReference, KnowledgeAnswer
-│   │       └── prompts.py          # Versioned system and RAG prompts, LangSmith run config
+│   │       ├── prompts.py          # Versioned system and RAG prompts, LangSmith run config
+│   │       └── validation.py       # clean_question: question limits and citizen replies
 │   ├── tools/
 │   │   └── knowledge_rag_client.py # KnowledgeRagClient for the knowledge-service retrieval API
 │   └── llm/
@@ -373,11 +374,12 @@ The Knowledge Agent prompts are in `app/agents/knowledge_agent/prompts.py`.
 | `SYSTEM_PROMPT` | The agent's role and rules |
 | `RAG_PROMPT` | `ChatPromptTemplate`: system message, then the documents and the question |
 | `AVAILABLE_DOCUMENTS_SCOPE` | The default scope: every published document in the knowledge service |
-| `clean_question(question)` | Normalises whitespace and checks 3–1000 characters; raises `InvalidQuestionError` with a reply for the citizen |
 | `INSUFFICIENT_INFORMATION_REPLY` | The exact sentence the model gives when the documents do not answer |
 | `build_rag_messages(question, sources, service_scope)` | The filled-in messages for one question |
 | `format_context(sources)` | Numbers the documents and wraps their text in `<document>` tags |
 | `build_trace_config(service_scope)` | LangSmith run name, tags, and metadata for a Knowledge Agent call |
+
+`clean_question(question)` is in `validation.py`: it normalises whitespace and checks 3–1000 characters, raising `InvalidQuestionError` with a reply for the citizen. `build_rag_messages` calls it too.
 
 The system prompt tells the model to:
 
@@ -471,6 +473,7 @@ pytest
 | `tests/test_llm_config.py` | Nothing |
 | `tests/test_llm_provider.py` | Nothing (network access is blocked in these tests) |
 | `tests/test_knowledge_prompts.py` | Nothing |
+| `tests/test_question_validation.py` | Nothing |
 | `tests/test_knowledge_rag_client.py` | Nothing (fake HTTP transport) |
 | `tests/test_knowledge_agent.py` | Nothing (fake RAG client and chat model) |
 | `tests/test_workflow.py` | Nothing (fake Knowledge Agent) |

@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
 )
 
 // EXPLICITLY SYNTHETIC TEST STORES. Never compiled into an application binary.

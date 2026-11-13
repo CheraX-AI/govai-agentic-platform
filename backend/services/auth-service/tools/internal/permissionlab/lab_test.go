@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
 )
 
 const testRealm = "ga48-permission-00000000000000000000000000000000"

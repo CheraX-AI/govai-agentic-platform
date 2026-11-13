@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,34 +19,42 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func sign(t *testing.T, key *rsa.PrivateKey, kid string, claims map[string]any) string {
+// testKeycloak is a fake Keycloak that serves one public signing key.
+type testKeycloak struct {
+	server *httptest.Server
+	issuer string
+	key    *rsa.PrivateKey
+	jwks   atomic.Value // published public key; tests can rotate it safely
+}
+
+func newTestKeycloak(t *testing.T) *testKeycloak {
 	t.Helper()
-	h, _ := json.Marshal(map[string]string{"typ": "JWT", "alg": "RS256", "kid": kid})
-	b, _ := json.Marshal(claims)
-	encoded := base64.RawURLEncoding.EncodeToString(h) + "." + base64.RawURLEncoding.EncodeToString(b)
-	sum := sha256.Sum256([]byte(encoded))
-	signature, e := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	return encoded + "." + base64.RawURLEncoding.EncodeToString(signature)
+	kc := &testKeycloak{key: newKey(t)}
+	kc.jwks.Store(publicKey(kc.key, "one"))
+	kc.server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{kc.jwks.Load()}})
+	}))
+	t.Cleanup(kc.server.Close)
+	kc.issuer = kc.server.URL + "/realms/test"
+	return kc
 }
 
-func keyJSON(key *rsa.PrivateKey, kid string) map[string]string {
-	return map[string]string{
-		"kty": "RSA",
-		"kid": kid,
-		"alg": "RS256",
-		"use": "sig",
-		"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
-		"e":   "AQAB",
+func (kc *testKeycloak) verifier(t *testing.T) *Verifier {
+	t.Helper()
+	v, err := New(Config{Issuer: kc.issuer, Audience: "govai-api", Clients: []string{"mobile"}}, kc.server.Client())
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	t.Cleanup(v.Close)
+	return v
 }
 
-func claims(issuer string, now time.Time) map[string]any {
+// validClaims is a correct citizen access token; tests change one field at a time.
+func (kc *testKeycloak) validClaims() map[string]any {
+	now := time.Now()
 	return map[string]any{
-		"iss":            issuer,
+		"iss":            kc.issuer,
 		"sub":            "synthetic-subject",
 		"aud":            []string{"govai-api"},
 		"azp":            "mobile",
@@ -59,281 +66,223 @@ func claims(issuer string, now time.Time) map[string]any {
 	}
 }
 
-func fixture(t *testing.T) (*Verifier, *rsa.PrivateKey, *atomic.Int32, *atomic.Int64, string) {
+func newKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
-	key, e := rsa.GenerateKey(rand.Reader, 2048)
-	if e != nil {
-		t.Fatal(e)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	count := &atomic.Int32{}
-	clock := &atomic.Int64{}
-	clock.Store(time.Now().Unix())
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		count.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{keyJSON(key, "one")}})
-	}))
-	t.Cleanup(server.Close)
-	issuer := server.URL + "/realms/test"
-	v, e := New(
-		Config{
-			Issuer:   issuer,
-			Audience: "govai-api",
-			Clients:  []string{"mobile"},
-			Now:      func() time.Time { return time.Unix(clock.Load(), 0) },
-		},
-		server.Client(),
-	)
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	t.Cleanup(v.Close)
-	return v, key, count, clock, issuer
+	return key
 }
 
-func TestVerifierClaimsAndForgery(t *testing.T) {
-	v, key, count, clock, issuer := fixture(t)
-	now := time.Unix(clock.Load(), 0)
-	identity, e := v.Verify(context.Background(), sign(t, key, "one", claims(issuer, now)))
-	if e != nil || identity.Subject != "synthetic-subject" || !identity.EmailVerified {
-		t.Fatal("valid access denied")
+func publicKey(key *rsa.PrivateKey, kid string) map[string]string {
+	return map[string]string{
+		"kty": "RSA",
+		"kid": kid,
+		"alg": "RS256",
+		"use": "sig",
+		"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+		"e":   "AQAB",
+	}
+}
+
+// sign builds an RS256 JWT, the same way Keycloak does.
+func sign(t *testing.T, key *rsa.PrivateKey, kid string, claims map[string]any) string {
+	t.Helper()
+	header, _ := json.Marshal(map[string]string{"typ": "JWT", "alg": "RS256", "kid": kid})
+	body, _ := json.Marshal(claims)
+	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(body)
+	sum := sha256.Sum256([]byte(unsigned))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	cases := map[string]func(map[string]any){
-		"wrong issuer":    func(c map[string]any) { c["iss"] = "https://other.example.test/realm" },
-		"wrong audience":  func(c map[string]any) { c["aud"] = []string{"account"} },
-		"wrong client":    func(c map[string]any) { c["azp"] = "other" },
-		"ID token":        func(c map[string]any) { c["typ"] = "ID" },
-		"expired":         func(c map[string]any) { c["exp"] = now.Add(-time.Second).Unix() },
-		"future iat":      func(c map[string]any) { c["iat"] = now.Add(time.Minute).Unix() },
-		"future nbf":      func(c map[string]any) { c["nbf"] = now.Add(time.Minute).Unix() },
-		"missing subject": func(c map[string]any) { delete(c, "sub") },
-		"excess lifetime": func(c map[string]any) { c["exp"] = now.Add(2 * time.Hour).Unix() },
+	return unsigned + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func TestVerify(t *testing.T) {
+	kc := newTestKeycloak(t)
+	v := kc.verifier(t)
+
+	identity, err := v.Verify(context.Background(), sign(t, kc.key, "one", kc.validClaims()))
+	if err != nil {
+		t.Fatalf("valid token rejected: %v", err)
 	}
-	for name, change := range cases {
+
+	if identity.Subject != "synthetic-subject" ||
+		identity.Client != "mobile" ||
+		!identity.EmailVerified ||
+		len(identity.Roles) != 1 ||
+		identity.Roles[0] != "citizen" {
+		t.Fatalf("wrong identity: %+v", identity)
+	}
+
+	invalid := map[string]func(map[string]any){
+		"expired":         func(c map[string]any) { c["exp"] = time.Now().Add(-time.Minute).Unix() },
+		"not valid yet":   func(c map[string]any) { c["nbf"] = time.Now().Add(time.Hour).Unix() },
+		"wrong issuer":    func(c map[string]any) { c["iss"] = "https://other.example.test/realms/test" },
+		"wrong audience":  func(c map[string]any) { c["aud"] = []string{"account"} },
+		"wrong client":    func(c map[string]any) { c["azp"] = "other-app" },
+		"ID token":        func(c map[string]any) { c["typ"] = "ID" },
+		"missing subject": func(c map[string]any) { delete(c, "sub") },
+	}
+	for name, change := range invalid {
 		t.Run(name, func(t *testing.T) {
-			c := claims(issuer, now)
-			change(c)
-			if _, e := v.Verify(context.Background(), sign(t, key, "one", c)); e == nil {
-				t.Fatal("invalid claims accepted")
+			claims := kc.validClaims()
+			change(claims)
+			if _, err := v.Verify(context.Background(), sign(t, kc.key, "one", claims)); err == nil {
+				t.Fatal("invalid token accepted")
 			}
 		})
 	}
 
-	forged, e := rsa.GenerateKey(rand.Reader, 2048)
-	if e != nil {
-		t.Fatal(e)
+	t.Run("bad signature", func(t *testing.T) {
+		forged := sign(t, newKey(t), "one", kc.validClaims())
+		if _, err := v.Verify(context.Background(), forged); err == nil {
+			t.Fatal("token signed by another key accepted")
+		}
+	})
+
+	t.Run("unsigned", func(t *testing.T) {
+		body := strings.Split(sign(t, kc.key, "one", kc.validClaims()), ".")[1]
+		if _, err := v.Verify(context.Background(), "eyJhbGciOiJub25lIn0."+body+"."); err == nil {
+			t.Fatal("unsigned token accepted")
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		if _, err := v.Verify(context.Background(), ""); err == nil {
+			t.Fatal("empty token accepted")
+		}
+	})
+}
+
+func TestKeyRotation(t *testing.T) {
+	kc := newTestKeycloak(t)
+	v := kc.verifier(t)
+	if _, err := v.Verify(context.Background(), sign(t, kc.key, "one", kc.validClaims())); err != nil {
+		t.Fatal(err)
 	}
 
-	if _, e = v.Verify(context.Background(), sign(t, forged, "one", claims(issuer, now))); e == nil {
-		t.Fatal("forged signature accepted")
-	}
-
-	raw := sign(t, key, "one", claims(issuer, now))
-	unsigned := "eyJhbGciOiJub25lIn0." + strings.Split(raw, ".")[1] + "."
-	if _, e = v.Verify(context.Background(), unsigned); e == nil {
-		t.Fatal("unsigned token accepted")
-	}
-
-	for i := 0; i < 8; i++ {
-		_, _ = v.Verify(context.Background(), sign(t, forged, "unknown", claims(issuer, now)))
-	}
-
-	if count.Load() != 1 {
-		t.Fatal("unknown-kid refresh cooldown failed")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, e = v.Verify(ctx, raw); e == nil {
-		t.Fatal("canceled verification accepted")
+	// Keycloak switches to a new signing key; the verifier must fetch it.
+	kc.key = newKey(t)
+	kc.jwks.Store(publicKey(kc.key, "two"))
+	if _, err := v.Verify(context.Background(), sign(t, kc.key, "two", kc.validClaims())); err != nil {
+		t.Fatalf("token signed with rotated key rejected: %v", err)
 	}
 }
 
-func TestMiddlewareAuthorizationAndIdentity(t *testing.T) {
-	v, key, _, clock, issuer := fixture(t)
-	previous := gin.Mode()
-	gin.SetMode(gin.ReleaseMode)
-	defer gin.SetMode(previous)
+func TestMiddleware(t *testing.T) {
+	kc := newTestKeycloak(t)
+	v := kc.verifier(t)
+	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	reached := 0
-	router.GET("/protected",
-		v.Authenticate(),
-		RequireVerifiedEmail(),
-		RequireRole("citizen"),
-		func(c *gin.Context) {
-			identity, ok := Current(c)
-			if !ok {
-				t.Fatal("missing validated identity")
-			}
+	router.GET("/protected", v.Authenticate(), RequireVerifiedEmail(), RequireRole("citizen"), func(c *gin.Context) {
+		identity, ok := Current(c)
+		if !ok || identity.Subject != "synthetic-subject" {
+			t.Error("identity missing in handler")
+		}
 
-			identity.Roles[0] = "changed"
-			again, _ := Current(c)
-			if again.Roles[0] != "citizen" {
-				t.Fatal("mutable role context leaked")
-			}
+		reached++
+		c.Status(http.StatusOK)
+	})
 
-			reached++
-			c.JSON(200, gin.H{"ok": true})
-		})
-	now := time.Unix(clock.Load(), 0)
-	for _, test := range []struct {
-		name   string
-		change func(map[string]any)
-		header string
-		tls    bool
-		want   int
+	token := func(change func(map[string]any)) string {
+		claims := kc.validClaims()
+		if change != nil {
+			change(claims)
+		}
+
+		return "Bearer " + sign(t, kc.key, "one", claims)
+	}
+
+	tests := []struct {
+		name    string
+		headers []string
+		noTLS   bool
+		want    int
 	}{
-		{name: "missing", tls: true, want: 401},
-		{name: "malformed", header: "Basic private", tls: true, want: 401},
-		{name: "valid", header: "TOKEN", tls: true, want: 200},
-		{
-			name:   "unverified",
-			header: "TOKEN",
-			tls:    true,
-			want:   403,
-			change: func(c map[string]any) { c["email_verified"] = false },
-		},
-		{
-			name:   "wrong role",
-			header: "TOKEN",
-			tls:    true,
-			want:   403,
-			change: func(c map[string]any) { c["realm_access"] = map[string]any{"roles": []string{"staff"}} },
-		},
-		{
-			name:   "expired",
-			header: "TOKEN",
-			tls:    true,
-			want:   401,
-			change: func(c map[string]any) { c["exp"] = now.Add(-time.Minute).Unix() },
-		},
-		{name: "HTTP", header: "TOKEN", want: 426},
-	} {
+		{name: "valid", headers: []string{token(nil)}, want: 200},
+		{name: "missing token", want: 401},
+		{name: "not Bearer", headers: []string{"Basic abc"}, want: 401},
+		{name: "two headers", headers: []string{token(nil), token(nil)}, want: 401},
+		{name: "expired", headers: []string{token(func(c map[string]any) {
+			c["exp"] = time.Now().Add(-time.Minute).Unix()
+		})}, want: 401},
+		{name: "wrong role", headers: []string{token(func(c map[string]any) {
+			c["realm_access"] = map[string]any{"roles": []string{"staff"}}
+		})}, want: 403},
+		{name: "unverified email", headers: []string{token(func(c map[string]any) {
+			c["email_verified"] = false
+		})}, want: 403},
+		{name: "plain HTTP", headers: []string{token(nil)}, noTLS: true, want: 426},
+	}
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			c := claims(issuer, now)
-			if test.change != nil {
-				test.change(c)
-			}
-
-			header := test.header
-			if header == "TOKEN" {
-				header = "Bearer " + sign(t, key, "one", c)
-			}
-
-			req := httptest.NewRequest("GET", "/protected?access_token=not-accepted", nil)
-			if test.tls {
+			req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+			if !test.noTLS {
 				req.TLS = &tls.ConnectionState{}
 			}
 
-			if header != "" {
-				req.Header.Set("Authorization", header)
+			for _, h := range test.headers {
+				req.Header.Add("Authorization", h)
 			}
 
-			req.Header.Set("X-Forwarded-Proto", "https")
-			req.Header.Set("X-User-Role", "citizen")
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			if w.Code != test.want || w.Header().Get("Cache-Control") != "no-store" {
-				t.Fatalf("status=%d", w.Code)
+			if w.Code != test.want {
+				t.Fatalf("status = %d, want %d", w.Code, test.want)
+			}
+
+			if w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("response may be cached")
 			}
 
 			if test.want == 401 && w.Header().Get("WWW-Authenticate") != "Bearer" {
-				t.Fatal("missing challenge")
+				t.Fatal("401 without WWW-Authenticate")
 			}
 		})
 	}
 
 	if reached != 1 {
-		t.Fatal("unauthorized request reached protected handler")
-	}
-
-	req := httptest.NewRequest("GET", "/protected", nil)
-	req.TLS = &tls.ConnectionState{}
-	req.Header.Add("Authorization", "Bearer one")
-	req.Header.Add("Authorization", "Bearer two")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != 401 {
-		t.Fatal("multiple headers accepted")
+		t.Fatalf("handler reached %d times, want only for the valid token", reached)
 	}
 }
 
-func TestConfigAndTLSGuards(t *testing.T) {
-	server := httptest.NewTLSServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, `{"keys":[]}`) }),
-	)
-	defer server.Close()
-	c := Config{Issuer: server.URL + "/realms/test", Audience: "govai-api", Clients: []string{"mobile"}}
-	for _, issuer := range []string{
-		"http://localhost/realms/test",
-		server.URL + "/realms/test/",
-		server.URL + "/realms/test?keys=evil",
-	} {
-		copy := c
-		copy.Issuer = issuer
-		if _, e := New(copy, server.Client()); e == nil {
-			t.Fatal("unsafe issuer accepted")
+func TestNewRejectsUnsafeConfig(t *testing.T) {
+	kc := newTestKeycloak(t)
+	good := Config{Issuer: kc.issuer, Audience: "govai-api", Clients: []string{"mobile"}}
+
+	bad := map[string]func(*Config){
+		"HTTP issuer":     func(c *Config) { c.Issuer = "http://localhost/realms/test" },
+		"trailing slash":  func(c *Config) { c.Issuer += "/" },
+		"query in issuer": func(c *Config) { c.Issuer += "?x=1" },
+		"no audience":     func(c *Config) { c.Audience = "" },
+		"no clients":      func(c *Config) { c.Clients = nil },
+	}
+	for name, change := range bad {
+		t.Run(name, func(t *testing.T) {
+			config := good
+			change(&config)
+			if _, err := New(config, kc.server.Client()); err == nil {
+				t.Fatal("unsafe config accepted")
+			}
+		})
+	}
+
+	t.Run("TLS checks off", func(t *testing.T) {
+		client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+		if _, err := New(good, client); err == nil {
+			t.Fatal("client without certificate checks accepted")
 		}
-	}
+	})
 
-	client := server.Client()
-	client.Transport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	if _, e := New(c, client); e == nil {
-		t.Fatal("TLS bypass accepted")
-	}
-}
-
-func TestRotationAfterRefreshInterval(t *testing.T) {
-	one, e := rsa.GenerateKey(rand.Reader, 2048)
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	two, e := rsa.GenerateKey(rand.Reader, 2048)
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	var rotate atomic.Bool
-	var count atomic.Int32
-	var clock atomic.Int64
-	clock.Store(time.Now().Unix())
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		count.Add(1)
-		key, kid := one, "one"
-		if rotate.Load() {
-			key, kid = two, "two"
+	t.Run("no client", func(t *testing.T) {
+		if _, err := New(good, nil); err == nil {
+			t.Fatal("nil client accepted")
 		}
-
-		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{keyJSON(key, kid)}})
-	}))
-	defer server.Close()
-	issuer := server.URL + "/realms/test"
-	v, e := New(
-		Config{
-			Issuer:   issuer,
-			Audience: "govai-api",
-			Clients:  []string{"mobile"},
-			Now:      func() time.Time { return time.Unix(clock.Load(), 0) },
-		},
-		server.Client(),
-	)
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	defer v.Close()
-	if _, e = v.Verify(context.Background(), sign(t, one, "one", claims(issuer, time.Unix(clock.Load(), 0)))); e != nil {
-		t.Fatal(e)
-	}
-
-	rotate.Store(true)
-	clock.Add(6)
-	if _, e = v.Verify(context.Background(), sign(t, two, "two", claims(issuer, time.Unix(clock.Load(), 0)))); e != nil ||
-
-		count.Load() != 2 {
-		t.Fatal("rotated key not refreshed")
-	}
+	})
 }

@@ -1,17 +1,4 @@
-"""The NVIDIA chat model used by the GovAI agents.
-
-Design:
-
-- Factory: create_llm_provider() builds the ChatNVIDIA client from LLMSettings,
-  and load_llm_provider() reads the settings from .env first.
-- Dependency injection: the graph creates one provider and passes it to the
-  agents, so tests can pass a fake chat model. There is no global instance.
-- invoke_llm() is the one call agents use: it sends the messages and turns
-  every NVIDIA failure into an LLMError subclass.
-
-LangSmith traces these calls automatically when LANGSMITH_TRACING=true. The
-API key is a secret field of the NVIDIA client, so it is never part of a trace.
-"""
+"""Creates the NVIDIA chat model and sends messages to it."""
 
 import logging
 

@@ -25,13 +25,23 @@ type HTTPConfig struct {
 	URL, AuthMode, BearerToken string
 	Timeout                    time.Duration
 	AllowLoopbackHTTP          bool
+	MaxConns                   int // open connections to the agent (default 8, 1-64)
 }
 
-func (HTTPConfig) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (HTTPConfig) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (HTTPConfig) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (HTTPConfig) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (HTTPConfig) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (HTTPConfig) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 type HTTPAgent struct {
 	client    *http.Client
@@ -92,7 +102,7 @@ func ValidateHTTPConfig(c HTTPConfig) error {
 		return ErrUnavailable
 	}
 
-	if c.Timeout < 10*time.Millisecond || c.Timeout > time.Minute {
+	if c.Timeout < 10*time.Millisecond || c.Timeout > time.Minute || c.MaxConns < 0 || c.MaxConns > 64 {
 		return ErrUnavailable
 	}
 
@@ -138,9 +148,14 @@ func NewHTTP(c HTTPConfig, client *http.Client) (*HTTPAgent, error) {
 	transport.MaxResponseHeaderBytes = 16 << 10
 	transport.ResponseHeaderTimeout = c.Timeout
 	transport.TLSHandshakeTimeout = 5 * time.Second
-	transport.MaxConnsPerHost = 8
-	transport.MaxIdleConnsPerHost = 8
-	transport.MaxIdleConns = 8
+	conns := c.MaxConns
+	if conns == 0 {
+		conns = 8
+	}
+
+	transport.MaxConnsPerHost = conns
+	transport.MaxIdleConnsPerHost = conns
+	transport.MaxIdleConns = conns
 	bounded := *client
 	bounded.Transport = transport
 	bounded.Jar = nil
@@ -149,11 +164,20 @@ func NewHTTP(c HTTPConfig, client *http.Client) (*HTTPAgent, error) {
 	return &HTTPAgent{cfg: c, client: &bounded, transport: transport}, nil
 }
 
-func (*HTTPAgent) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (*HTTPAgent) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (*HTTPAgent) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (*HTTPAgent) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (*HTTPAgent) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (*HTTPAgent) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 func (a *HTTPAgent) Close() { a.transport.CloseIdleConnections() }
 

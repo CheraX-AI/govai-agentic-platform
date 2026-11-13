@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/websession"
 )
 
 type Web struct {
@@ -20,13 +20,23 @@ type Web struct {
 	Origin, CAFile   string
 	DataKey, RateKey []byte
 	Lifetime         time.Duration
+	Limits           RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
-func (Web) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Web) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Web) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Web) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Web) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Web) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // LoadWeb validates browser sessions, cookie settings and trusted origin.
 func LoadWeb() (Web, error) {

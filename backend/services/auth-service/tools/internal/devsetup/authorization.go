@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
-
-	"github.com/joho/godotenv"
 )
 
 func (a *localAdmin) configureAuthorization(ctx context.Context, root string) error {
@@ -26,13 +23,7 @@ func (a *localAdmin) configureAuthorization(ctx context.Context, root string) er
 		"API_AUTH_CLIENT_IDS": mobileLoginClient,
 		"API_AUTH_CA_FILE":    filepath.ToSlash(filepath.Join(root, "tls", "ca.pem")),
 	}
-	text, e := godotenv.Marshal(settings)
-	if e != nil {
-		return ErrSetup
-	}
-
-	path := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.authorization")
-	if os.WriteFile(path, []byte(text+"\n"), 0600) != nil {
+	if updateEnv(serviceEnv(root), "API authorization", settings) != nil {
 		return ErrSetup
 	}
 
@@ -44,7 +35,6 @@ func (a *localAdmin) authorizationCheck(ctx context.Context) error {
 	for _, test := range []struct{ method, path, token string }{
 		{"GET", "/api/v1/me", ""},
 		{"GET", "/api/v1/me", "invalid-token"},
-		{"POST", "/api/v1/ai/chat", ""},
 	} {
 		req, e := http.NewRequestWithContext(ctx, test.method, "https://localhost:5001"+test.path, nil)
 		if e != nil {

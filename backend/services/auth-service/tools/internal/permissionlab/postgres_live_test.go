@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/app/wiring"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/httpapi"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/keycloak"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/keycloak"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/http/handlers"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -130,12 +130,12 @@ func freshKey() []byte {
 }
 
 func newDurableLab(ctx context.Context) (d *durableLab, err error) {
-	runtime, e := godotenv.Read("../../.env.database")
+	runtime, e := godotenv.Read("../../.env")
 	if e != nil {
 		return nil, errSafe
 	}
 
-	secrets, e := godotenv.Read("../../.env.database-admin")
+	secrets, e := godotenv.Read("../../.env.migrate")
 	if e != nil {
 		return nil, errSafe
 	}
@@ -394,8 +394,8 @@ func durableHTTP(ctx context.Context, service *registration.Service, key string,
 	previous := gin.Mode()
 	gin.SetMode(gin.ReleaseMode)
 	defer gin.SetMode(previous)
-	limiter, e := httpapi.NewLocalRegistrationLimiter(
-		httpapi.RegistrationLimitConfig{
+	limiter, e := handler.NewLocalRegistrationLimiter(
+		handler.RegistrationLimitConfig{
 			Key:           freshKey(),
 			IPAttempts:    10,
 			EmailAttempts: 10,
@@ -409,10 +409,10 @@ func durableHTTP(ctx context.Context, service *registration.Service, key string,
 		return 0, nil, errSafe
 	}
 
-	h, e := httpapi.NewRegistrationHandler(
+	h, e := handler.NewRegistrationHandler(
 		service,
 		limiter,
-		httpapi.RegistrationHTTPConfig{Timeout: 28 * time.Second, UnavailableRetryAfter: time.Second},
+		handler.RegistrationHTTPConfig{Timeout: 28 * time.Second, UnavailableRetryAfter: time.Second},
 	)
 	if e != nil {
 		return 0, nil, errSafe
@@ -674,7 +674,7 @@ func (l *lab) postgresScenario(ctx context.Context, caFile string) error {
 	previousMode := gin.Mode()
 	gin.SetMode(gin.ReleaseMode)
 	defer gin.SetMode(previousMode)
-	router := httpapi.NewRouter(httpapi.RouterOptions{
+	router := handler.NewRouter(handler.RouterOptions{
 		CORSOrigins:  []string{"https://web.example.test"},
 		Registration: runtimeHandler,
 	})

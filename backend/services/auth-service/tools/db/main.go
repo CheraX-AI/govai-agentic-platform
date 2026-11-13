@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/postgres"
 )
 
 func main() {
@@ -38,11 +38,12 @@ func run() error {
 
 	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
 	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"
-	if isPrivileged && config.LoadLocalEnv(".env.database-admin") != nil {
+	// Only privileged commands load the owner login; the API never reads .env.migrate.
+	if isPrivileged && config.LoadLocalEnv(".env.migrate") != nil {
 		return postgres.ErrStore
 	}
 
-	if config.LoadLocalEnv(".env.database") != nil || config.LoadLocalEnv(".env") != nil {
+	if config.LoadLocalEnv(".env") != nil {
 		return postgres.ErrStore
 	}
 

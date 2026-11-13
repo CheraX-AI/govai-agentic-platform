@@ -1,10 +1,4 @@
-"""Agent API settings, read from the agent-service/.env file.
-
-The API authenticates its one caller, core-service, with a shared service token.
-It is a service credential, never a citizen's access or refresh token, and it
-must match KNOWLEDGE_AGENT_BEARER_TOKEN in backend/services/core-service/.env.
-Real environment variables override the file, which is useful in CI.
-"""
+"""Agent API settings, read from .env."""
 
 import os
 from pathlib import Path

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/registration"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/registration"
 )
 
 // baselinePayload freezes the original seven-field group-free permission probe.

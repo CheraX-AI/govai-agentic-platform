@@ -9,7 +9,7 @@
   unchanged by this folder move. Do not substitute it for either authentication database.
 
 Application SQL migrations stay in
-`backend/services/auth-service/internal/postgres/migrations/`; Go queries stay in
+`backend/services/auth-service/internal/external/postgres/migrations/`; Go queries stay in
 that service. Keycloak manages its own database schema. Moving configuration did
 not move or merge database contents, change ports, or rename Docker projects,
 networks or volumes. Private environment files, TLS material and local backups

@@ -3,8 +3,8 @@
 Go/Gin core-service hosts chat business endpoints separately from the authentication
 service. It reuses `backend/pkg/authn` and existing Keycloak-issued access JWTs.
 Canonical route: POST `/api/chat/message` on the core API (local HTTPS port 5002).
-The auth-service's earlier `/api/v1/ai/chat` 501 placeholder is unchanged; it is not
-an alias or the Knowledge Agent integration. Use the core URL for this contract.
+The auth-service's earlier `/api/v1/ai/chat` 501 placeholder has been removed. Use
+the core URL for this contract (browsers go through auth-service `/api/v1/web/chat`).
 
 ## Implemented and verified
 

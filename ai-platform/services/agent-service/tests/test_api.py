@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
-from app.agents.knowledge_agent.prompts import LONG_QUESTION_REPLY, InvalidQuestionError
+from app.agents.knowledge_agent.validation import LONG_QUESTION_REPLY, InvalidQuestionError
 from app.agents.knowledge_agent.schemas import KnowledgeAnswer, SourceReference
 from app.api.config import AgentAPIConfigError, AgentAPISettings, load_api_settings
 from app.api.main import CHAT_PATH, INVALID_REQUEST_DETAIL, create_app

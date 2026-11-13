@@ -2,7 +2,8 @@
 # Local GovAI HTTPS and registration
 
 Later login update: the [mobile/Postman login API](../../backend/services/auth-service/docs/GA-48-login.md)
-now has a separate non-admin client and private `.env.login`. Provision it with
+now has a separate non-admin client whose settings are in the "Login (mobile)"
+section of the auth service's private `.env`. Provision it with
 `go run ./tools/dev-auth configure-login` from the auth-service directory, then
 restart the API. Registration manual evidence below predates this login slice;
 real web/mobile integration and browser sessions remain pending.
@@ -129,7 +130,7 @@ It configures:
 - Public `govai-registration-verify-dev` client with an exact HTTPS account-console
   callback. This is a **development** verification destination, not an implemented
   frontend/mobile integration. Password login remains separate work.
-- Ignored `.env.registration` with stable independent HMAC keys, scoped secret,
+- The Registration section of the auth service's ignored `.env`, with stable independent HMAC keys, scoped secret,
   API certificate paths, CA file, HTTPS issuer and port 5001. Existing keys are
   preserved; activation follows final configuration checks.
 

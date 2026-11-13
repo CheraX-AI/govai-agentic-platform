@@ -79,6 +79,8 @@ func run() error {
 		}
 
 		defer agentTransport.CloseIdleConnections()
+		// One agent connection per chat that may run at the same time.
+		agentConfig.HTTP.MaxConns = c.MaxConcurrent
 		connected, err := chat.NewHTTP(agentConfig.HTTP, &http.Client{Transport: agentTransport})
 		if err != nil {
 			return config.ErrConfig
@@ -89,7 +91,11 @@ func run() error {
 	}
 
 	// Mount protected chat routes and start the HTTPS server.
-	router, err := httpapi.NewRouter(verifier, agent, c.Origins, slog.Default(), c.RequestTimeout)
+	router, err := httpapi.NewRouter(verifier, agent, slog.Default(), httpapi.Settings{
+		Origins:       c.Origins,
+		Timeout:       c.RequestTimeout,
+		MaxConcurrent: c.MaxConcurrent,
+	})
 	if err != nil {
 		return err
 	}

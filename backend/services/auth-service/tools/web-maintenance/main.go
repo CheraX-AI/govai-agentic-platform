@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/app/wiring"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/websession"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/wiring"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/postgres"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/websession"
 )
 
 func main() {
@@ -29,10 +29,8 @@ func run() error {
 		return websession.ErrUnavailable
 	}
 
-	for _, file := range []string{".env.web", ".env.login", ".env.registration", ".env.database", ".env"} {
-		if config.LoadLocalEnv(file) != nil {
-			return websession.ErrUnavailable
-		}
+	if config.LoadLocalEnv(".env") != nil {
+		return websession.ErrUnavailable
 	}
 
 	c, err := config.LoadWeb()

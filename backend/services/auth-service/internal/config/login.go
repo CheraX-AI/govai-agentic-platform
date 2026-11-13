@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/login"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/features/login"
 )
 
 type Login struct {
@@ -16,13 +16,23 @@ type Login struct {
 	Provider login.KeycloakConfig
 	RateKey  []byte
 	CAFile   string
+	Limits   RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
-func (Login) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Login) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Login) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Login) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Login) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Login) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 // LoadLogin validates native login and refresh settings.
 func LoadLogin() (Login, error) {

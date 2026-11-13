@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -53,9 +54,45 @@ func writeNew(path string, b []byte) error {
 	return nil
 }
 
+// validHostname accepts a plain DNS name such as govai.example.ac.lk:
+// letters, digits and hyphens in dot-separated labels, no wildcard or port.
+func validHostname(host string) bool {
+	if host == "" || len(host) > 253 {
+		return false
+	}
+
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+
+		for _, r := range label {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // Certificates refuses an existing directory and never installs system/browser
 // trust. CA signing key exists in memory only; server private keys remain local.
-func Certificates(dir string) (string, error) {
+// The certificates always cover localhost; extraHosts adds the VM's DNS names
+// or IP addresses (for example govai.example.ac.lk or 10.0.0.5).
+func Certificates(dir string, extraHosts ...string) (string, error) {
+	dnsNames := []string{"localhost"}
+	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	for _, host := range extraHosts {
+		if ip := net.ParseIP(host); ip != nil {
+			ips = append(ips, ip)
+		} else if validHostname(host) {
+			dnsNames = append(dnsNames, strings.ToLower(host))
+		} else {
+			return "", ErrSetup
+		}
+	}
+
 	if os.Mkdir(dir, 0700) != nil {
 		return "", ErrSetup
 	}
@@ -92,8 +129,8 @@ func Certificates(dir string) (string, error) {
 			Subject:      pkix.Name{CommonName: "GovAI Local " + name},
 			NotBefore:    now.Add(-time.Hour),
 			NotAfter:     now.Add(90 * 24 * time.Hour),
-			DNSNames:     []string{"localhost"},
-			IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+			DNSNames:     dnsNames,
+			IPAddresses:  ips,
 			KeyUsage:     x509.KeyUsageDigitalSignature,
 			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		}

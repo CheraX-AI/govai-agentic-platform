@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/keycloak"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/external/keycloak"
 )
 
 type Registration struct {
@@ -21,13 +21,23 @@ type Registration struct {
 	Admin                           keycloak.RegistrationConfig
 	FingerprintKey, RateKey         []byte
 	CAFile, TLSCertFile, TLSKeyFile string
+	Limits                          RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
-func (Registration) Format(s fmt.State, _ rune) { _, _ = io.WriteString(s, "[REDACTED]") }
+// Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
+func (Registration) Format(output fmt.State, _ rune) {
+	_, _ = io.WriteString(output, "[REDACTED]")
+}
 
-func (Registration) MarshalJSON() ([]byte, error) { return []byte(`"[REDACTED]"`), nil }
+// MarshalJSON hides the value when it is converted to JSON.
+func (Registration) MarshalJSON() ([]byte, error) {
+	return []byte(`"[REDACTED]"`), nil
+}
 
-func (Registration) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
+// LogValue hides the value when it is written to a slog log.
+func (Registration) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
 
 var registrationSegment = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 

@@ -75,27 +75,27 @@ func (a *localAdmin) configureLogin(ctx context.Context, root string) error {
 		},
 	}
 	a.ensureLoginMapper(ctx, id, verified)
-	state := filepath.Join(root, "..", "..", "backend", "services", "auth-service", ".env.login")
+	state := serviceEnv(root)
 	env, e := godotenv.Read(state)
 	if os.IsNotExist(e) {
-		env = map[string]string{"LOGIN_RATE_KEY": base64Key()}
+		env = map[string]string{}
 	} else if e != nil {
 		return ErrSetup
 	}
 
-	for k, v := range map[string]string{
+	values := map[string]string{
 		"LOGIN_ENABLED":       "true",
 		"LOGIN_ISSUER_URL":    base + "/realms/GovAI",
 		"LOGIN_CLIENT_ID":     mobileLoginClient,
 		"LOGIN_CLIENT_SECRET": secret,
 		"LOGIN_AUDIENCE":      "govai-api",
 		"LOGIN_CA_FILE":       filepath.ToSlash(filepath.Join(root, "tls", "ca.pem")),
-	} {
-		env[k] = v
+	}
+	if env["LOGIN_RATE_KEY"] == "" {
+		values["LOGIN_RATE_KEY"] = base64Key() // Keep an existing key stable.
 	}
 
-	text, e := godotenv.Marshal(env)
-	if e != nil || os.WriteFile(state, []byte(text+"\n"), 0600) != nil {
+	if updateEnv(state, "Login (mobile)", values) != nil {
 		return ErrSetup
 	}
 
