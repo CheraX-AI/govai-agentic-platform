@@ -45,8 +45,9 @@ Remaining work:
   refresh and logout integration. Postman does not prove browser SameSite/CORS
   enforcement or mobile secure storage. Current web test origin is
   `https://localhost:5001`; deployed origins must be agreed with teammates.
-- Real AI/RAG integration: protected `/api/v1/ai/chat` currently returns 501.
-  Bearer `/me` and chat are not a complete cookie-authenticated web gateway.
+- Chat is not served by auth-service itself: browsers use `/api/v1/web/chat`
+  (forwarded to core-service); mobile and API clients call core-service
+  `/api/chat/message` directly. Bearer `/me` is not a cookie-authenticated route.
 - Operational reconciliation, broader crash/unknown-commit tests, deployment TLS,
   secret/key rotation, backups and distributed abuse controls. Rate limits remain
   process-local; maintenance commands have no scheduler/alert delivery configured.

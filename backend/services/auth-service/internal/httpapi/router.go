@@ -48,9 +48,7 @@ func NewRouter(options RouterOptions) *gin.Engine {
 
 		if (options.Login != nil &&
 			c.Request.URL.Path == "/api/v1/auth/login") ||
-			(options.Protected != nil &&
-				(c.Request.URL.Path == "/api/v1/me" ||
-					c.Request.URL.Path == "/api/v1/ai/chat")) {
+			(options.Protected != nil && c.Request.URL.Path == "/api/v1/me") {
 			c.Header("Cache-Control", "no-store")
 			c.Header("Pragma", "no-cache")
 		}
@@ -123,8 +121,7 @@ func NewRouter(options RouterOptions) *gin.Engine {
 			method := c.GetHeader("Access-Control-Request-Method")
 			allowedMethod := "GET"
 			registrationPath := options.Registration != nil && c.Request.URL.Path == "/api/v1/registrations"
-			chatPath := options.Protected != nil && c.Request.URL.Path == "/api/v1/ai/chat"
-			if registrationPath || chatPath {
+			if registrationPath {
 				allowedMethod = "POST"
 			}
 

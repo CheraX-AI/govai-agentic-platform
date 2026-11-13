@@ -9,7 +9,7 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-service/internal/postgres"
 )
 
-// Authorization connects JWT verification to protected routes.
+// Authorization connects JWT verification to the protected route (/api/v1/me).
 func Authorization(c config.Authorization, store *postgres.Store) (*httpapi.Protected, func(), error) {
 	if !c.Enabled || store == nil {
 		return nil, nil, config.ErrAuthorizationConfig

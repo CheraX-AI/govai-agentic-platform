@@ -77,10 +77,9 @@ func TestLoginLive(t *testing.T) {
 		counts[route]++
 	}
 
-	if len(counts) != 3 ||
+	if len(counts) != 2 ||
 		counts["/api/v1/auth/login"] != 6 ||
-		counts["/api/v1/me"] != 4 ||
-		counts["/api/v1/ai/chat"] != 2 {
+		counts["/api/v1/me"] != 4 {
 		t.Fatal("LOGIN_LOG_COUNT FAIL")
 	}
 
@@ -353,14 +352,6 @@ func (l *lab) loginScenarioWithSessions(ctx context.Context, caFile string, sess
 	noToken, _ := protectedRequest("GET", "/api/v1/me", "")
 	badToken, _ := protectedRequest("GET", "/api/v1/me", "invalid-token")
 	l.lifeCheck("AUTH_MISSING_INVALID_401", noToken == 401 && badToken == 401)
-	chatMissing, _ := protectedRequest("POST", "/api/v1/ai/chat", "")
-	chatValid, chatBody := protectedRequest("POST", "/api/v1/ai/chat", result.Access)
-	l.lifeCheck(
-		"AUTH_CHAT_GUARDED_PLACEHOLDER",
-		chatMissing == 401 &&
-			chatValid == 501 &&
-			strings.Contains(string(chatBody), "chat_not_implemented"),
-	)
 	// Remove/restore only the disposable test user's default role membership to
 	// obtain a real signed non-citizen token. No existing GovAI role/user changes.
 	realmConfig := decode[object](l.must(ctx, "GET", p, nil, 200))

@@ -35,7 +35,6 @@ func (a *localAdmin) authorizationCheck(ctx context.Context) error {
 	for _, test := range []struct{ method, path, token string }{
 		{"GET", "/api/v1/me", ""},
 		{"GET", "/api/v1/me", "invalid-token"},
-		{"POST", "/api/v1/ai/chat", ""},
 	} {
 		req, e := http.NewRequestWithContext(ctx, test.method, "https://localhost:5001"+test.path, nil)
 		if e != nil {

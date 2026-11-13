@@ -131,22 +131,29 @@ func TestProtectedProfileAndChatBoundaries(t *testing.T) {
 
 	profiles.ready = true
 	profiles.err = nil
-	if w := request("POST", "/api/v1/ai/chat", ""); w.Code != 401 {
-		t.Fatal("chat exposed")
+	// Chat lives in core-service (and /api/v1/web/chat for browsers); the old
+	// placeholder route must stay removed.
+	if w := request("POST", "/api/v1/ai/chat", token); w.Code != 404 {
+		t.Fatalf("removed chat placeholder still routed: %d", w.Code)
 	}
 
-	if w := request("POST", "/api/v1/ai/chat", token); w.Code != 501 {
-		t.Fatal("placeholder misreported working chat")
-	}
-
-	r := httptest.NewRequest("OPTIONS", "/api/v1/ai/chat", nil)
+	r := httptest.NewRequest("OPTIONS", "/api/v1/me", nil)
 	r.Header.Set("Origin", "https://web.example.test")
-	r.Header.Set("Access-Control-Request-Method", "POST")
-	r.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type")
+	r.Header.Set("Access-Control-Request-Method", "GET")
+	r.Header.Set("Access-Control-Request-Headers", "Authorization")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, r)
 	if w.Code != 204 || w.Header().Get("Cache-Control") != "no-store" {
-		t.Fatal("protected chat preflight failed")
+		t.Fatal("protected preflight failed")
+	}
+
+	r = httptest.NewRequest("OPTIONS", "/api/v1/me", nil)
+	r.Header.Set("Origin", "https://web.example.test")
+	r.Header.Set("Access-Control-Request-Method", "POST")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Fatal("protected preflight allowed POST")
 	}
 
 	if request("GET", "/api/v1/me", token).Header().Get("Cache-Control") != "no-store" {

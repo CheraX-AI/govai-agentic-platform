@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
@@ -75,14 +74,6 @@ func (p *Protected) attach(router *gin.Engine) {
 				"email_verified": identity.EmailVerified,
 				"roles":          identity.Roles,
 			},
-		)
-	})
-	group.POST("/ai/chat", func(c *gin.Context) {
-		// No RAG contract/client exists. Authentication/authorization runs before this
-		// placeholder; no Python request, generated answer or citizen data forwarding.
-		c.JSON(
-			http.StatusNotImplemented,
-			gin.H{"error": "AI chat integration is not implemented.", "code": "chat_not_implemented"},
 		)
 	})
 }
