@@ -284,11 +284,11 @@ func Run(ctx context.Context, root, mode string, out io.Writer) (err error) {
 	}
 
 	if mode == "recovery-check" {
-		return a.recoveryCheck(ctx)
+		return a.recoveryCheck(ctx, root)
 	}
 
 	if mode == "sessions-check" {
-		return a.sessionsCheck(ctx)
+		return a.sessionsCheck(ctx, root)
 	}
 
 	if mode == "configure-login" {

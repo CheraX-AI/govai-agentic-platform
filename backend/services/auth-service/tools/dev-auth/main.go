@@ -1,4 +1,9 @@
 // dev-auth only addresses the fixed local GovAI realm over validated TLS.
+//
+// Usage (from the auth-service folder):
+//
+//	go run ./tools/dev-auth certs [extra-host ...]   e.g. certs govai.example.ac.lk 10.0.0.5
+//	go run ./tools/dev-auth <mode>                   e.g. configure, check, sessions-check
 package main
 
 import (
@@ -19,7 +24,7 @@ func main() {
 }
 
 func run() error {
-	if len(os.Args) != 2 {
+	if len(os.Args) < 2 || (os.Args[1] != "certs" && len(os.Args) != 2) {
 		return devsetup.ErrSetup
 	}
 
@@ -33,7 +38,7 @@ func run() error {
 	}
 
 	if os.Args[1] == "certs" {
-		fingerprint, e := devsetup.Certificates(filepath.Join(root, "tls"))
+		fingerprint, e := devsetup.Certificates(filepath.Join(root, "tls"), os.Args[2:]...)
 		if e != nil {
 			return e
 		}
