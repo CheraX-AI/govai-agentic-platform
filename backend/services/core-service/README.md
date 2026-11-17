@@ -37,7 +37,8 @@ admission limits. Success answers/citations in tests are explicitly synthetic.
 Local server startup and trusted-CA health 200 / unauthenticated chat 401 passed.
 Existing authentication/profile storage remains in auth-service; core only relies
 on validated JWT citizen/email claims and performs no profile lookup. Its only
-database use is conversation ownership (see "Conversation IDs").
+database use is conversation ownership (see "Conversation IDs") and the prepared
+message table (see "Conversation messages").
 
 ## Current GA-65 limits
 
@@ -156,7 +157,9 @@ render agent text safely; this backend does not turn AI output into trusted HTML
 ## Conversation IDs
 
 Each chat belongs to a conversation, identified by a UUID and owned by one
-citizen. Only the ID and its owner are stored: no messages, history or AI memory.
+citizen. The ID and its owner are stored. A message table is prepared (see
+"Conversation messages") but nothing writes to it yet, so there is no history or AI
+memory.
 
 - Request: `{"message": "...", "conversation_id": "<uuid>"}`. `conversation_id`
   is optional, so existing clients keep working; leaving it out starts a new
@@ -176,7 +179,7 @@ citizen. Only the ID and its owner are stored: no messages, history or AI memory
 Storage is the `govai_core` database on the shared PostgreSQL server, separate from
 every other service's database. Table `core.conversations` (`internal/database/migrations/001_conversations.sql`). The
 API login `govai_core_app` can only read and insert; it cannot update or delete
-owners. The API refuses to start if `CORE_DATABASE_URL` is missing, the schema is not
+owners. After pulling a new migration, run `go run ./cmd/migrate` again. The API refuses to start if `CORE_DATABASE_URL` is missing, the schema is not
 migrated, or the login is too privileged.
 
 One-time setup, from this folder:
@@ -189,9 +192,35 @@ psql -U postgres -h 127.0.0.1 -p <port> -v owner_password='<random>' -v app_pass
 go run ./cmd/migrate
 # 4. Optional live test with the app login
 $env:CORE_TEST_DATABASE_URL = "<CORE_DATABASE_URL value>"; go test -tags integration ./internal/conversation/
+# 5. Optional migration test: needs a login that can create databases and SET ROLE govai_core_app
+#    (a local superuser); each test creates and drops its own govai_core_test_* database
+$env:CORE_TEST_ADMIN_DATABASE_URL = "postgres://postgres:<password>@127.0.0.1:<port>/postgres?sslmode=disable"; go test -tags integration ./internal/database/
 ```
 
 Tests: `internal/conversation` (new UUID, reuse, citizen A vs B, unknown and
 malformed IDs, storage failures), `internal/httpapi/conversation_test.go` (the same
 through the authenticated router, plus 400/404/503 codes), and the agent HTTP test
 checks that the agent request body carries the ID.
+
+## Conversation messages
+
+Table `core.conversation_messages` (`internal/database/migrations/002_conversation_messages.sql`)
+is ready for chat history and memory. Nothing saves or reads messages yet.
+
+- `message_id` (UUID primary key) and `conversation_id`, a foreign key to
+  `core.conversations`. Ownership stays on the conversation, so reads must join it on
+  `citizen_subject`. A conversation that has messages cannot be deleted.
+- `ordinal` is assigned by the database and orders a conversation's messages;
+  the `(conversation_id, ordinal)` index serves ordered reads.
+- `role` is `citizen` or `assistant`. `status` is `pending`, `completed` or `failed`;
+  only a pending message may change, once.
+- `created_at` and `updated_at` are set by the database.
+- `content_ciphertext` holds the text sealed with AES-256-GCM (nonce + ciphertext +
+  tag, as in auth-service), never plaintext. The key will come from core-service
+  configuration when saving is added. No tokens or credentials are stored.
+- `govai_core_app` may read, insert and set `status`; it cannot choose the ordinal or
+  timestamps, rewrite content, move or delete messages.
+
+Migration checksums are taken over LF line endings, so a Windows checkout (CRLF) and
+the Linux image agree. `internal/database/database_test.go` pins every shipped
+migration: never edit an applied file, add a new one.

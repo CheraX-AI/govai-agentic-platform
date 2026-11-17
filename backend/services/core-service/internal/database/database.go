@@ -3,6 +3,7 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"embed"
@@ -98,6 +99,11 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	return apply(ctx, pool, scripts)
+}
+
+// apply runs the given migrations; tests pass a prefix to upgrade from an older schema.
+func apply(ctx context.Context, pool *pgxpool.Pool, scripts []migration) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return ErrDatabase
@@ -222,6 +228,8 @@ func load(files fs.FS) ([]migration, error) {
 			return nil, ErrDatabase
 		}
 
+		// Git may check SQL out with CRLF on Windows; hash LF text so every build agrees.
+		sql = bytes.ReplaceAll(sql, []byte("\r\n"), []byte("\n"))
 		sum := sha256.Sum256(sql)
 		scripts = append(scripts, migration{version: version, checksum: hex.EncodeToString(sum[:]), sql: string(sql)})
 	}
