@@ -14,8 +14,15 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation"
 	"github.com/gin-gonic/gin"
 )
+
+// Conversations resolves the conversation ID for a citizen's message
+// (conversation.Service). owner is always the verified token subject.
+type Conversations interface {
+	Resolve(ctx context.Context, owner, requested string) (string, error)
+}
 
 func fail(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": message, "code": code})
@@ -32,10 +39,11 @@ type Settings struct {
 func NewRouter(
 	verifier *authn.Verifier,
 	agent chat.Agent,
+	conversations Conversations,
 	logger *slog.Logger,
 	settings Settings,
 ) (*gin.Engine, error) {
-	if verifier == nil || agent == nil {
+	if verifier == nil || agent == nil || conversations == nil {
 		return nil, errors.New("invalid chat router dependencies")
 	}
 
@@ -167,7 +175,8 @@ func NewRouter(
 		authn.RequireVerifiedEmail(),
 		authn.RequireRole("citizen"),
 		func(c *gin.Context) {
-			if _, ok := authn.Current(c); !ok {
+			identity, ok := authn.Current(c)
+			if !ok {
 				fail(c, 401, "unauthorized", "Authentication required.")
 				return
 			}
@@ -211,9 +220,12 @@ func NewRouter(
 			defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
 			question, err := chatcontract.Parse(c.Request.Body)
 			if err != nil {
-				if errors.Is(err, chatcontract.ErrTooLarge) {
+				switch {
+				case errors.Is(err, chatcontract.ErrTooLarge):
 					fail(c, 413, "request_too_large", "Question exceeds the request limit.")
-				} else {
+				case errors.Is(err, chatcontract.ErrInvalidConversationID):
+					fail(c, 400, "invalid_conversation_id", "conversation_id must be a lowercase UUID.")
+				default:
 					fail(c, 400, "invalid_message", "Provide a nonempty message of at most 4000 characters.")
 				}
 
@@ -226,6 +238,24 @@ func NewRouter(
 				return
 			}
 
+			// The owner is the verified token subject, never a client-supplied value.
+			// Unknown and other citizens' IDs both get 404, so IDs cannot be probed.
+			conversationID, err := conversations.Resolve(ctx, identity.Subject, question.ConversationID())
+			if err != nil {
+				switch {
+				case errors.Is(err, conversation.ErrNotFound):
+					fail(c, 404, "conversation_not_found", "Conversation not found.")
+				case errors.Is(ctx.Err(), context.DeadlineExceeded):
+					fail(c, 504, "chat_timeout", "Chat request timed out.")
+				default:
+					logger.Warn("conversation storage unavailable", "request_id", c.Writer.Header().Get("X-Request-ID"))
+					fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
+				}
+
+				return
+			}
+
+			ctx = chat.WithConversationID(ctx, conversationID)
 			reply, err := agent.Ask(ctx, question)
 			if err != nil || ctx.Err() != nil {
 				if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -239,6 +269,14 @@ func NewRouter(
 				return
 			}
 
+			// The agent does not choose the conversation; core-service does. An agent
+			// that echoes a different ID is broken, so its answer is not trusted.
+			if reply.ConversationID != "" && reply.ConversationID != conversationID {
+				fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")
+				return
+			}
+
+			reply.ConversationID = conversationID
 			encoded, err := chatcontract.Encode(reply)
 			if err != nil {
 				fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")

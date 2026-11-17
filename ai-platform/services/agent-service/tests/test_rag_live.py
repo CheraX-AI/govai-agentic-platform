@@ -5,6 +5,8 @@ knowledge service answers /health. The checks do not depend on which documents
 are stored, so they keep working as documents are added.
 """
 
+import re
+
 import httpx
 import pytest
 
@@ -44,17 +46,15 @@ def knowledge_agent():
 
 # Tests
 
-def test_answer_cites_only_retrieved_documents(knowledge_agent):
+def test_answer_does_not_name_its_documents(knowledge_agent):
 
     # A general question that any government service guide can answer
     answer = knowledge_agent.answer("What documents do I need to submit?")
 
-    # Either a cited answer, or the fixed reply when the documents do not say
+    # Either an answer without document numbers, or the fixed reply when the documents do not say
     assert answer.answer
     if answer.answer != INSUFFICIENT_INFORMATION_REPLY:
-        assert answer.sources
-    for source in answer.sources:
-        assert source.number >= 1
+        assert not re.search(r"\[\d+\]", answer.answer)
 
 
 def test_agent_does_not_answer_from_outside_knowledge(knowledge_agent):

@@ -1,15 +1,22 @@
 import { apiRequest, boundedJson, utf8Length } from './publicRequest';
 export type ChatSource = { number: number; title: string; page?: number; url?: string };
-export type ChatReply = { answer: string; sources: ChatSource[] };
+// conversationId is the backend's ID for the open chat. It is never shown in the UI.
+export type ChatReply = { answer: string; sources: ChatSource[]; conversationId?: string };
 export class ChatError extends Error {
  constructor(public status: number, message: string) { super(message); }
 }
-export async function sendChat(base: string, token: string, message: string, signal: AbortSignal, transport: typeof fetch = fetch): Promise<ChatReply> {
+// The backend's conversation ID format: a lowercase UUID (backend/pkg/chatcontract).
+const CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export function isConversationId(value: unknown): value is string { return typeof value === 'string' && CONVERSATION_ID.test(value); }
+// Leave conversationId out for the first message; core-service creates the conversation.
+export async function sendChat(base: string, token: string, message: string, signal: AbortSignal, transport: typeof fetch = fetch, conversationId?: string): Promise<ChatReply> {
  const text = message.trim();
- if (!text || [...text].length > 4000 || utf8Length(JSON.stringify({message:text})) > 16384) throw new ChatError(400, 'Enter a question of at most 4000 characters.');
+ if (conversationId !== undefined && !isConversationId(conversationId)) throw new ChatError(400, 'Unable to continue this conversation. Start a new chat.');
+ const payload = conversationId ? {message:text, conversation_id:conversationId} : {message:text};
+ if (!text || [...text].length > 4000 || utf8Length(JSON.stringify(payload)) > 16384) throw new ChatError(400, 'Enter a question of at most 4000 characters.');
  if (!token || /\s/.test(token) || token.length > 16384) throw new ChatError(401,'Please log in again.');
  let response: Response;
- try { response = await apiRequest(base, '/api/chat/message', {message:text}, {token,signal,timeout:40000}, transport); }
+ try { response = await apiRequest(base, '/api/chat/message', payload, {token,signal,timeout:40000}, transport); }
  catch { throw new ChatError(503,'Unable to confirm the chat response. Please try again later.'); }
  if (!response.ok) {
   const status=response.status;
@@ -33,5 +40,8 @@ export async function sendChat(base: string, token: string, message: string, sig
   numbers.add(source.number)
   sources.push({number:source.number,title:source.title,...(source.page!==undefined?{page:source.page}:{}),...(source.url!==undefined?{url:source.url}:{})})
  }
- return {answer:reply.answer,sources}
+ // The backend owns the ID: it must be well formed, and a continued chat must keep its ID.
+ const returned = reply.conversation_id
+ if((returned !== undefined && !isConversationId(returned)) || (conversationId && returned !== conversationId)) throw new ChatError(502,'Unable to retrieve a valid answer.')
+ return {answer:reply.answer,sources,...(returned !== undefined ? {conversationId:returned} : {})}
 }

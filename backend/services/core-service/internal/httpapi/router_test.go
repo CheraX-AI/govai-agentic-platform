@@ -22,6 +22,7 @@ import (
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/httpapi"
 )
 
@@ -43,13 +44,67 @@ func (f *fakeAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontr
 	return f.reply, f.err
 }
 
+// memoryStore is a test double for the PostgreSQL conversation store; the
+// router tests use it with the real conversation.Service.
+type memoryStore struct {
+	mu      sync.Mutex
+	owners  map[string]string
+	creates int
+	err     error
+}
+
+func (m *memoryStore) Create(_ context.Context, id, owner string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+
+	if _, exists := m.owners[id]; exists {
+		return errors.New("duplicate")
+	}
+
+	m.creates++
+	m.owners[id] = owner
+	return nil
+}
+
+func (m *memoryStore) Owns(_ context.Context, id, owner string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return false, m.err
+	}
+
+	return m.owners[id] == owner, nil
+}
+
+func (m *memoryStore) owner(id string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.owners[id]
+}
+
+func newConversations(t *testing.T) (*conversation.Service, *memoryStore) {
+	t.Helper()
+	store := &memoryStore{owners: map[string]string{}}
+	service, err := conversation.NewService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return service, store
+}
+
 type fixture struct {
-	verifier *authn.Verifier
-	router   http.Handler
-	key      *rsa.PrivateKey
-	issuer   string
-	agent    *fakeAgent
-	logs     *bytes.Buffer
+	verifier      *authn.Verifier
+	router        http.Handler
+	key           *rsa.PrivateKey
+	issuer        string
+	agent         *fakeAgent
+	logs          *bytes.Buffer
+	conversations *conversation.Service
+	store         *memoryStore
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -95,9 +150,11 @@ func newFixture(t *testing.T) *fixture {
 		},
 	}
 	logs := &bytes.Buffer{}
+	conversations, store := newConversations(t)
 	router, err := httpapi.NewRouter(
 		verifier,
 		agent,
+		conversations,
 		slog.New(slog.NewJSONHandler(logs, nil)),
 		httpapi.Settings{Origins: []string{"https://web.example.test"}},
 	)
@@ -105,7 +162,16 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 
-	return &fixture{verifier: verifier, router: router, key: key, issuer: issuer, agent: agent, logs: logs}
+	return &fixture{
+		verifier:      verifier,
+		router:        router,
+		key:           key,
+		issuer:        issuer,
+		agent:         agent,
+		logs:          logs,
+		conversations: conversations,
+		store:         store,
+	}
 }
 
 func (f *fixture) token(t *testing.T, overrides map[string]any) string {
@@ -356,7 +422,7 @@ func TestRouterRejectsInvalidSettings(t *testing.T) {
 		{Timeout: 500 * time.Millisecond},
 		{Timeout: 2 * time.Minute},
 	} {
-		if _, err := httpapi.NewRouter(f.verifier, &blockingAgent{}, logger, s); err == nil {
+		if _, err := httpapi.NewRouter(f.verifier, &blockingAgent{}, f.conversations, logger, s); err == nil {
 			t.Fatalf("invalid settings accepted: %+v", s)
 		}
 	}
@@ -367,7 +433,13 @@ func checkConcurrencyBound(t *testing.T, settings httpapi.Settings, limit int) {
 	agent := &blockingAgent{started: make(chan struct{}, limit), release: make(chan struct{})}
 	var release sync.Once
 	defer release.Do(func() { close(agent.release) })
-	router, err := httpapi.NewRouter(f.verifier, agent, slog.New(slog.NewJSONHandler(io.Discard, nil)), settings)
+	router, err := httpapi.NewRouter(
+		f.verifier,
+		agent,
+		f.conversations,
+		slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		settings,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

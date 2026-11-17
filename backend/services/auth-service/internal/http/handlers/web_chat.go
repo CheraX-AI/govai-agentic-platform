@@ -90,12 +90,15 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 	defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
 	q, err := chatcontract.Parse(c.Request.Body)
 	if err != nil {
-		status := 400
-		if errors.Is(err, chatcontract.ErrTooLarge) {
-			status = 413
+		switch {
+		case errors.Is(err, chatcontract.ErrTooLarge):
+			errorResponse(c, 413, "invalid_message", "Provide a nonempty question of at most 4000 characters.")
+		case errors.Is(err, chatcontract.ErrInvalidConversationID):
+			errorResponse(c, 400, "invalid_conversation_id", "conversation_id must be a lowercase UUID.")
+		default:
+			errorResponse(c, 400, "invalid_message", "Provide a nonempty question of at most 4000 characters.")
 		}
 
-		errorResponse(c, status, "invalid_message", "Provide a nonempty question of at most 4000 characters.")
 		return
 	}
 
@@ -108,7 +111,14 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 		return
 	}
 
-	body, _ := json.Marshal(map[string]string{"message": q.Text()})
+	// Forward only the question and the optional conversation ID. Core resolves
+	// the ID against the verified token subject; no user ID is ever forwarded.
+	request := map[string]string{"message": q.Text()}
+	if q.ConversationID() != "" {
+		request["conversation_id"] = q.ConversationID()
+	}
+
+	body, _ := json.Marshal(request)
 	var encoded []byte
 	err = h.chat.access.WithAccess(ctx, raw, tokens[0], func(ctx context.Context, access string) error {
 		payload, e := h.chat.upstream.Ask(ctx, access, body)
@@ -121,6 +131,11 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 			return e
 		}
 
+		// Continuing a conversation must keep its ID; core never switches it.
+		if q.ConversationID() != "" && reply.ConversationID != q.ConversationID() {
+			return chatcontract.ErrResponse
+		}
+
 		encoded, e = chatcontract.Encode(reply)
 		return e
 	})
@@ -128,6 +143,8 @@ func (h *WebSessionHandler) Chat(c *gin.Context) {
 		switch {
 		case errors.Is(err, websession.ErrDenied), errors.Is(err, chatgateway.ErrDenied):
 			webFail(c, 401, "session_rejected")
+		case errors.Is(err, chatgateway.ErrConversationNotFound):
+			errorResponse(c, 404, "conversation_not_found", "Conversation not found.")
 		case errors.Is(err, chatgateway.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
 			errorResponse(c, 504, "chat_timeout", "Chat request timed out.")
 		case errors.Is(err, chatgateway.ErrResponse), errors.Is(err, chatcontract.ErrResponse):

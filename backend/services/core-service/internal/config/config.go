@@ -16,6 +16,7 @@ type Config struct {
 	MaxConcurrent                                    int // chats answered at the same time (all users)
 	Port, Certificate, Key, Issuer, Audience, CAFile string
 	Clients, Origins                                 []string
+	DatabaseURL                                      string // runtime login for govai_core; required
 }
 
 // Load validates core HTTP, TLS and token-verification settings.
@@ -27,6 +28,7 @@ func Load() (Config, error) {
 		Issuer:      os.Getenv("CHAT_ISSUER_URL"),
 		Audience:    os.Getenv("CHAT_AUDIENCE"),
 		CAFile:      os.Getenv("CHAT_CA_FILE"),
+		DatabaseURL: os.Getenv("CORE_DATABASE_URL"),
 	}
 	c.RequestTimeout = 30 * time.Second
 	if value := os.Getenv("CHAT_REQUEST_TIMEOUT"); value != "" {
@@ -58,7 +60,8 @@ func Load() (Config, error) {
 		strconv.Itoa(port) != c.Port ||
 		c.Certificate == "" ||
 		c.Key == "" ||
-		c.Audience == "" {
+		c.Audience == "" ||
+		c.DatabaseURL == "" {
 		return Config{}, ErrConfig
 	}
 

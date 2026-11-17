@@ -11,6 +11,7 @@ func TestConfig(t *testing.T) {
 		"CHAT_AUDIENCE":        "govai-api",
 		"CHAT_ALLOWED_CLIENTS": "mobile,web",
 		"CHAT_ALLOWED_ORIGINS": "https://web.test",
+		"CORE_DATABASE_URL":    "postgres://synthetic@127.0.0.1:5432/govai_core?sslmode=disable",
 	} {
 		t.Setenv(key, value)
 	}
@@ -38,6 +39,7 @@ func TestConfig(t *testing.T) {
 		{"CHAT_ALLOWED_CLIENTS", ""},
 		{"CHAT_ALLOWED_ORIGINS", "*"},
 		{"CHAT_ALLOWED_ORIGINS", "https://web.test/"},
+		{"CORE_DATABASE_URL", ""},
 	} {
 		t.Run(tc.key+tc.value, func(t *testing.T) {
 			t.Setenv(tc.key, tc.value)

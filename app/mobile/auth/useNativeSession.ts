@@ -49,10 +49,10 @@ export function useNativeSession(enabled: boolean) {
     try { await (await session()).logout(); if (mounted.current && version === generation.current) setError(''); }
     catch { if (mounted.current && version === generation.current) { setStatus('error'); setError('Local sign-out or provider revocation could not be fully confirmed.'); } }
   }
-  async function chat(message: string, signal: AbortSignal) {
+  async function chat(message: string, signal: AbortSignal, conversationId?: string) {
     const config = loadMobileApiConfig();
     if (!config.coreBaseUrl) throw new Error('Chat configuration is unavailable.');
-    return (await session()).withAccess(token => sendChat(config.coreBaseUrl!, token, message, signal));
+    return (await session()).withAccess(token => sendChat(config.coreBaseUrl!, token, message, signal, undefined, conversationId));
   }
   return { status, error, login, logout, chat };
 }

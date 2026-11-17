@@ -40,6 +40,23 @@ func requestIDFrom(ctx context.Context) string {
 	return id
 }
 
+type conversationIDKey struct{}
+
+// WithConversationID lets the HTTP adapter forward the resolved, ownership-checked
+// conversation ID upstream, as "conversation_id" in the agent request body.
+func WithConversationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, conversationIDKey{}, id)
+}
+
+func conversationIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(conversationIDKey{}).(string)
+	if !chatcontract.ValidConversationID(id) {
+		return ""
+	}
+
+	return id
+}
+
 // Unavailable is used when no knowledge agent is configured.
 // It never fabricates an answer, citation or successful integration result.
 type Unavailable struct{}

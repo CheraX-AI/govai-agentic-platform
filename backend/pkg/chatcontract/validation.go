@@ -1,7 +1,6 @@
 package chatcontract
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"net/url"
@@ -25,39 +24,26 @@ func Parse(reader io.Reader) (Question, error) {
 		return Question{}, ErrInvalid
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	start, err := decoder.Token()
-	if err != nil || start != json.Delim('{') {
+	// One object with "message" and an optional "conversation_id", each once,
+	// exact case, in any order; any other field or trailing JSON is rejected.
+	object, err := fields(body, "message", conversationIDField)
+	if err != nil {
 		return Question{}, ErrInvalid
 	}
 
-	if !decoder.More() {
+	rawMessage, ok := object["message"]
+	if !ok {
 		return Question{}, ErrInvalid
 	}
 
-	key, err := decoder.Token()
-	if err != nil || key != "message" {
+	message, err := strictString(rawMessage)
+	if err != nil {
 		return Question{}, ErrInvalid
 	}
 
-	var raw json.RawMessage
-	if decoder.Decode(&raw) != nil || len(raw) == 0 || raw[0] != '"' {
-		return Question{}, ErrInvalid
-	}
-
-	var message string
-	if json.Unmarshal(raw, &message) != nil || decoder.More() {
-		return Question{}, ErrInvalid
-	}
-
-	end, err := decoder.Token()
-	if err != nil || end != json.Delim('}') {
-		return Question{}, ErrInvalid
-	}
-
-	var extra any
-	if decoder.Decode(&extra) != io.EOF {
-		return Question{}, ErrInvalid
+	conversationID, ok := optionalConversationID(object)
+	if !ok {
+		return Question{}, ErrInvalidConversationID
 	}
 
 	message = strings.TrimSpace(message)
@@ -71,7 +57,56 @@ func Parse(reader io.Reader) (Question, error) {
 		}
 	}
 
-	return Question{message: message}, nil
+	return Question{message: message, conversationID: conversationID}, nil
+}
+
+// optionalConversationID reads "conversation_id": absent is valid (""), but a
+// present value must be a canonical UUID string; null and "" are rejected.
+func optionalConversationID(object map[string]json.RawMessage) (string, bool) {
+	raw, ok := object[conversationIDField]
+	if !ok {
+		return "", true
+	}
+
+	id, err := strictString(raw)
+	if err != nil || !ValidConversationID(id) {
+		return "", false
+	}
+
+	return id, true
+}
+
+// ValidConversationID accepts only the canonical lowercase UUID text form
+// (RFC 9562, version 1-8, RFC variant), so one conversation has exactly one
+// spelling. The nil and max UUIDs fail the version check.
+func ValidConversationID(id string) bool {
+	if len(id) != conversationIDLength {
+		return false
+	}
+
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return false
+			}
+
+			continue
+		}
+
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+
+	version := id[14]
+	if version < '1' || version > '8' {
+		return false
+	}
+
+	variant := id[19]
+
+	return variant == '8' || variant == '9' || variant == 'a' || variant == 'b'
 }
 
 // Run only after json.Valid. Reject lone escaped surrogates instead of silently
@@ -117,6 +152,11 @@ func Encode(reply Reply) ([]byte, error) {
 		strings.TrimSpace(reply.Answer) == "" ||
 		len(reply.Answer) > 32<<10 ||
 		len(reply.Sources) > MaxSources {
+		return nil, ErrResponse
+	}
+
+	// Optional for now; when present it must be a canonical UUID.
+	if reply.ConversationID != "" && !ValidConversationID(reply.ConversationID) {
 		return nil, ErrResponse
 	}
 

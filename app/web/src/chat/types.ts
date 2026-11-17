@@ -1,4 +1,4 @@
-import type { ChatSource } from '../services/chatApi'
+import type { ChatReply, ChatSource } from '../services/chatApi'
 
 export type SourceReference = ChatSource
 
@@ -11,11 +11,13 @@ export type Message = {
 }
 
 // The UI accepts either the existing gateway service or an explicitly injected fixture.
+// conversationId is omitted for the first message of a chat.
 
 export type ChatService = (
   message: string,
   signal: AbortSignal,
-) => Promise<{ answer: string; sources: ChatSource[] }>
+  conversationId?: string,
+) => Promise<ChatReply>
 
 export function safeSourceUrl(value: string): string | undefined {
   try {

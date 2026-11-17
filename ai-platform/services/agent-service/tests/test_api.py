@@ -10,15 +10,17 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 from app.agents.knowledge_agent.validation import LONG_QUESTION_REPLY, InvalidQuestionError
-from app.agents.knowledge_agent.schemas import KnowledgeAnswer, SourceReference
+from app.agents.knowledge_agent.schemas import KnowledgeAnswer
 from app.api.config import AgentAPIConfigError, AgentAPISettings, load_api_settings
 from app.api.main import CHAT_PATH, INVALID_REQUEST_DETAIL, create_app
-from app.graph.workflow import FAILURE_INVALID_QUESTION, FAILURE_UNAVAILABLE, build_graph
+from app.graph.constants import FAILURE_INVALID_QUESTION, FAILURE_UNAVAILABLE
+from app.graph.workflow import build_graph
 from app.llm.exceptions import LLMTimeoutError
 
 TEST_TOKEN = "synthetic-service-token-0123456789abcdef"
 AUTH = {"Authorization": f"Bearer {TEST_TOKEN}"}
 QUESTION = "What do I hand in at the test passport counter?"
+CONVERSATION_ID = "3f2b8c1e-9a4d-4f6b-8c2e-1d7a5b9e0f34"
 
 
 # Fakes
@@ -57,15 +59,12 @@ class FakeKnowledgeAgent:
         return self.answer_value
 
 
-def answered(answer="Hand in form TF-1 [1].", sources=None):
+def answered(answer="Hand in form TF-1."):
 
-    # A successful graph result with the given answer and cited sources
-    if sources is None:
-        sources = [{"number": 1, "document_title": "Synthetic guide", "source_file": "guide.pdf", "page_number": 2}]
-
+    # A successful graph result with the given answer
     result = {
         "messages": [AIMessage(content=answer)],
-        "knowledge_answer": {"answer": answer, "sources": sources, "scope": "govai_documents", "prompt_version": "v1"},
+        "knowledge_answer": {"answer": answer, "scope": "govai_documents", "prompt_version": "v2"},
         "failure": None,
     }
 
@@ -92,15 +91,13 @@ def post(client, body=None, headers=AUTH, **kwargs):
 
 # Success
 
-def test_answer_with_sources_matches_the_core_service_contract():
+def test_answer_matches_the_core_service_contract():
 
     response = post(make_client(FakeGraph(answered())))
 
+    # Only the answer: the citizen is not shown which documents it came from
     assert response.status_code == 200
-    assert response.json() == {
-        "answer": "Hand in form TF-1 [1].",
-        "sources": [{"number": 1, "title": "Synthetic guide", "page": 2}],
-    }
+    assert response.json() == {"answer": "Hand in form TF-1."}
 
 
 def test_only_the_question_reaches_the_graph():
@@ -115,6 +112,75 @@ def test_only_the_question_reaches_the_graph():
     assert graph.calls[0]["config"]["metadata"]["request_id"] == "abc123"
 
 
+# Conversation ID
+
+def test_conversation_id_is_returned_unchanged():
+
+    response = post(make_client(FakeGraph(answered())), body={"message": QUESTION, "conversation_id": CONVERSATION_ID})
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": "Hand in form TF-1.", "conversation_id": CONVERSATION_ID}
+
+
+def test_conversation_id_reaches_the_graph_only_as_metadata():
+
+    graph = FakeGraph(answered())
+
+    post(make_client(graph), body={"message": QUESTION, "conversation_id": CONVERSATION_ID})
+
+    # The graph still gets only the question; no history or memory is loaded
+    call = graph.calls[0]
+    assert call["state"] == {"messages": call["state"]["messages"]}
+    assert len(call["state"]["messages"]) == 1
+    assert call["config"]["metadata"]["conversation_id"] == CONVERSATION_ID
+
+
+def test_request_without_conversation_id_still_works():
+
+    graph = FakeGraph(answered())
+
+    response = post(make_client(graph))
+
+    # A legacy request: no conversation ID is invented, and none is returned
+    assert response.status_code == 200
+    assert response.json() == {"answer": "Hand in form TF-1."}
+    assert "conversation_id" not in graph.calls[0]["config"]["metadata"]
+
+
+def test_invalid_question_keeps_the_conversation_id():
+
+    result = {"messages": [AIMessage(content=LONG_QUESTION_REPLY)], "knowledge_answer": None, "failure": FAILURE_INVALID_QUESTION}
+
+    response = post(make_client(FakeGraph(result)), body={"message": QUESTION, "conversation_id": CONVERSATION_ID})
+
+    assert response.json() == {"answer": LONG_QUESTION_REPLY, "conversation_id": CONVERSATION_ID}
+
+
+@pytest.mark.parametrize(
+    "conversation_id",
+    [
+        "",
+        CONVERSATION_ID.upper(),
+        CONVERSATION_ID.replace("-", ""),
+        "{" + CONVERSATION_ID + "}",
+        " " + CONVERSATION_ID,
+        "00000000-0000-0000-0000-000000000000",
+        "3f2b8c1e-9a4d-0f6b-8c2e-1d7a5b9e0f34",
+        "3f2b8c1e-9a4d-4f6b-0c2e-1d7a5b9e0f34",
+        123,
+    ],
+)
+def test_malformed_conversation_id_is_422(conversation_id):
+
+    graph = FakeGraph(answered())
+
+    response = post(make_client(graph), body={"message": QUESTION, "conversation_id": conversation_id})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": INVALID_REQUEST_DETAIL}
+    assert graph.calls == []
+
+
 def test_request_id_is_returned_and_unsafe_ids_are_replaced():
 
     response = post(make_client(FakeGraph(answered())), headers={**AUTH, "X-Request-ID": "bad id\x01"})
@@ -123,45 +189,12 @@ def test_request_id_is_returned_and_unsafe_ids_are_replaced():
     assert len(response.headers["X-Request-ID"]) == 32
 
 
-def test_missing_page_is_left_out():
+def test_no_documents_found_is_an_answer():
 
-    sources = [{"number": 3, "document_title": "Synthetic guide", "source_file": None, "page_number": None}]
-
-    response = post(make_client(FakeGraph(answered(sources=sources))))
-
-    assert response.json()["sources"] == [{"number": 3, "title": "Synthetic guide"}]
-
-
-def test_title_falls_back_to_file_name_then_number():
-
-    sources = [
-        {"number": 1, "document_title": None, "source_file": "guide.pdf", "page_number": None},
-        {"number": 2, "document_title": "  ", "source_file": None, "page_number": None},
-    ]
-
-    response = post(make_client(FakeGraph(answered(sources=sources))))
-
-    titles = [source["title"] for source in response.json()["sources"]]
-    assert titles == ["guide.pdf", "Document 2"]
-
-
-def test_long_multilingual_title_is_cut_to_512_bytes():
-
-    # Sinhala letters take 3 bytes each in UTF-8
-    sources = [{"number": 1, "document_title": "ශ්‍රී" * 300, "source_file": None, "page_number": None}]
-
-    response = post(make_client(FakeGraph(answered(sources=sources))))
-
-    title = response.json()["sources"][0]["title"]
-    assert 0 < len(title.encode("utf-8")) <= 512
-
-
-def test_no_documents_found_is_an_answer_without_sources():
-
-    response = post(make_client(FakeGraph(answered(answer="I could not find this information.", sources=[]))))
+    response = post(make_client(FakeGraph(answered(answer="I could not find this information."))))
 
     assert response.status_code == 200
-    assert response.json() == {"answer": "I could not find this information.", "sources": []}
+    assert response.json() == {"answer": "I could not find this information."}
 
 
 def test_invalid_question_returns_the_advice_as_the_answer():
@@ -171,22 +204,17 @@ def test_invalid_question_returns_the_advice_as_the_answer():
     response = post(make_client(FakeGraph(result)))
 
     assert response.status_code == 200
-    assert response.json() == {"answer": LONG_QUESTION_REPLY, "sources": []}
+    assert response.json() == {"answer": LONG_QUESTION_REPLY}
 
 
 def test_real_graph_with_a_fake_agent():
 
-    answer = KnowledgeAnswer(
-        answer="Hand in form TF-1 [1].",
-        sources=[SourceReference(number=1, document_title="Synthetic guide", page_number=1)],
-        scope="govai_documents",
-        prompt_version="v1",
-    )
+    answer = KnowledgeAnswer(answer="Hand in form TF-1.", scope="govai_documents", prompt_version="v2")
 
     response = post(make_client(build_graph(FakeKnowledgeAgent(answer=answer))))
 
     assert response.status_code == 200
-    assert response.json()["sources"] == [{"number": 1, "title": "Synthetic guide", "page": 1}]
+    assert response.json() == {"answer": "Hand in form TF-1."}
 
 
 def test_real_graph_invalid_question_is_not_an_outage():

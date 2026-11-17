@@ -18,10 +18,6 @@ __pycache__/
 .files/
 chainlit.md
 
-# Local test scripts, not part of the service
-scripts/test_langsmith.py
-scripts/test_llm_trace.py
-
 # Environment variables and secrets (keep examples)
 .env
 .env.*

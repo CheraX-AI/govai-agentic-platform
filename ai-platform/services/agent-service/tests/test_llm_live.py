@@ -22,9 +22,9 @@ def test_model_answers_from_the_document():
 
     answer = invoke_llm(provider, messages)
 
-    # The answer uses the document and cites it
+    # The answer uses the document without naming it
     assert "TF-1" in answer
-    assert "[1]" in answer
+    assert "[1]" not in answer
 
 
 def test_model_says_when_there_are_no_documents():
