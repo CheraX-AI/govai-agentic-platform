@@ -28,6 +28,13 @@ var ErrDenied = errors.New("chat_gateway_denied")
 
 var ErrResponse = errors.New("chat_gateway_invalid_response")
 
+// ErrConversationNotFound means core rejected the conversation ID as unknown or
+// not the citizen's. Core owns that decision; the gateway only passes it on.
+var ErrConversationNotFound = errors.New("chat_gateway_conversation_not_found")
+
+// maxErrorBytes bounds how much of a core error body is read.
+const maxErrorBytes = 1 << 10
+
 type Client struct {
 	endpoint  string
 	http      *http.Client
@@ -131,6 +138,10 @@ func (c *Client) Ask(ctx context.Context, access string, body []byte) (Payload, 
 		return Payload{}, ErrTimeout
 	}
 
+	if response.StatusCode == 404 && conversationNotFound(response.Body) {
+		return Payload{}, ErrConversationNotFound
+	}
+
 	if response.StatusCode != 200 {
 		return Payload{}, ErrUnavailable
 	}
@@ -152,4 +163,19 @@ func (c *Client) Ask(ctx context.Context, access string, body []byte) (Payload, 
 	}
 
 	return Payload{body: b}, nil
+}
+
+// conversationNotFound reports whether a core 404 is its conversation_not_found
+// error, so other 404s (e.g. a wrong endpoint) stay generic failures.
+func conversationNotFound(body io.Reader) bool {
+	var failure struct {
+		Code string `json:"code"`
+	}
+
+	data, err := io.ReadAll(io.LimitReader(body, maxErrorBytes+1))
+	if err != nil || len(data) > maxErrorBytes || json.Unmarshal(data, &failure) != nil {
+		return false
+	}
+
+	return failure.Code == "conversation_not_found"
 }

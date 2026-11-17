@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -61,7 +62,8 @@ func TestParseRejectsMalformedConversationID(t *testing.T) {
 	for name, id := range malformedConversationIDs {
 		t.Run(name, func(t *testing.T) {
 			body, _ := json.Marshal(map[string]string{"message": "hello", "conversation_id": id})
-			if _, err := Parse(strings.NewReader(string(body))); !errors.Is(err, ErrInvalid) {
+			_, err := Parse(strings.NewReader(string(body)))
+			if !errors.Is(err, ErrInvalidConversationID) || !errors.Is(err, ErrInvalid) {
 				t.Fatalf("accepted or wrong error: %v", err)
 			}
 		})
@@ -156,5 +158,34 @@ func TestDecodeReplyConversationID(t *testing.T) {
 				t.Fatalf("accepted or wrong error: %v", err)
 			}
 		})
+	}
+}
+
+// TestSharedConversationIDCases checks the cases agent-service's Python tests
+// also read, so the Go and Python rules cannot drift apart.
+func TestSharedConversationIDCases(t *testing.T) {
+	data, err := os.ReadFile("testdata/conversation_ids.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cases struct {
+		Valid   []string `json:"valid"`
+		Invalid []string `json:"invalid"`
+	}
+	if json.Unmarshal(data, &cases) != nil || len(cases.Valid) == 0 || len(cases.Invalid) == 0 {
+		t.Fatal("invalid shared cases file")
+	}
+
+	for _, id := range cases.Valid {
+		if !ValidConversationID(id) {
+			t.Errorf("valid ID rejected: %q", id)
+		}
+	}
+
+	for _, id := range cases.Invalid {
+		if ValidConversationID(id) {
+			t.Errorf("invalid ID accepted: %q", id)
+		}
 	}
 }

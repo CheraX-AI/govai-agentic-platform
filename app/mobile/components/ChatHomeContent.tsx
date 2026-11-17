@@ -29,7 +29,7 @@ const preloadAssets = { ...chatHomeAssets, ...Object.fromEntries(Object.entries(
 const suggestions = ['How do I renew my NIC?', 'What do I need for a passport?', 'Pay my vehicle licence'];
 
 
-export type ChatHomeProps = { onExit: () => void; mode: 'standalone' | 'demo' | 'authenticated'; authenticatedDisplayName?: string | null; onSendChat?: (message: string, signal: AbortSignal) => Promise<ChatReply> };
+export type ChatHomeProps = { onExit: () => void; mode: 'standalone' | 'demo' | 'authenticated'; authenticatedDisplayName?: string | null; onSendChat?: (message: string, signal: AbortSignal, conversationId?: string) => Promise<ChatReply> };
 
 // Only a future backend-authenticated adapter should supply this name.
 export function ChatHomeContent(props: ChatHomeProps) {
@@ -100,13 +100,21 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: Ch
       void (async () => {
         try {
           if (!onSendChat) throw new Error('Chat configuration is unavailable.');
-          const reply = await onSendChat(prompt, controller.signal);
+          // The first message of a thread has no ID; later ones reuse the backend's ID.
+          const reply = await onSendChat(prompt, controller.signal, current.conversationId);
+          // A reply for a thread that New Chat or logout already dropped is ignored, ID included.
           if (controller.signal.aborted || leaving.current || request.current !== attempt || threadRef.current?.id !== attempt.thread) return;
           captureFollow();
-          const updated = { ...threadRef.current, messages: [...threadRef.current.messages, { id: ++sequence.current, role: 'ai' as const, text: reply.answer, sources: reply.sources, live: true }] };
+          const updated = { ...threadRef.current, conversationId: reply.conversationId ?? threadRef.current.conversationId, messages: [...threadRef.current.messages, { id: ++sequence.current, role: 'ai' as const, text: reply.answer, sources: reply.sources, live: true }] };
           threadRef.current = updated; setThread(updated); request.current = null; setPending(false); setMessageError('');
         } catch (error) {
           if (controller.signal.aborted || leaving.current || request.current !== attempt) return;
+          // A rejected session or unknown conversation must not reuse the ID; a retry starts a new one.
+          const status = (error as { status?: unknown } | null)?.status;
+          if ((status === 401 || status === 404) && threadRef.current?.id === attempt.thread && threadRef.current.conversationId) {
+            const cleared = { ...threadRef.current, conversationId: undefined };
+            threadRef.current = cleared; setThread(cleared);
+          }
           attempt.status = 'failed'; setPending(false); setFailed(true);
           setMessageError(error instanceof Error ? error.message : 'Chat is unavailable. Please try again later.');
         } finally { if (responseAbort.current === controller) responseAbort.current = null; }

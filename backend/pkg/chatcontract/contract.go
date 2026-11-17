@@ -12,6 +12,10 @@ var (
 	ErrInvalid  = errors.New("invalid chat message")
 	ErrTooLarge = errors.New("chat message too large")
 	ErrResponse = errors.New("invalid chat response")
+
+	// ErrInvalidConversationID is also ErrInvalid (errors.Is), so callers that
+	// only check ErrInvalid keep treating it as a bad request.
+	ErrInvalidConversationID = fmt.Errorf("%w: malformed conversation_id", ErrInvalid)
 )
 
 const MaxRequestBytes = 16 << 10

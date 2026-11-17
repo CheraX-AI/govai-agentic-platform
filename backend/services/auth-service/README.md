@@ -48,6 +48,11 @@ Remaining work:
 - Chat is not served by auth-service itself: browsers use `/api/v1/web/chat`
   (forwarded to core-service); mobile and API clients call core-service
   `/api/chat/message` directly. Bearer `/me` is not a cookie-authenticated route.
+  Web chat accepts an optional `conversation_id` (lowercase UUID) next to `message`
+  and forwards it to core-service, which creates IDs and checks ownership; the reply
+  carries core's `conversation_id`. Malformed ID: 400 `invalid_conversation_id`;
+  unknown or another citizen's: 404 `conversation_not_found`. auth-service never
+  creates an ID or forwards a user ID.
 - Operational reconciliation, broader crash/unknown-commit tests, deployment TLS,
   secret/key rotation, backups and distributed abuse controls. Rate limits remain
   process-local; maintenance commands have no scheduler/alert delivery configured.

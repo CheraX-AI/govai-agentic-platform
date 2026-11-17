@@ -3,14 +3,14 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.knowledge_agent.validation import EMPTY_QUESTION_REPLY, SHORT_QUESTION_REPLY, InvalidQuestionError
-from app.agents.knowledge_agent.schemas import KnowledgeAnswer, SourceReference
-from app.graph.workflow import (
+from app.agents.knowledge_agent.schemas import KnowledgeAnswer
+from app.graph.constants import (
     ASSISTANT_UNAVAILABLE_REPLY,
     FAILURE_INVALID_QUESTION,
     FAILURE_UNAVAILABLE,
     KNOWLEDGE_AGENT_NODE,
-    build_graph,
 )
+from app.graph.workflow import build_graph
 from app.llm.exceptions import LLMTimeoutError
 from app.tools.knowledge_rag_client import KnowledgeServiceUnavailableError
 
@@ -32,10 +32,9 @@ class FakeKnowledgeAgent:
             raise self.error
 
         answer = KnowledgeAnswer(
-            answer=f"Answer to: {question} [1]",
-            sources=[SourceReference(number=1, document_title="Synthetic guide", page_number=1)],
+            answer=f"Answer to: {question}",
             scope="govai_documents",
-            prompt_version="v1",
+            prompt_version="v2",
         )
 
         return answer
@@ -65,7 +64,7 @@ def test_reply_is_added_to_the_chat():
     messages = result["messages"]
     assert len(messages) == 2
     assert isinstance(messages[-1], AIMessage)
-    assert messages[-1].content == "Answer to: Synthetic question? [1]"
+    assert messages[-1].content == "Answer to: Synthetic question?"
 
 
 def test_full_answer_is_kept_in_the_state():
@@ -73,9 +72,9 @@ def test_full_answer_is_kept_in_the_state():
     result = ask(build_graph(FakeKnowledgeAgent()), "Synthetic question?")
 
     answer = result["knowledge_answer"]
-    assert answer["sources"][0]["number"] == 1
+    assert answer["answer"] == "Answer to: Synthetic question?"
     assert answer["scope"] == "govai_documents"
-    assert answer["prompt_version"] == "v1"
+    assert answer["prompt_version"] == "v2"
 
 
 def test_latest_question_is_answered():

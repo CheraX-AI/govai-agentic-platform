@@ -32,19 +32,9 @@ class ServiceScope(BaseModel):
     service_id: str | None = None
 
 
-class SourceReference(BaseModel):
-    """A document cited in an answer. number matches the [n] citation in the answer text."""
-
-    number: int
-    document_title: str | None = None
-    source_file: str | None = None
-    page_number: int | None = None
-
-
 class KnowledgeAnswer(BaseModel):
-    """The agent's answer, the documents it cited, and the scope and prompt that produced it."""
+    """The agent's answer and the scope and prompt that produced it; it never names its sources."""
 
     answer: str
-    sources: list[SourceReference]
     scope: str
     prompt_version: str

@@ -13,7 +13,8 @@ from langchain_core.messages import HumanMessage
 from app.api.auth import require_service_token
 from app.api.config import load_api_settings
 from app.api.schemas import ChatRequest, ChatResponse, to_chat_response
-from app.graph.workflow import FAILURE_UNAVAILABLE, create_graph
+from app.graph.constants import FAILURE_UNAVAILABLE
+from app.graph.workflow import create_graph
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,10 @@ REQUEST_ID_HEADER = "X-Request-ID"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
 # Error bodies: short, fixed, and never holding the question
-INVALID_REQUEST_DETAIL = 'The body must be {"message": "<question>"} with 1-4000 characters.'
+INVALID_REQUEST_DETAIL = (
+    'The body must be {"message": "<question>"} with 1-4000 characters, '
+    'and an optional "conversation_id" (a lowercase UUID).'
+)
 UNAVAILABLE_DETAIL = "The GovAI assistant is unavailable."
 
 
@@ -67,11 +71,16 @@ def create_app(graph=None, settings=None):
         # Use core-service's request ID, so one question can be followed through every service
         request_id = read_request_id(request)
 
+        # Run metadata for logs and traces; the graph does not use the conversation yet (no memory)
+        metadata = {"request_id": request_id}
+        if body.conversation_id:
+            metadata["conversation_id"] = body.conversation_id
+
         try:
             # One graph run per question; earlier messages are not sent by core-service
             result = request.app.state.graph.invoke(
                 {"messages": [HumanMessage(content=body.message)]},
-                config={"metadata": {"request_id": request_id}},
+                config={"metadata": metadata},
             )
 
         except Exception as error:
@@ -86,7 +95,8 @@ def create_app(graph=None, settings=None):
 
         try:
             # An answer, or advice on how to ask (an empty or too long question)
-            response = to_chat_response(result["messages"][-1].content, result.get("knowledge_answer"))
+            # Return the same conversation ID core-service sent; the agent never makes one
+            response = to_chat_response(result["messages"][-1].content, body.conversation_id)
 
         except ValueError as error:
             # e.g. an empty answer; Pydantic's message holds the answer, so log only the type
@@ -95,7 +105,7 @@ def create_app(graph=None, settings=None):
 
         logger.info(
             "chat request finished",
-            extra={"request_id": request_id, "failure": result.get("failure"), "sources": len(response.sources)},
+            extra={"request_id": request_id, "failure": result.get("failure")},
         )
 
         return JSONResponse(

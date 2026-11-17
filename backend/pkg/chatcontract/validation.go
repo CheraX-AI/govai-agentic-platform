@@ -43,7 +43,7 @@ func Parse(reader io.Reader) (Question, error) {
 
 	conversationID, ok := optionalConversationID(object)
 	if !ok {
-		return Question{}, ErrInvalid
+		return Question{}, ErrInvalidConversationID
 	}
 
 	message = strings.TrimSpace(message)
@@ -69,17 +69,17 @@ func optionalConversationID(object map[string]json.RawMessage) (string, bool) {
 	}
 
 	id, err := strictString(raw)
-	if err != nil || !validConversationID(id) {
+	if err != nil || !ValidConversationID(id) {
 		return "", false
 	}
 
 	return id, true
 }
 
-// validConversationID accepts only the canonical lowercase UUID text form
+// ValidConversationID accepts only the canonical lowercase UUID text form
 // (RFC 9562, version 1-8, RFC variant), so one conversation has exactly one
 // spelling. The nil and max UUIDs fail the version check.
-func validConversationID(id string) bool {
+func ValidConversationID(id string) bool {
 	if len(id) != conversationIDLength {
 		return false
 	}
@@ -156,7 +156,7 @@ func Encode(reply Reply) ([]byte, error) {
 	}
 
 	// Optional for now; when present it must be a canonical UUID.
-	if reply.ConversationID != "" && !validConversationID(reply.ConversationID) {
+	if reply.ConversationID != "" && !ValidConversationID(reply.ConversationID) {
 		return nil, ErrResponse
 	}
 

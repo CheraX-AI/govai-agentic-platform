@@ -3,7 +3,7 @@
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-from app.agents.knowledge_agent.agent import KnowledgeAgent, cited_references
+from app.agents.knowledge_agent.agent import KnowledgeAgent, remove_citations
 from app.agents.knowledge_agent.prompts import (
     AVAILABLE_DOCUMENTS_SCOPE,
     INSUFFICIENT_INFORMATION_REPLY,
@@ -11,6 +11,7 @@ from app.agents.knowledge_agent.prompts import (
 )
 from app.agents.knowledge_agent.schemas import KnowledgeSource, ServiceScope
 from app.agents.knowledge_agent.validation import InvalidQuestionError
+from app.llm.exceptions import LLMError
 from app.llm.provider import LLMProvider
 from app.tools.knowledge_rag_client import KnowledgeServiceUnavailableError
 from helpers import SYNTHETIC_QUESTION, SYNTHETIC_SOURCE, make_settings
@@ -80,26 +81,14 @@ def make_agent(sources=(), replies=("The answer [1].",), rag_error=None, scope=A
 
 def test_answer_uses_the_retrieved_documents():
 
-    agent, _, chat_model = make_agent(sources=[make_source(1)], replies=["Hand in form TF-1 [1]."])
+    agent, _, chat_model = make_agent(sources=[make_source(1)], replies=["Hand in form TF-1."])
 
     answer = agent.answer(SYNTHETIC_QUESTION)
 
-    assert answer.answer == "Hand in form TF-1 [1]."
+    assert answer.answer == "Hand in form TF-1."
     assert answer.scope == AVAILABLE_DOCUMENTS_SCOPE.scope_id
     assert answer.prompt_version == PROMPT_VERSION
     assert chat_model.calls == 1
-
-
-def test_only_cited_sources_are_returned():
-
-    sources = [make_source(1), make_source(2), make_source(3)]
-    agent, _, _ = make_agent(sources=sources, replies=["First [3], then [1]."])
-
-    answer = agent.answer(SYNTHETIC_QUESTION)
-
-    assert [source.number for source in answer.sources] == [1, 3]
-    assert answer.sources[1].document_title == "Synthetic guide 3"
-    assert answer.sources[1].page_number == 3
 
 
 def test_no_documents_gives_the_fixed_reply_without_calling_the_model():
@@ -110,7 +99,6 @@ def test_no_documents_gives_the_fixed_reply_without_calling_the_model():
     answer = agent.answer(SYNTHETIC_QUESTION)
 
     assert answer.answer == INSUFFICIENT_INFORMATION_REPLY
-    assert answer.sources == []
     assert chat_model.calls == 0
 
 
@@ -170,24 +158,36 @@ def test_retrieval_errors_reach_the_caller():
     assert chat_model.calls == 0
 
 
-# Citations
+# Removing document numbers
 
-def test_citations_outside_the_sources_are_ignored():
+def test_model_document_numbers_are_removed():
 
-    references = cited_references("See [0], [2], and [9].", [make_source(1), make_source(2)])
+    agent, _, _ = make_agent(sources=[make_source(1), make_source(3)], replies=["First [3], then [1]. Also [1, 3]."])
 
-    assert [reference.number for reference in references] == [2]
+    answer = agent.answer(SYNTHETIC_QUESTION)
 
-
-def test_repeated_citations_are_listed_once():
-
-    references = cited_references("Yes [1]. Also [1].", [make_source(1)])
-
-    assert len(references) == 1
+    assert answer.answer == "First, then. Also."
 
 
-def test_answer_without_citations_has_no_sources():
+def test_answer_of_only_document_numbers_is_an_llm_error():
 
-    references = cited_references(INSUFFICIENT_INFORMATION_REPLY, [make_source(1)])
+    # Nothing would be left to show the citizen
+    agent, _, _ = make_agent(sources=[make_source(1)], replies=["[1]"])
 
-    assert references == []
+    with pytest.raises(LLMError):
+        agent.answer(SYNTHETIC_QUESTION)
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Hand in form TF-1 [1].", "Hand in form TF-1."),
+        ("See [1][2] and [10].", "See and."),
+        ("Fees are listed [1, 2].", "Fees are listed."),
+        ("No numbers here.", "No numbers here."),
+        ("Bring [your NIC] and the form.", "Bring [your NIC] and the form."),
+    ],
+)
+def test_remove_citations(text, expected):
+
+    assert remove_citations(text) == expected

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { sendChat, ChatError } from '../services/chatApi'
+import { createConversationIdTracker } from './conversationId'
 import type { ChatService, Message } from './types'
 
 // Owns only in-memory UI state. The default uses the existing real gateway;
@@ -19,6 +20,9 @@ export function useConversation(
   const active = useRef<AbortController | null>(null)
   const failed = useRef<Message | null>(null)
 
+  // The backend conversation ID: hidden, kept for later messages, cleared with the chat.
+  const [conversationId] = useState(createConversationIdTracker)
+
   useEffect(() => () => {
     active.current?.abort()
     active.current = null
@@ -33,16 +37,19 @@ export function useConversation(
     setCanRetry(false)
   }, [])
 
+  // New Chat, logout and a change of user all reset; the next message starts a new conversation.
+
   const reset = useCallback(() => {
     active.current?.abort()
     active.current = null
     failed.current = null
+    conversationId.clear()
     setMessages([])
     setDraft('')
     setStatus('idle')
     setError(null)
     setCanRetry(false)
-  }, [])
+  }, [conversationId])
 
   async function request(message: Message) {
     const controller = new AbortController()
@@ -57,13 +64,16 @@ export function useConversation(
 
     try {
 
-      // The backend accepts one message, not the local transcript.
+      // The backend accepts one message, not the local transcript. The first
+      // message has no conversation ID; later ones reuse the backend's ID.
 
-      const reply = await service(message.text, controller.signal)
+      const snapshot = conversationId.snapshot()
+      const reply = await service(message.text, controller.signal, conversationId.current())
 
       // Cancellation/reset may win even when a service resolves after being aborted.
 
       if (controller.signal.aborted || active.current !== controller) return
+      if (!conversationId.save(snapshot, reply.conversationId)) return
       setMessages(previous => [
         ...previous,
         {
@@ -82,6 +92,11 @@ export function useConversation(
         : new ChatError(503, 'Chat is temporarily unavailable. Your messages are still here.')
       failed.current = [400, 401, 403, 413].includes(next.status) ? null : message
       setCanRetry(failed.current !== null)
+
+      // A rejected session or an unknown conversation must not reuse the ID; a
+      // retry then starts a new conversation instead of failing again.
+
+      if (next.status === 401 || next.status === 404) conversationId.clear()
       setError(next)
       setStatus('error')
       if (next.status === 401) onSessionRejected?.()
@@ -96,7 +111,7 @@ export function useConversation(
     if (
       !value ||
       Array.from(value).length > 4000 ||
-      new TextEncoder().encode(JSON.stringify({ message: value })).length > 16384
+      new TextEncoder().encode(JSON.stringify({ message: value, conversation_id: conversationId.current() })).length > 16384
     ) {
       setError(new ChatError(
         400,

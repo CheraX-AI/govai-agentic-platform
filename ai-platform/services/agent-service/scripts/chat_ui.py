@@ -67,9 +67,9 @@ async def answer(message):
     # The graph call is blocking, so run it off the Chainlit event loop
     result = await asyncio.to_thread(graph.invoke, state, config)
 
-    # Show the reply with the documents it cited
+    # Show the reply; it does not say which documents it came from
     reply = result["messages"][-1].content
-    await cl.Message(content=reply + format_sources(result.get("knowledge_answer"))).send()
+    await cl.Message(content=reply).send()
 
 
 # Helper functions
@@ -81,25 +81,3 @@ def get_graph():
     graph = create_graph()
 
     return graph
-
-
-def format_sources(knowledge_answer):
-
-    # No answer, or an answer without citations, has no source list
-    if not knowledge_answer or not knowledge_answer["sources"]:
-        return ""
-
-    # One line per cited document: [n] title, file, page
-    lines = ["", "", "**Sources**"]
-    for source in knowledge_answer["sources"]:
-        details = []
-        for value in (source["document_title"], source["source_file"]):
-            if value:
-                details.append(value)
-        if source["page_number"] is not None:
-            details.append(f"page {source['page_number']}")
-        lines.append(f"[{source['number']}] " + ", ".join(details))
-
-    text = "\n".join(lines)
-
-    return text

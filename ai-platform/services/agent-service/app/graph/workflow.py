@@ -7,33 +7,27 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.agents.knowledge_agent.agent import create_knowledge_agent
 from app.agents.knowledge_agent.validation import EMPTY_QUESTION_REPLY, InvalidQuestionError
+from app.graph.constants import (
+    ASSISTANT_UNAVAILABLE_REPLY,
+    FAILURE_INVALID_QUESTION,
+    FAILURE_UNAVAILABLE,
+    KNOWLEDGE_AGENT_NODE,
+)
 from app.llm.exceptions import LLMError
 from app.tools.knowledge_rag_client import KnowledgeServiceError
 
 logger = logging.getLogger(__name__)
 
-KNOWLEDGE_AGENT_NODE = "knowledge_agent"
-
-# Shown instead of internal errors; the details are only logged
-ASSISTANT_UNAVAILABLE_REPLY = "The GovAI assistant cannot answer right now. Please try again later."
-
-# Why a turn has no answer, so callers such as the HTTP API can pick a status code
-FAILURE_INVALID_QUESTION = "invalid_question"
-FAILURE_UNAVAILABLE = "unavailable"
-
 
 # Models
 
 class AgentState(MessagesState):
-    """Conversation state shared by every node.
+    """Conversation state shared by every node; messages holds the chat."""
 
-    messages holds the chat; knowledge_answer holds the last answer with its
-    cited sources, scope, and prompt version (None when no answer was made).
-    failure says why there is no answer: FAILURE_INVALID_QUESTION,
-    FAILURE_UNAVAILABLE, or None when the turn succeeded.
-    """
-
+    # The last answer with its scope and prompt version; None when no answer was made
     knowledge_answer: dict | None
+
+    # Why there is no answer: FAILURE_INVALID_QUESTION, FAILURE_UNAVAILABLE, or None on success
     failure: str | None
 
 
