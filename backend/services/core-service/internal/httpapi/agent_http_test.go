@@ -103,9 +103,20 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 			f := newFixture(t)
 			var calls atomic.Int32
 			var upstreamRequestID atomic.Value
+			var upstreamConversationID atomic.Value
 			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
 				upstreamRequestID.Store(r.Header.Get("X-Request-ID"))
+				// The agent gets only the question and the resolved conversation ID, in the body
+				var sent map[string]string
+				if json.NewDecoder(r.Body).Decode(&sent) != nil ||
+					len(sent) != 2 ||
+					sent["message"] != "private-question" ||
+					r.Header.Get("X-Conversation-ID") != "" {
+					t.Error("unexpected agent request body")
+				}
+
+				upstreamConversationID.Store(sent["conversation_id"])
 				if r.Header.Get("Authorization") != "Bearer synthetic-service-key" ||
 					r.Header.Get("Cookie") != "" {
 					t.Error("incorrect upstream credentials")
@@ -144,7 +155,13 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 			}
 
 			defer agent.Close()
-			f.router, err = httpapi.NewRouter(f.verifier, agent, slog.New(slog.NewJSONHandler(f.logs, nil)), httpapi.Settings{})
+			f.router, err = httpapi.NewRouter(
+				f.verifier,
+				agent,
+				f.conversations,
+				slog.New(slog.NewJSONHandler(f.logs, nil)),
+				httpapi.Settings{},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -171,11 +188,18 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 				t.Fatal("request ID not forwarded to the agent")
 			}
 
+			// The ownership-checked conversation ID goes to the agent as a header
+			forwarded, _ := upstreamConversationID.Load().(string)
+			if !chatcontract.ValidConversationID(forwarded) || f.store.owner(forwarded) != "synthetic-subject" {
+				t.Fatal("conversation ID not forwarded to the agent")
+			}
+
 			if tc.status == 200 {
 				var got chatcontract.Reply
 				if json.Unmarshal(r.Body.Bytes(), &got) != nil ||
 					got.Answer != "Synthetic answer only." ||
-					got.Sources == nil {
+					got.Sources == nil ||
+					got.ConversationID != forwarded {
 					t.Fatal("response contract mismatch")
 				}
 

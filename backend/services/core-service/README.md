@@ -36,7 +36,8 @@ media/TLS/CORS boundaries, cookie-only rejection, safe failures/logs and concurr
 admission limits. Success answers/citations in tests are explicitly synthetic.
 Local server startup and trusted-CA health 200 / unauthenticated chat 401 passed.
 Existing authentication/profile storage remains in auth-service; core only relies
-on validated JWT citizen/email claims and performs no profile/database lookup.
+on validated JWT citizen/email claims and performs no profile lookup. Its only
+database use is conversation ownership (see "Conversation IDs").
 
 ## Current GA-65 limits
 
@@ -132,7 +133,7 @@ A valid token can remain accepted until expiry after logout, per the shared offl
 JWT policy; no immediate bearer-revocation guarantee is added by this API.
 
 Restarting after Ctrl+C is safe. No migrations or external identity changes occur
-at startup. Run module tests from this directory; this is independent of the auth
+at startup; startup only checks that the database is migrated. Run module tests from this directory; this is independent of the auth
 service module and local dependencies use the existing pkg/authn replace directive.
 ## GA-67 response and error verification
 
@@ -151,3 +152,46 @@ These checks use synthetic fixtures; actual Knowledge Agent compatibility,
 real generated answers/citations, and teammate web/mobile integration remain
 pending. The adapter remains disabled in the local configuration. Clients must
 render agent text safely; this backend does not turn AI output into trusted HTML.
+
+## Conversation IDs
+
+Each chat belongs to a conversation, identified by a UUID and owned by one
+citizen. Only the ID and its owner are stored: no messages, history or AI memory.
+
+- Request: `{"message": "...", "conversation_id": "<uuid>"}`. `conversation_id`
+  is optional, so existing clients keep working; leaving it out starts a new
+  conversation.
+- Reply: `{"answer": "...", "sources": [], "conversation_id": "<uuid>"}`. Send the
+  ID back with the next message to continue the same conversation.
+- The owner is always the verified token subject (`sub`), never a request field;
+  unknown fields such as `citizen_id` are rejected.
+- Malformed ID (not a lowercase UUID): **400** `invalid_conversation_id`. Unknown ID,
+  or another citizen's: **404** `conversation_not_found` (the same answer, so IDs
+  cannot be probed). Storage down: **503** `chat_unavailable`.
+- The resolved ID goes to agent-service in the request body:
+  `{"message": "...", "conversation_id": "<uuid>"}`. The agent returns the same ID; a
+  reply with a different ID is rejected (**502** `invalid_agent_response`), so only
+  core-service decides the conversation.
+
+Storage is the `govai_core` database on the shared PostgreSQL server, separate from
+every other service's database. Table `core.conversations` (`internal/database/migrations/001_conversations.sql`). The
+API login `govai_core_app` can only read and insert; it cannot update or delete
+owners. The API refuses to start if `CORE_DATABASE_URL` is missing, the schema is not
+migrated, or the login is too privileged.
+
+One-time setup, from this folder:
+
+```powershell
+# 1. Create the database and logins (as a PostgreSQL superuser, new random passwords)
+psql -U postgres -h 127.0.0.1 -p <port> -v owner_password='<random>' -v app_password='<random>' -f internal/database/setup/create_database.sql
+# 2. Put CORE_MIGRATION_DATABASE_URL (owner) in .env.migrate and CORE_DATABASE_URL (app) in .env
+# 3. Apply the schema with the owner login
+go run ./cmd/migrate
+# 4. Optional live test with the app login
+$env:CORE_TEST_DATABASE_URL = "<CORE_DATABASE_URL value>"; go test -tags integration ./internal/conversation/
+```
+
+Tests: `internal/conversation` (new UUID, reuse, citizen A vs B, unknown and
+malformed IDs, storage failures), `internal/httpapi/conversation_test.go` (the same
+through the authenticated router, plus 400/404/503 codes), and the agent HTTP test
+checks that the agent request body carries the ID.

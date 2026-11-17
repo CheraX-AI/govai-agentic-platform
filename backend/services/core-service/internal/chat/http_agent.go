@@ -182,14 +182,21 @@ func (*HTTPAgent) LogValue() slog.Value {
 func (a *HTTPAgent) Close() { a.transport.CloseIdleConnections() }
 
 func (a *HTTPAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontract.Reply, error) {
-	// The injected port can be called independently of HTTP validation.
-	encoded, err := json.Marshal(map[string]string{"message": q.Text()})
+	// The injected port can be called independently of HTTP validation. Only the
+	// question and the resolved, ownership-checked conversation ID are sent.
+	request := map[string]string{"message": q.Text()}
+	conversationID := conversationIDFrom(ctx)
+	if conversationID != "" {
+		request["conversation_id"] = conversationID
+	}
+
+	encoded, err := json.Marshal(request)
 	if err != nil {
 		return chatcontract.Reply{}, chatcontract.ErrInvalid
 	}
 
 	canonical, err := chatcontract.Parse(bytes.NewReader(encoded))
-	if err != nil || canonical.Text() != q.Text() {
+	if err != nil || canonical.Text() != q.Text() || canonical.ConversationID() != conversationID {
 		return chatcontract.Reply{}, chatcontract.ErrInvalid
 	}
 
