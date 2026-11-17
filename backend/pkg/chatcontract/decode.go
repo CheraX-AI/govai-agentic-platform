@@ -103,7 +103,7 @@ func DecodeReply(body []byte) (Reply, error) {
 		return Reply{}, ErrResponse
 	}
 
-	object, err := fields(body, "answer", "sources")
+	object, err := fields(body, "answer", "sources", conversationIDField)
 	if err != nil {
 		return Reply{}, err
 	}
@@ -113,7 +113,12 @@ func DecodeReply(body []byte) (Reply, error) {
 		return Reply{}, ErrResponse
 	}
 
-	reply := Reply{Answer: answer, Sources: []Source{}}
+	conversationID, ok := optionalConversationID(object)
+	if !ok {
+		return Reply{}, ErrResponse
+	}
+
+	reply := Reply{Answer: answer, Sources: []Source{}, ConversationID: conversationID}
 	if raw, ok := object["sources"]; ok && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		raw = bytes.TrimSpace(raw)
 		if len(raw) == 0 || raw[0] != '[' {

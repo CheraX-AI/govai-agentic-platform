@@ -26,9 +26,22 @@ const MaxSourceNumber = 100
 
 const MaxSourcePage = 100000
 
-type Question struct{ message string }
+// conversationIDField is the JSON name of the optional conversation ID.
+const conversationIDField = "conversation_id"
+
+// conversationIDLength is the length of a canonical UUID: 32 hex digits and 4 hyphens.
+const conversationIDLength = 36
+
+// Question is a validated chat request. The conversation ID is optional and
+// "" when the request had none.
+type Question struct {
+	message        string
+	conversationID string
+}
 
 func (q Question) Text() string { return q.message }
+
+func (q Question) ConversationID() string { return q.conversationID }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
 func (Question) Format(output fmt.State, _ rune) {
@@ -54,9 +67,12 @@ type Source struct {
 	URL    string `json:"url,omitempty"`
 }
 
+// Reply is a chat answer. ConversationID ("" = none) is a canonical UUID and
+// is left out of the JSON when empty.
 type Reply struct {
-	Answer  string   `json:"answer"`
-	Sources []Source `json:"sources"`
+	Answer         string   `json:"answer"`
+	Sources        []Source `json:"sources"`
+	ConversationID string   `json:"conversation_id,omitempty"`
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
