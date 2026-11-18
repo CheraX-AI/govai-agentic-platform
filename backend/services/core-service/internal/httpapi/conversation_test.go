@@ -53,7 +53,7 @@ func TestNewConversationReceivesUUID(t *testing.T) {
 	}
 
 	// The owner is the verified token subject
-	if f.store.owner(reply.ConversationID) != "synthetic-subject" {
+	if f.store.Owner(reply.ConversationID) != "synthetic-subject" {
 		t.Fatal("conversation not owned by the verified citizen")
 	}
 
@@ -74,8 +74,8 @@ func TestExistingConversationKeepsItsID(t *testing.T) {
 		}
 	}
 
-	if f.store.creates != 1 {
-		t.Fatalf("reused ID created new conversations: %d", f.store.creates)
+	if f.store.Creates() != 1 {
+		t.Fatalf("reused ID created new conversations: %d", f.store.Creates())
 	}
 }
 
@@ -97,7 +97,7 @@ func TestCitizenCannotAccessAnotherCitizensConversation(t *testing.T) {
 		t.Fatal("conversation or owner disclosed")
 	}
 
-	if f.store.owner(conversationA) != "synthetic-citizen-a" {
+	if f.store.Owner(conversationA) != "synthetic-citizen-a" {
 		t.Fatal("conversation owner changed")
 	}
 }
@@ -107,7 +107,7 @@ func TestUnknownConversationIsRejected(t *testing.T) {
 
 	r := f.send(f.token(t, nil), chatBody("hello", unknownConversation))
 
-	if r.Code != 404 || errorCode(t, r) != "conversation_not_found" || f.agent.calls != 0 || f.store.creates != 0 {
+	if r.Code != 404 || errorCode(t, r) != "conversation_not_found" || f.agent.calls != 0 || f.store.Creates() != 0 {
 		t.Fatalf("unknown conversation accepted: %d", r.Code)
 	}
 }
@@ -136,7 +136,7 @@ func TestMalformedConversationIDIsBadRequest(t *testing.T) {
 
 func TestConversationStorageFailureIsUnavailable(t *testing.T) {
 	f := newFixture(t)
-	f.store.err = errors.New("private database host and password")
+	f.store.Err = errors.New("private database host and password")
 
 	r := f.send(f.token(t, nil), `{"message":"hello"}`)
 
@@ -152,7 +152,7 @@ func TestConversationStorageFailureIsUnavailable(t *testing.T) {
 func TestAuthenticationPrecedesConversationLookup(t *testing.T) {
 	f := newFixture(t)
 
-	if r := f.send("", chatBody("hello", unknownConversation)); r.Code != 401 || f.store.creates != 0 {
+	if r := f.send("", chatBody("hello", unknownConversation)); r.Code != 401 || f.store.Creates() != 0 {
 		t.Fatal("unauthenticated request reached conversation storage")
 	}
 }
@@ -168,9 +168,10 @@ func TestAgentEchoOfConversationID(t *testing.T) {
 		t.Fatal("matching agent conversation ID rejected")
 	}
 
-	// An agent that returns another ID is not trusted
+	// An agent that returns another ID is not trusted (a new question: a repeat
+	// of "again" would get the stored answer without asking the agent)
 	f.agent.reply.ConversationID = unknownConversation
-	r := f.send(token, chatBody("again", conversationID))
+	r := f.send(token, chatBody("something else", conversationID))
 	if r.Code != 502 || errorCode(t, r) != "invalid_agent_response" || strings.Contains(r.Body.String(), unknownConversation) {
 		t.Fatalf("agent chose the conversation: %d", r.Code)
 	}

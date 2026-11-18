@@ -1,5 +1,4 @@
-// Package conversation gives each chat a conversation ID owned by one citizen.
-// It stores only the ID and its owner: no messages, history or AI memory.
+// Package conversation owns each chat's conversation ID and its encrypted messages.
 package conversation
 
 import (

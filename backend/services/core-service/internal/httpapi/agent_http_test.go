@@ -159,6 +159,7 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 				f.verifier,
 				agent,
 				f.conversations,
+				f.messages,
 				slog.New(slog.NewJSONHandler(f.logs, nil)),
 				httpapi.Settings{},
 			)
@@ -190,7 +191,7 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 
 			// The ownership-checked conversation ID goes to the agent as a header
 			forwarded, _ := upstreamConversationID.Load().(string)
-			if !chatcontract.ValidConversationID(forwarded) || f.store.owner(forwarded) != "synthetic-subject" {
+			if !chatcontract.ValidConversationID(forwarded) || f.store.Owner(forwarded) != "synthetic-subject" {
 				t.Fatal("conversation ID not forwarded to the agent")
 			}
 

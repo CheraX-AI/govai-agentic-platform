@@ -30,6 +30,7 @@ func TestOpenRejectsUnsafeConnectionStrings(t *testing.T) {
 var appliedChecksums = []string{
 	"124f58984a0e06253d4819ba2024536ec56b6410cd8013f3e8d9978f7e79ac81", // 001_conversations.sql
 	"43860f9d5e2ad7e885a9962d08a9c381fb30d8653384d970c81915302b14a95d", // 002_conversation_messages.sql
+	"e6ba1e65f99cd906881bbdbbff37a335e01165eed30579255fb26e2e3f880150", // 003_message_turns.sql
 }
 
 func TestShippedMigrationsAreUnchanged(t *testing.T) {

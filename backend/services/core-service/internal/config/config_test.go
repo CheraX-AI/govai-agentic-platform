@@ -12,11 +12,14 @@ func TestConfig(t *testing.T) {
 		"CHAT_ALLOWED_CLIENTS": "mobile,web",
 		"CHAT_ALLOWED_ORIGINS": "https://web.test",
 		"CORE_DATABASE_URL":    "postgres://synthetic@127.0.0.1:5432/govai_core?sslmode=disable",
+		// Synthetic test key (bytes 1..32), never a real one
+		"CORE_CONVERSATION_DATA_KEY": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
 	} {
 		t.Setenv(key, value)
 	}
 
-	if c, err := Load(); err != nil || c.Port != "5002" || len(c.Clients) != 2 || c.MaxConcurrent != 8 {
+	if c, err := Load(); err != nil || c.Port != "5002" || len(c.Clients) != 2 || c.MaxConcurrent != 8 ||
+		len(c.MessageKey) != 32 || c.MessageKey[0] != 1 || c.MessageKey[31] != 32 {
 		t.Fatal("valid config rejected")
 	}
 
@@ -40,6 +43,12 @@ func TestConfig(t *testing.T) {
 		{"CHAT_ALLOWED_ORIGINS", "*"},
 		{"CHAT_ALLOWED_ORIGINS", "https://web.test/"},
 		{"CORE_DATABASE_URL", ""},
+		{"CORE_CONVERSATION_DATA_KEY", ""},
+		{"CORE_CONVERSATION_DATA_KEY", "not base64!"},
+		{"CORE_CONVERSATION_DATA_KEY", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHw=="}, // 31 bytes
+		{"CORE_CONVERSATION_DATA_KEY", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAh"}, // 33 bytes
+		{"CORE_CONVERSATION_DATA_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}, // all zero
+		{"CORE_CONVERSATION_DATA_KEY", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"},  // missing padding
 	} {
 		t.Run(tc.key+tc.value, func(t *testing.T) {
 			t.Setenv(tc.key, tc.value)

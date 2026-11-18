@@ -17,6 +17,7 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/config"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation/pgstore"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/database"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/httpapi"
 	"github.com/gin-gonic/gin"
@@ -81,7 +82,7 @@ func run() error {
 		return err
 	}
 
-	store, err := conversation.NewPostgresStore(pool)
+	store, err := pgstore.New(pool)
 	if err != nil {
 		return err
 	}
@@ -89,6 +90,12 @@ func run() error {
 	conversations, err := conversation.NewService(store)
 	if err != nil {
 		return err
+	}
+
+	// A question still pending after the request budget belongs to a lost request.
+	messages, err := conversation.NewMessages(store, c.MessageKey, c.RequestTimeout+30*time.Second)
+	if err != nil {
+		return config.ErrConfig
 	}
 
 	gin.SetMode(gin.ReleaseMode)
@@ -118,7 +125,7 @@ func run() error {
 	}
 
 	// Mount protected chat routes and start the HTTPS server.
-	router, err := httpapi.NewRouter(verifier, agent, conversations, slog.Default(), httpapi.Settings{
+	router, err := httpapi.NewRouter(verifier, agent, conversations, messages, slog.Default(), httpapi.Settings{
 		Origins:       c.Origins,
 		Timeout:       c.RequestTimeout,
 		MaxConcurrent: c.MaxConcurrent,

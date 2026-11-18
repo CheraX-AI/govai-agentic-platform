@@ -75,14 +75,19 @@ func checkSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		t.Fatalf("recorded %d migrations, shipped %d", versions, len(scripts))
 	}
 
-	var foreignKey string
-	if err := pool.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint
- WHERE conrelid = 'core.conversation_messages'::regclass AND contype = 'f'`).Scan(&foreignKey); err != nil ||
-		foreignKey != "FOREIGN KEY (conversation_id) REFERENCES core.conversations(id)" {
-		t.Fatalf("unexpected foreign key %q", foreignKey)
+	rows, err := pool.Query(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conrelid = 'core.conversation_messages'::regclass AND contype = 'f' ORDER BY conname`)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	rows, err := pool.Query(ctx, `SELECT indexdef FROM pg_indexes
+	foreignKeys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil || strings.Join(foreignKeys, "\n") != "FOREIGN KEY (conversation_id) REFERENCES core.conversations(id)\n"+
+		"FOREIGN KEY (conversation_id, reply_to) REFERENCES core.conversation_messages(conversation_id, message_id)" {
+		t.Fatalf("unexpected foreign keys %q", foreignKeys)
+	}
+
+	rows, err = pool.Query(ctx, `SELECT indexdef FROM pg_indexes
  WHERE schemaname = 'core' AND tablename = 'conversation_messages' ORDER BY indexname`)
 	if err != nil {
 		t.Fatal(err)
@@ -97,6 +102,7 @@ func checkSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	for _, want := range []string{
 		"UNIQUE INDEX conversation_messages_order ON core.conversation_messages USING btree (conversation_id, ordinal)",
 		"UNIQUE INDEX conversation_messages_pkey ON core.conversation_messages USING btree (message_id)",
+		"UNIQUE INDEX conversation_messages_reply_to_key ON core.conversation_messages USING btree (reply_to)",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing index %q in:\n%s", want, joined)
@@ -140,8 +146,8 @@ func checkMessageRules(t *testing.T, ctx context.Context, pool *pgxpool.Pool, co
 		}
 
 		_, err := tx.Exec(ctx, `INSERT INTO core.conversation_messages
- (message_id, conversation_id, role, content_ciphertext, status) VALUES ($1, $2, 'assistant', $3, 'completed')`,
-			answer, conversationID, sealed(t, 120))
+ (message_id, conversation_id, role, content_ciphertext, status, reply_to) VALUES ($1, $2, 'assistant', $3, 'completed', $4)`,
+			answer, conversationID, sealed(t, 120), question)
 		return err
 	}); err != nil {
 		t.Fatalf("runtime role cannot add messages: %v", err)
@@ -177,18 +183,23 @@ func checkMessageRules(t *testing.T, ctx context.Context, pool *pgxpool.Pool, co
 	}
 
 	for name, statement := range map[string]string{
-		"unknown conversation":   fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'citizen', '\x%s')`, uuid(t), uuid(t), strings.Repeat("ab", 40)),
-		"unknown role":           fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'system', '\x%s')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
-		"unknown status":         fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, status) VALUES ('%s', '%s', 'citizen', '\x%s', 'sent')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
-		"too short to be sealed": fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'citizen', '\x%s')`, uuid(t), conversationID, strings.Repeat("ab", 28)),
-		"duplicate message_id":   fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'citizen', '\x%s')`, question, conversationID, strings.Repeat("ab", 40)),
-		"chosen ordinal":         fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, ordinal, role, content_ciphertext) OVERRIDING SYSTEM VALUE VALUES ('%s', '%s', 1, 'citizen', '\x%s')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
-		"final status reopened":  fmt.Sprintf(`UPDATE core.conversation_messages SET status = 'pending' WHERE message_id = '%s'`, answer),
-		"content rewritten":      fmt.Sprintf(`UPDATE core.conversation_messages SET content_ciphertext = '\x%s' WHERE message_id = '%s'`, strings.Repeat("cd", 40), answer),
-		"message moved":          fmt.Sprintf(`UPDATE core.conversation_messages SET conversation_id = conversation_id WHERE message_id = '%s'`, answer),
-		"message deleted":        fmt.Sprintf(`DELETE FROM core.conversation_messages WHERE message_id = '%s'`, answer),
-		"conversation deleted":   fmt.Sprintf(`DELETE FROM core.conversations WHERE id = '%s'`, conversationID),
-		"owner rewritten":        fmt.Sprintf(`UPDATE core.conversations SET citizen_subject = 'synthetic-citizen-b' WHERE id = '%s'`, conversationID),
+		"unknown conversation":    fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'citizen', '\x%s')`, uuid(t), uuid(t), strings.Repeat("ab", 40)),
+		"unknown role":            fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'system', '\x%s')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
+		"unknown status":          fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, status) VALUES ('%s', '%s', 'citizen', '\x%s', 'sent')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
+		"too short to be sealed":  fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'citizen', '\x%s')`, uuid(t), conversationID, strings.Repeat("ab", 28)),
+		"duplicate message_id":    fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext) VALUES ('%s', '%s', 'citizen', '\x%s')`, question, conversationID, strings.Repeat("ab", 40)),
+		"chosen ordinal":          fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, ordinal, role, content_ciphertext) OVERRIDING SYSTEM VALUE VALUES ('%s', '%s', 1, 'citizen', '\x%s')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
+		"answer without question": fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, status) VALUES ('%s', '%s', 'assistant', '\x%s', 'completed')`, uuid(t), conversationID, strings.Repeat("ab", 40)),
+		"second answer":           fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, status, reply_to) VALUES ('%s', '%s', 'assistant', '\x%s', 'completed', '%s')`, uuid(t), conversationID, strings.Repeat("ab", 40), question),
+		"pending answer":          fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, reply_to) VALUES ('%s', '%s', 'assistant', '\x%s', '%s')`, uuid(t), conversationID, strings.Repeat("ab", 40), question),
+		"answer to unknown":       fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, status, reply_to) VALUES ('%s', '%s', 'assistant', '\x%s', 'completed', '%s')`, uuid(t), conversationID, strings.Repeat("ab", 40), uuid(t)),
+		"citizen with reply_to":   fmt.Sprintf(`INSERT INTO core.conversation_messages (message_id, conversation_id, role, content_ciphertext, reply_to) VALUES ('%s', '%s', 'citizen', '\x%s', '%s')`, uuid(t), conversationID, strings.Repeat("ab", 40), question),
+		"final status reopened":   fmt.Sprintf(`UPDATE core.conversation_messages SET status = 'pending' WHERE message_id = '%s'`, answer),
+		"content rewritten":       fmt.Sprintf(`UPDATE core.conversation_messages SET content_ciphertext = '\x%s' WHERE message_id = '%s'`, strings.Repeat("cd", 40), answer),
+		"message moved":           fmt.Sprintf(`UPDATE core.conversation_messages SET conversation_id = conversation_id WHERE message_id = '%s'`, answer),
+		"message deleted":         fmt.Sprintf(`DELETE FROM core.conversation_messages WHERE message_id = '%s'`, answer),
+		"conversation deleted":    fmt.Sprintf(`DELETE FROM core.conversations WHERE id = '%s'`, conversationID),
+		"owner rewritten":         fmt.Sprintf(`UPDATE core.conversations SET citizen_subject = 'synthetic-citizen-b' WHERE id = '%s'`, conversationID),
 	} {
 		err := asApp(ctx, pool, func(tx pgx.Tx) error { _, err := tx.Exec(ctx, statement); return err })
 		if err == nil {

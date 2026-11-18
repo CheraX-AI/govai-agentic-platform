@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"net/url"
 	"os"
@@ -17,6 +19,9 @@ type Config struct {
 	Port, Certificate, Key, Issuer, Audience, CAFile string
 	Clients, Origins                                 []string
 	DatabaseURL                                      string // runtime login for govai_core; required
+
+	// MessageKey encrypts stored message content (AES-256). Never log or return it.
+	MessageKey []byte
 }
 
 // Load validates core HTTP, TLS and token-verification settings.
@@ -64,6 +69,14 @@ func Load() (Config, error) {
 		c.DatabaseURL == "" {
 		return Config{}, ErrConfig
 	}
+
+	// Required: a base64 32-byte key. An all-zero key is a placeholder, not a secret.
+	key, err := base64.StdEncoding.Strict().DecodeString(os.Getenv("CORE_CONVERSATION_DATA_KEY"))
+	if err != nil || len(key) != 32 || bytes.Equal(key, make([]byte, 32)) {
+		return Config{}, ErrConfig
+	}
+
+	c.MessageKey = key
 
 	issuer, err := url.Parse(c.Issuer)
 	if err != nil ||
