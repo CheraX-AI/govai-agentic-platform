@@ -1,0 +1,175 @@
+{
+  "vhosts": [
+    {
+      "name": "govai"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "notifications",
+      "vhost": "govai",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "notifications.retry",
+      "vhost": "govai",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "notifications.dead",
+      "vhost": "govai",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "notifications.account.v1",
+      "vhost": "govai",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notifications.retry.v1",
+      "vhost": "govai",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-strategy": "at-least-once",
+        "x-dead-letter-exchange": "notifications",
+        "x-queue-type": "quorum",
+        "x-overflow": "reject-publish",
+        "x-dead-letter-routing-key": "delivery.retry.v1",
+        "x-message-ttl": 30000
+      }
+    },
+    {
+      "name": "notifications.dead.v1",
+      "vhost": "govai",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notifications.security.v1",
+      "vhost": "govai",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notifications.security.retry.v1",
+      "vhost": "govai",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-strategy": "at-least-once",
+        "x-dead-letter-routing-key": "delivery.security.retry.v1",
+        "x-queue-type": "quorum",
+        "x-message-ttl": 30000,
+        "x-overflow": "reject-publish",
+        "x-dead-letter-exchange": "notifications"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "notifications",
+      "vhost": "govai",
+      "destination": "notifications.security.v1",
+      "destination_type": "queue",
+      "routing_key": "citizen.login.succeeded",
+      "arguments": {}
+    },
+    {
+      "source": "notifications",
+      "vhost": "govai",
+      "destination": "notifications.security.v1",
+      "destination_type": "queue",
+      "routing_key": "citizen.password.changed",
+      "arguments": {}
+    },
+    {
+      "source": "notifications",
+      "vhost": "govai",
+      "destination": "notifications.account.v1",
+      "destination_type": "queue",
+      "routing_key": "citizen.email.verified",
+      "arguments": {}
+    },
+    {
+      "source": "notifications",
+      "vhost": "govai",
+      "destination": "notifications.account.v1",
+      "destination_type": "queue",
+      "routing_key": "delivery.retry.v1",
+      "arguments": {}
+    },
+    {
+      "source": "notifications.retry",
+      "vhost": "govai",
+      "destination": "notifications.retry.v1",
+      "destination_type": "queue",
+      "routing_key": "retry",
+      "arguments": {}
+    },
+    {
+      "source": "notifications.dead",
+      "vhost": "govai",
+      "destination": "notifications.dead.v1",
+      "destination_type": "queue",
+      "routing_key": "failed",
+      "arguments": {}
+    },
+    {
+      "source": "notifications",
+      "vhost": "govai",
+      "destination": "notifications.security.v1",
+      "destination_type": "queue",
+      "routing_key": "delivery.security.retry.v1",
+      "arguments": {}
+    },
+    {
+      "source": "notifications.retry",
+      "vhost": "govai",
+      "destination": "notifications.security.retry.v1",
+      "destination_type": "queue",
+      "routing_key": "security",
+      "arguments": {}
+    }
+  ],
+  "policies": [
+    {
+      "priority": 1,
+      "name": "notifications-poison-messages",
+      "definition": {
+        "delivery-limit": 20,
+        "overflow": "reject-publish",
+        "dead-letter-strategy": "at-least-once",
+        "dead-letter-exchange": "notifications.dead",
+        "dead-letter-routing-key": "failed"
+      },
+      "pattern": "^notifications\\.(account|security)\\.v1$",
+      "vhost": "govai",
+      "apply-to": "quorum_queues"
+    }
+  ]
+}

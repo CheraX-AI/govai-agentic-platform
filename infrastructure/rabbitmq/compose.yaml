@@ -1,0 +1,40 @@
+name: govai-agentic-platform
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.4.0-management
+    hostname: govai-rabbitmq
+    restart: unless-stopped
+
+    # Keep development connections restricted to this computer.
+
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+    # Keep a stable node name and persistent volume across container recreation.
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./.env.definitions.json:/etc/rabbitmq/definitions.json:ro
+    networks:
+      - notifications-network
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - check_running
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 60s
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  notifications-network:
+    driver: bridge
