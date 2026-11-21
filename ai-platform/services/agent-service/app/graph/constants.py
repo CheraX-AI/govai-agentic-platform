@@ -6,6 +6,7 @@
 INPUT_VALIDATION_NODE = "input_validation"
 INPUT_SAFETY_NODE = "input_safety"
 KNOWLEDGE_AGENT_NODE = "knowledge_agent"
+REMEMBER_NODE = "remember"
 RESPONSE_VALIDATION_NODE = "response_validation"
 FALLBACK_NODE = "fallback"
 

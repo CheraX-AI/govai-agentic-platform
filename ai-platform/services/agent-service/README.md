@@ -27,12 +27,18 @@ agent-service/
 │   │   └── config.py               # AGENT_API_AUTH_MODE and AGENT_API_TOKEN read from .env
 │   ├── graph/
 │   │   ├── constants.py            # Node names, citizen replies, and failure codes
-│   │   └── workflow.py             # AgentState (with failure), KnowledgeAgentNode, build_graph(), create_graph()
+│   │   └── workflow.py             # AgentState, KnowledgeAgentNode, RememberNode, build_graph(), create_graph()
+│   ├── memory/
+│   │   ├── config.py               # AGENT_MEMORY_* settings read from .env (memory off when the URL is blank)
+│   │   ├── checkpointer.py         # open_memory(): PostgreSQL pool + LangGraph PostgresSaver; forget, compact
+│   │   ├── encryption.py           # AES-256-GCM cipher for the stored memory
+│   │   └── window.py               # Which turns are kept: last N answered, no failures or repeats
 │   ├── agents/
 │   │   └── knowledge_agent/
 │   │       ├── agent.py            # KnowledgeAgent: retrieve, prompt, LLM, remove [n] markers
 │   │       ├── schemas.py          # KnowledgeSource, ServiceScope, KnowledgeAnswer
-│   │       ├── prompts.py          # Versioned system and RAG prompts, LangSmith run config
+│   │       ├── prompts.py          # Versioned RAG and follow-up rewrite prompts, LangSmith run config
+│   │       ├── rewrite.py          # rewrite_question: follow-up -> standalone question
 │   │       └── validation.py       # clean_question: question limits and citizen replies
 │   ├── tools/
 │   │   └── knowledge_rag_client.py # KnowledgeRagClient for the knowledge-service retrieval API
@@ -42,7 +48,9 @@ agent-service/
 │       └── provider.py             # LLMProvider: create the NVIDIA client, invoke it
 ├── scripts/
 │   ├── chat_ui.py                  # Chainlit chat with the agent graph
-│   └── check_llm.py                # Sends one synthetic question to the configured model
+│   ├── check_llm.py                # Sends one synthetic question to the configured model
+│   ├── create_memory_database.sql  # One-time: memory database and its two logins
+│   └── setup_memory_tables.py      # One-time: memory tables and runtime grants (owner login)
 ├── tests/                          # Unit tests, and live tests skipped without the services
 ├── Dockerfile                      # Image for the Chainlit chat, LangGraph Studio and the chat API
 ├── .dockerignore                   # Keeps .env, .venv, tests, and caches out of the image
@@ -264,9 +272,9 @@ Content-Type: application/json
 
 `conversation_id` is optional (a lowercase UUID). core-service creates it and checks
 that it belongs to the citizen before sending it; the agent never creates or checks
-ownership of one. The agent returns the same ID, and passes it to the graph only as
-run metadata (`config["metadata"]["conversation_id"]`): there is no chat history or
-memory yet. A request without it works as before and gets no ID back.
+ownership of one. The agent returns the same ID, and uses it as the memory thread of
+the conversation (see "Conversation memory"). A request without it is answered without
+memory and gets no ID back.
 
 The reply has no `sources`: the answer comes from the retrieved documents, but citizens
 are not shown which ones. core-service still sends the apps `"sources": []`.
@@ -288,6 +296,7 @@ request ID and outcome, never the question, answer or token.
 | --- | --- |
 | `AGENT_API_AUTH_MODE` | `bearer` (normal) or `none` (local test only, API on 127.0.0.1) |
 | `AGENT_API_TOKEN` | 32+ printable ASCII characters; the same value as core-service's `KNOWLEDGE_AGENT_BEARER_TOKEN` |
+| `AGENT_MEMORY_*` | Optional conversation memory, see "Conversation memory" |
 
 Make a token with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 Startup stops with an error if the mode or token is invalid.
@@ -320,6 +329,69 @@ uvicorn app.api.main:app --host 127.0.0.1 --port 8030
 ```
 
 On Linux the container user (uid 10001) must be able to read the mounted `api-key.pem`.
+
+## Conversation memory
+
+The agent API remembers the last answered turns of each conversation, so a follow-up such
+as "what about the fee?" is understood. core-service keeps the citizen's full encrypted
+record and checks ownership; the agent keeps only this short working memory, in its own
+`govai_agent` database. core-service sends no history: only the `conversation_id`.
+
+```text
+core-service ─(message, conversation_id)─► agent-api
+                                             ├─ load memory (LangGraph PostgresSaver, thread_id = conversation_id)
+                                             ├─ rewrite a follow-up into a full question (only when there is history)
+                                             ├─ knowledge-service + NVIDIA answer
+                                             └─ save the trimmed memory once, when the run ends; drop older checkpoints
+```
+
+- **What is kept.** At most `AGENT_MEMORY_MAX_TURNS` answered turns (default 6). Invalid
+  questions and "assistant unavailable" replies are not remembered, and a retried question
+  is kept once, matching core-service, which reopens a failed question.
+- **Follow-ups.** With history, one extra model call (prompt `REWRITE_PROMPT_VERSION`) turns
+  the message into a standalone question, which is searched and answered. A first message
+  costs no extra call. If the rewrite is unusable the citizen's own words are used; if the
+  model fails, the request fails as any model failure does (503).
+- **Encryption.** Every stored value is AES-256-GCM encrypted with `AGENT_MEMORY_DATA_KEY`
+  (never core-service's key). Memory saved with another key is forgotten and the question
+  answered without it.
+- **Failures.** The API does not start if the memory database is unreachable or not set up.
+  A database error during a request gives 503, like core-service's own storage errors.
+- **No memory.** With `AGENT_MEMORY_DATABASE_URL` blank, or a request without
+  `conversation_id`, the graph runs without a checkpointer, as before. The Chainlit chat
+  and LangGraph Studio never use this memory.
+- **Trust.** The agent trusts `conversation_id` because only core-service holds the service
+  token and it checks ownership first. The agent never receives citizen identity.
+
+### Memory settings
+
+| Variable | Value |
+| --- | --- |
+| `AGENT_MEMORY_DATABASE_URL` | Runtime login `govai_agent_app` for `govai_agent`; blank turns memory off. Host `postgres` from the agent-api container, `127.0.0.1` from a local uvicorn |
+| `AGENT_MEMORY_DATA_KEY` | Secret, base64 of 32 random bytes; keep it stable |
+| `AGENT_MEMORY_MAX_TURNS` | 1-20, default 6 |
+
+### One-time setup
+
+On the shared PostgreSQL server (the root compose `postgres` service), from this folder,
+with new random passwords:
+
+```powershell
+# 1. Database and logins (as a PostgreSQL superuser)
+psql -U postgres -h 127.0.0.1 -p <port> -v owner_password='<random>' -v app_password='<random>' -f scripts/create_memory_database.sql
+
+# 2. Tables and runtime grants (as the owner; the URL is read from the environment only)
+$env:AGENT_MEMORY_OWNER_DATABASE_URL = "postgres://govai_agent_owner:<owner password>@127.0.0.1:<port>/govai_agent?sslmode=disable"
+python scripts/setup_memory_tables.py
+Remove-Item Env:AGENT_MEMORY_OWNER_DATABASE_URL
+
+# 3. In .env (host postgres for the agent-api container, 127.0.0.1 for a local uvicorn)
+#    AGENT_MEMORY_DATABASE_URL=postgres://govai_agent_app:<app password>@postgres:5432/govai_agent?sslmode=disable
+#    AGENT_MEMORY_DATA_KEY=<base64 of 32 random bytes>
+```
+
+`setup_memory_tables.py` is safe to run again, for example after upgrading
+`langgraph-checkpoint-postgres`: it applies only the missing table changes.
 
 ## Run with Docker
 
@@ -485,9 +557,12 @@ pytest
 | `tests/test_question_validation.py` | Nothing |
 | `tests/test_knowledge_rag_client.py` | Nothing (fake HTTP transport) |
 | `tests/test_knowledge_agent.py` | Nothing (fake RAG client and chat model) |
-| `tests/test_workflow.py` | Nothing (fake Knowledge Agent) |
+| `tests/test_workflow.py` | Nothing (fake Knowledge Agent, in-memory checkpointer) |
+| `tests/test_question_rewrite.py` | Nothing (fake chat model) |
+| `tests/test_memory_window.py`, `test_memory_encryption.py`, `test_memory_config.py` | Nothing |
 | `tests/test_llm_live.py` | `NVIDIA_API_KEY` and the `LLM_*` settings in `.env`, and internet |
 | `tests/test_rag_live.py` | The above, the `KNOWLEDGE_*` settings, and the knowledge service running |
+| `tests/test_memory_live.py` | `AGENT_MEMORY_*` in `.env` and the memory database set up |
 
 `test_llm_live.py` sends only a synthetic question and document to the real NVIDIA API.
 It checks that the model answers from the document without a `[1]` marker, gives the
@@ -507,7 +582,8 @@ Live tests are skipped when their settings or services are missing; `pytest -rs`
 | What | Command |
 | --- | --- |
 | All tests | `pytest` |
-| Offline tests only | `pytest --ignore tests/test_llm_live.py --ignore tests/test_rag_live.py` |
+| Offline tests only | `pytest --ignore tests/test_llm_live.py --ignore tests/test_rag_live.py --ignore tests/test_memory_live.py` |
+| Memory tests | `pytest tests/test_memory_window.py tests/test_memory_encryption.py tests/test_memory_config.py tests/test_workflow.py tests/test_memory_live.py` |
 | Knowledge Agent and RAG tests | `pytest tests/test_knowledge_rag_client.py tests/test_knowledge_agent.py tests/test_workflow.py tests/test_rag_live.py` |
 | LLM tests | `pytest tests/test_llm_config.py tests/test_llm_provider.py tests/test_llm_live.py` |
 | Prompt tests | `pytest tests/test_knowledge_prompts.py` |

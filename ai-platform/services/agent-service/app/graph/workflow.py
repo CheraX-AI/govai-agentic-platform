@@ -1,8 +1,8 @@
-"""The agent graph: START -> knowledge_agent -> END."""
+"""The agent graph: START -> knowledge_agent -> [remember] -> END."""
 
 import logging
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.agents.knowledge_agent.agent import create_knowledge_agent
@@ -12,8 +12,11 @@ from app.graph.constants import (
     FAILURE_INVALID_QUESTION,
     FAILURE_UNAVAILABLE,
     KNOWLEDGE_AGENT_NODE,
+    REMEMBER_NODE,
 )
 from app.llm.exceptions import LLMError
+from app.memory.config import DEFAULT_MAX_TURNS
+from app.memory.window import earlier_messages, messages_to_forget
 from app.tools.knowledge_rag_client import KnowledgeServiceError
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,9 @@ logger = logging.getLogger(__name__)
 class AgentState(MessagesState):
     """Conversation state shared by every node; messages holds the chat."""
 
+    # The text sent back to the citizen for this question
+    reply: str | None
+
     # The last answer with its scope and prompt version; None when no answer was made
     knowledge_answer: dict | None
 
@@ -31,10 +37,10 @@ class AgentState(MessagesState):
     failure: str | None
 
 
-# Node
+# Nodes
 
 class KnowledgeAgentNode:
-    """Graph node that passes the latest question to the Knowledge Agent."""
+    """Graph node that passes the latest question, and the conversation before it, to the Knowledge Agent."""
 
     def __init__(self, knowledge_agent):
 
@@ -46,9 +52,10 @@ class KnowledgeAgentNode:
         request_id = (config.get("metadata") or {}).get("request_id")
 
         try:
-            # Answer the latest question from the knowledge service documents
+            # Answer the latest question; earlier messages explain follow-ups
             question = latest_question(state["messages"])
-            answer = self.knowledge_agent.answer(question, request_id=request_id)
+            history = earlier_messages(state["messages"])
+            answer = self.knowledge_agent.answer(question, request_id=request_id, history=history)
 
         except InvalidQuestionError as error:
             # Empty, too short, or too long: tell the citizen how to ask instead
@@ -67,6 +74,7 @@ class KnowledgeAgentNode:
         # Add the reply to the chat and keep the full answer for the caller
         update = {
             "messages": [AIMessage(content=answer.answer)],
+            "reply": answer.answer,
             "knowledge_answer": answer.model_dump(),
             "failure": None,
         }
@@ -74,28 +82,58 @@ class KnowledgeAgentNode:
         return update
 
 
+class RememberNode:
+    """Graph node that trims the remembered chat before it is saved."""
+
+    def __init__(self, max_turns):
+
+        self.max_turns = max_turns
+
+    def __call__(self, state):
+
+        # Forget failed and repeated turns, and the oldest beyond the limit
+        forget = messages_to_forget(state["messages"], self.max_turns, answered=state.get("failure") is None)
+
+        removals = []
+        for message in forget:
+            removals.append(RemoveMessage(id=message.id))
+
+        update = {"messages": removals}
+
+        return update
+
+
 # Public functions
 
-def build_graph(knowledge_agent):
-    """Build the graph around a Knowledge Agent (real, or a fake in tests)."""
+def build_graph(knowledge_agent, checkpointer=None, max_turns=DEFAULT_MAX_TURNS):
+    """Build the graph around a Knowledge Agent (real, or a fake in tests).
+
+    With a checkpointer the graph remembers each conversation (thread_id), and a
+    remember node keeps that memory to the last max_turns answered turns.
+    """
 
     # Create the graph with the shared conversation state
     builder = StateGraph(AgentState)
 
-    # Add the agent nodes
+    # Add the agent node: start -> knowledge agent
     builder.add_node(KNOWLEDGE_AGENT_NODE, KnowledgeAgentNode(knowledge_agent))
-
-    # Connect the nodes: start -> knowledge agent -> end
     builder.add_edge(START, KNOWLEDGE_AGENT_NODE)
-    builder.add_edge(KNOWLEDGE_AGENT_NODE, END)
 
-    graph = builder.compile()
+    # Only a remembering graph trims its chat; without memory nothing is kept anyway
+    if checkpointer is None:
+        builder.add_edge(KNOWLEDGE_AGENT_NODE, END)
+    else:
+        builder.add_node(REMEMBER_NODE, RememberNode(max_turns))
+        builder.add_edge(KNOWLEDGE_AGENT_NODE, REMEMBER_NODE)
+        builder.add_edge(REMEMBER_NODE, END)
+
+    graph = builder.compile(checkpointer=checkpointer)
 
     return graph
 
 
 def create_graph():
-    """Build the graph with the real Knowledge Agent from .env."""
+    """Build the graph with the real Knowledge Agent from .env, without memory."""
 
     knowledge_agent = create_knowledge_agent()
     graph = build_graph(knowledge_agent)
@@ -121,6 +159,7 @@ def reply_without_answer(reply, failure):
     # A chat reply with no knowledge answer behind it, and the reason why
     update = {
         "messages": [AIMessage(content=reply)],
+        "reply": reply,
         "knowledge_answer": None,
         "failure": failure,
     }

@@ -96,6 +96,9 @@ services:
     depends_on:
       knowledge-service:
         condition: service_healthy
+      # Conversation memory (AGENT_MEMORY_DATABASE_URL, host postgres) in the root compose file
+      postgres:
+        condition: service_healthy
     networks:
       - govai-network
 
