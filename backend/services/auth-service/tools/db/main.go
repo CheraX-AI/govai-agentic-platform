@@ -23,7 +23,9 @@ func main() {
 
 func run() error {
 	if len(os.Args) != 2 ||
-		(os.Args[1] != "migrate" &&
+		(os.Args[1] != "migrate-profile" &&
+			os.Args[1] != "check-profile" &&
+			os.Args[1] != "migrate" &&
 			os.Args[1] != "check" &&
 			os.Args[1] != "migrate-web" &&
 			os.Args[1] != "check-web" &&
@@ -32,11 +34,11 @@ func run() error {
 			os.Args[1] != "migrate-recovery" &&
 			os.Args[1] != "check-recovery") {
 		return fmt.Errorf(
-			"usage: go run ./tools/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|migrate-recovery|check-recovery",
+			"usage: go run ./tools/db migrate-profile|check-profile|migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|migrate-recovery|check-recovery",
 		)
 	}
 
-	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
+	isMigration := os.Args[1] == "migrate-profile" || os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
 	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"
 	// Only privileged commands load the owner login; the API never reads .env.migrate.
 	if isPrivileged && config.LoadLocalEnv(".env.migrate") != nil {
@@ -60,7 +62,11 @@ func run() error {
 	}
 
 	defer p.Close()
-	if os.Args[1] == "migrate" {
+	if os.Args[1] == "migrate-profile" {
+		err = postgres.MigrateCitizenDetails(ctx, p)
+	} else if os.Args[1] == "check-profile" {
+		err = postgres.CitizenDetailsReady(ctx, p)
+	} else if os.Args[1] == "migrate" {
 		err = postgres.Migrate(ctx, p)
 	} else if os.Args[1] == "migrate-web" {
 		err = postgres.MigrateWebSessions(ctx, p)

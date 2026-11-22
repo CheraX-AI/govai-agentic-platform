@@ -486,3 +486,74 @@ identifier buckets, not a unified distributed account lockout.
 Automated tests cover legacy email, email/NIC identifiers, old/new NIC syntax,
 ambiguous/phone rejection, redaction, resolution failure, mismatched token subject,
 and both HTTP entry points. User-confirmed Postman tests after API restart returned 200 for mobile/Postman and web NIC login with a synthetic registered account. Actual frontend/mobile UI integration remains pending.
+
+## GA-252 citizen profile details
+
+This optional extension reuses `auth.citizen_profiles` and its unique
+`(issuer, subject)` identity binding. It does not duplicate registration names,
+NICs, mobile numbers, email, passwords or credential hashes. Coordinate changes
+to the base profile with GA-280; authenticated HTTP endpoints belong to GA-253.
+
+After reviewing the target database and its backup, explicitly apply and check
+the extension from this service directory:
+
+```powershell
+go run ./tools/db migrate-profile
+go run ./tools/db check-profile
+```
+
+Baseline migration 001 must already be installed. Migration 007 is transactional,
+checksum protected, and serialized with the existing migration advisory lock.
+It backfills one empty details row per existing profile and installs an insert
+trigger to create that row atomically for future registrations. Replays are safe.
+API startup does not run migrations. No existing migration is rewritten.
+
+The details primary key/foreign key is `(issuer, subject)`; its index already
+supports owner lookups. The runtime can insert identity columns only, and update
+only permitted details/photo/revision columns. It cannot rewrite the owner,
+creation timestamp, base registration profile, or migration history. Timestamp
+updates and exactly-one revision increments are enforced by the database.
+
+`internal/features/profile` defines redacted internal data types. The PostgreSQL
+store provides `CitizenDetails` and `SaveCitizenDetails`; callers must supply
+identity from verified authentication, never from user JSON. These are internal
+persistence operations, not public authenticated endpoints. They accept only
+ready registered identities and match both issuer and subject. Saving uses a
+single conditional update; a stale revision returns `profile.ErrConflict` for
+GA-253 to map to HTTP 409. Ordinary saves cannot change a photo object key.
+
+`details_ciphertext` stores an encrypted JSON payload with `name_si`, `name_ta`,
+`date_of_birth`, `gender`, and `address` (`line1`, `line2`, `city`). This follows
+the existing registration encrypted-payload pattern and avoids plaintext copies
+of personal fields. AES-GCM uses the existing data key and fresh random nonces.
+Additional authenticated data binds the ciphertext to issuer, subject, and a
+details-specific version label. Entirely empty details are SQL NULL.
+Only a server-owned SeaweedFS object key belongs
+in `photo_object_key`; uploading/replacing files is GA-254. No photo bytes belong
+in this database. Keep existing keys; do not regenerate them for this migration.
+
+Storage bounds are 200 Unicode code points for each Sinhala/Tamil name,
+64 for gender, and 200/200/100 for address line1/line2/city. Optional values
+can be cleared. DOB is empty or a valid ISO calendar date, year 1 or later,
+not in the future. These are defensive persistence bounds, not final product
+validation: required fields, gender choices and NIC/DOB consistency remain
+subject to the approved GA-253 contract. Semantic validation runs in application
+code before encryption; SQL checks the encrypted envelope, identity and revision.
+Nothing forwards profile data to AI. Names and other sensitive details must
+remain protected under GA-256.
+
+Run unit tests with `go test ./...`. The database suite remains opt-in:
+
+```powershell
+$env:GOVAI_DB_TEST = "1"
+go test ./internal/external/postgres -count=1 -v
+Remove-Item Env:GOVAI_DB_TEST
+```
+
+Use the existing isolated loopback test cluster and private local settings as
+described in `infrastructure/postgres/auth/README.md`. Fixtures create and remove
+only their random `govai_auth_test_*` databases. New coverage checks backfill,
+new registration, migration replay/checksums, grants, owner selection, non-ready
+profiles, revision conflicts/concurrency, encryption, persistence, photo-reference
+preservation and unchanged registration data. HTTP ownership, browser/mobile
+save/relogin, and actual photo storage remain later subtasks.
