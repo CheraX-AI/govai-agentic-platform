@@ -1,1 +1,1 @@
-"""Conversation memory: each conversation's recent turns, stored encrypted in PostgreSQL."""
+"""Conversation memory: the encrypted PostgreSQL checkpointer, the key ring and the window rules."""

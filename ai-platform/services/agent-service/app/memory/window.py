@@ -54,6 +54,17 @@ def earlier_messages(messages):
     return history
 
 
+def turns_to_messages(turns):
+    """Stored turns as chat messages, oldest first: each question followed by its answer."""
+
+    messages = []
+    for turn in turns:
+        messages.append(HumanMessage(content=turn.question))
+        messages.append(AIMessage(content=turn.answer))
+
+    return messages
+
+
 # Helper functions
 
 def split_turns(messages):

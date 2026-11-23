@@ -1,4 +1,4 @@
-"""Create the conversation memory tables and let the runtime login use them.
+"""Create the conversation and checkpoint tables and let the runtime login use them.
 
 Usage (from the agent-service folder, after scripts/create_memory_database.sql):
 
@@ -6,8 +6,8 @@ Usage (from the agent-service folder, after scripts/create_memory_database.sql):
     python scripts/setup_memory_tables.py
 
 The owner URL is read only from the environment, never from .env, so the owner
-password is not stored next to the runtime settings. Safe to run again: LangGraph
-applies only the table changes that are missing.
+password is not stored next to the runtime settings. Safe to run again: LangGraph's
+checkpoint migrations and scripts/memory_tables.sql only add what is missing.
 
 Exit codes: 0 the tables are ready, 1 setup failed, 2 the owner URL is not set.
 """
@@ -16,26 +16,17 @@ import os
 import sys
 from pathlib import Path
 
-# Running "python scripts/setup_memory_tables.py" puts only scripts/ on the path, so add agent-service/
-SERVICE_ROOT = Path(__file__).resolve().parent.parent
-if str(SERVICE_ROOT) not in sys.path:
-    sys.path.insert(0, str(SERVICE_ROOT))
-
+import psycopg
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg import Error as DatabaseError
-from psycopg import sql
-
-from app.memory.checkpointer import MEMORY_TABLES
+from psycopg.rows import dict_row
 
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_NOT_SET = 2
 
 OWNER_URL_VARIABLE = "AGENT_MEMORY_OWNER_DATABASE_URL"
-RUNTIME_LOGIN = "govai_agent_app"
-
-# Runtime rights: read, save, compact and forget memory; never create or change tables
-RUNTIME_GRANT = "GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {login}"
+TABLES_FILE = Path(__file__).resolve().parent / "memory_tables.sql"
 
 
 def main():
@@ -46,21 +37,27 @@ def main():
         print(f"Set {OWNER_URL_VARIABLE} to the govai_agent_owner URL first.")
         return EXIT_NOT_SET
 
+    with open(TABLES_FILE, "r", encoding="utf-8") as file:
+        statements = file.read()
+
     try:
-        # Create or update the LangGraph checkpoint tables, then grant the runtime login
-        with PostgresSaver.from_conn_string(owner_url) as saver:
-            saver.setup()
-            for table in MEMORY_TABLES:
-                saver.conn.execute(
-                    sql.SQL(RUNTIME_GRANT).format(table=sql.Identifier(table), login=sql.Identifier(RUNTIME_LOGIN))
-                )
+        # LangGraph's checkpoint tables first; its migrations build indexes outside a transaction
+        with psycopg.connect(owner_url, connect_timeout=5, autocommit=True, prepare_threshold=0, row_factory=dict_row) as connection:
+            PostgresSaver(connection).setup()
+
+        # One transaction: either every conversation table, trigger and grant is in place, or none changes
+        with psycopg.connect(owner_url, connect_timeout=5) as connection:
+            connection.execute(statements)
 
     except DatabaseError as error:
         # The error text can hold the host or login, so only its type is shown
         print(f"Setup failed ({type(error).__name__}). Check the owner URL and that the database exists.")
         return EXIT_FAILED
 
-    print(f"Memory tables are ready: {', '.join(MEMORY_TABLES)} (runtime login: {RUNTIME_LOGIN}).")
+    print(
+        "Memory tables are ready: conversations, conversation_turns, checkpoints, checkpoint_blobs, "
+        "checkpoint_writes (runtime login: govai_agent_app)."
+    )
 
     return EXIT_OK
 

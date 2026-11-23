@@ -23,11 +23,13 @@ uvicorn==0.54.0
 # LangSmith tracing of the retrieval step (@traceable)
 langsmith==0.14.16
 
-# Conversation memory: LangGraph checkpoints in PostgreSQL (app/memory)
-langgraph-checkpoint-postgres==3.2.1
+# Long-term memory: conversations and every turn in PostgreSQL (app/conversations)
 psycopg[binary,pool]==3.3.9
 
-# AES-256-GCM encryption of the stored memory
+# Short-term memory: LangGraph's AsyncPostgresSaver on the same database (app/memory/checkpointer.py)
+langgraph-checkpoint-postgres==3.2.1
+
+# AES-256-GCM encryption of both stores
 cryptography==50.0.2
 
 # Settings and prompt data models

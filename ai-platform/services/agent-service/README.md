@@ -21,17 +21,25 @@ agent-service/
 ├── agent.py                        # Builds the graph from .env; loaded by langgraph.json
 ├── app/
 │   ├── api/
-│   │   ├── main.py                 # create_app(): POST /api/v1/chat and GET /health for core-service
-│   │   ├── schemas.py              # ChatRequest, ChatResponse: the core-service contract
-│   │   ├── auth.py                 # Service token check (constant time)
+│   │   ├── main.py                 # create_app(): POST /api/v1/chat and GET /health; builds memory
+│   │   ├── conversations.py        # History routes: list, turns, delete one, delete all
+│   │   ├── schemas.py              # Chat and history models: the core-service contract
+│   │   ├── responses.py            # Fixed error responses and request IDs
+│   │   ├── auth.py                 # Service token check (constant time) and X-GovAI-Citizen
 │   │   └── config.py               # AGENT_API_AUTH_MODE and AGENT_API_TOKEN read from .env
 │   ├── graph/
 │   │   ├── constants.py            # Node names, citizen replies, and failure codes
 │   │   └── workflow.py             # AgentState, KnowledgeAgentNode, RememberNode, build_graph(), create_graph()
+│   ├── conversations/
+│   │   ├── models.py               # Conversation, turn and start types; not-found and busy errors
+│   │   ├── rules.py                # Turn rules: busy, reopen, replay, title
+│   │   ├── service.py              # ConversationService: start/finish turns, keep memory in step, history, delete
+│   │   └── store.py                # ConversationStore: PostgreSQL (long-term memory)
 │   ├── memory/
 │   │   ├── config.py               # AGENT_MEMORY_* settings read from .env (memory off when the URL is blank)
-│   │   ├── checkpointer.py         # open_memory(): PostgreSQL pool + LangGraph PostgresSaver; forget, compact
-│   │   ├── encryption.py           # AES-256-GCM cipher for the stored memory
+│   │   ├── checkpointer.py         # open_checkpointer(): LangGraph AsyncPostgresSaver (short-term memory)
+│   │   ├── encryption.py           # Key ring: AES-256-GCM with key IDs, for turns and checkpoints
+│   │   ├── errors.py               # MemoryUnavailableError, MemoryDataError
 │   │   └── window.py               # Which turns are kept: last N answered, no failures or repeats
 │   ├── agents/
 │   │   └── knowledge_agent/
@@ -50,7 +58,9 @@ agent-service/
 │   ├── chat_ui.py                  # Chainlit chat with the agent graph
 │   ├── check_llm.py                # Sends one synthetic question to the configured model
 │   ├── create_memory_database.sql  # One-time: memory database and its two logins
-│   └── setup_memory_tables.py      # One-time: memory tables and runtime grants (owner login)
+│   ├── memory_tables.sql           # Conversation tables, status trigger, runtime grants (also on checkpoints)
+│   ├── setup_memory_tables.py      # Creates the checkpoint tables, then applies memory_tables.sql (owner login)
+│   └── reencrypt_memory.py         # Key rotation: re-seal values still on an old key
 ├── tests/                          # Unit tests, and live tests skipped without the services
 ├── Dockerfile                      # Image for the Chainlit chat, LangGraph Studio and the chat API
 ├── .dockerignore                   # Keeps .env, .venv, tests, and caches out of the image
@@ -260,6 +270,7 @@ fields; change both sides together.
 ```http
 POST /api/v1/chat
 Authorization: Bearer <AGENT_API_TOKEN>
+X-GovAI-Citizen: <Keycloak subject core-service verified>
 X-Request-ID: <optional, [A-Za-z0-9-]{1,64}>
 Content-Type: application/json
 
@@ -270,25 +281,35 @@ Content-Type: application/json
 {"answer": "Bring form TF-1.", "conversation_id": "3f2b8c1e-9a4d-4f6b-8c2e-1d7a5b9e0f34"}
 ```
 
-`conversation_id` is optional (a lowercase UUID). core-service creates it and checks
-that it belongs to the citizen before sending it; the agent never creates or checks
-ownership of one. The agent returns the same ID, and uses it as the memory thread of
-the conversation (see "Conversation memory"). A request without it is answered without
-memory and gets no ID back.
+`conversation_id` is optional (a lowercase UUID). Without it the agent creates a new
+conversation for the citizen and returns its ID; with it the agent checks that the
+conversation belongs to that citizen (see "Conversations and memory"). With memory off,
+no ID is returned.
 
 The reply has no `sources`: the answer comes from the retrieved documents, but citizens
 are not shown which ones. core-service still sends the apps `"sources": []`.
 
 | Situation | Status | Body |
 | --- | --- | --- |
-| Answer, or "not in the documents" | 200 | `{"answer": "...", "conversation_id": "..."}` (ID only when sent) |
+| Answer, or "not in the documents" | 200 | `{"answer": "...", "conversation_id": "..."}` |
 | Empty, too short or too long question | 200 | advice on how to ask, as the answer |
-| Knowledge service or NVIDIA failed, or the graph crashed | 503 | `{"detail": "..."}` |
-| Missing or wrong token (checked before the body) | 401 | `{"detail": "..."}` |
+| Conversation unknown or another citizen's | 404 | `{"detail": "Conversation not found."}` |
+| The same question is still being answered | 409 | `{"detail": "..."}`, `Retry-After: 2` |
+| Knowledge service, NVIDIA or the conversation database failed | 503 | `{"detail": "..."}` |
+| Missing or wrong token, or missing or invalid `X-GovAI-Citizen` (checked before the body) | 401 | `{"detail": "..."}` |
 | Body is not exactly `{"message": "<1-4000 characters>"}` plus an optional valid `conversation_id` | 422 | fixed message; the input is never echoed |
 
+History routes (same two headers; 404 for another citizen's conversation, 503 when memory is off):
+
+| Route | Result |
+| --- | --- |
+| `GET /api/v1/conversations?offset=0&limit=20` | `{"conversations": [{"id", "title", "created_at", "last_turn_at"}], "next_offset"}`, newest first |
+| `GET /api/v1/conversations/{id}/turns?before=<seq>&limit=20` | `{"turns": [{"seq", "question", "answer", "created_at", "answered_at"}], "next_before"}`, oldest first |
+| `DELETE /api/v1/conversations/{id}` | 204; removes the turns and the checkpoint (503 if either fails: retry) |
+| `DELETE /api/v1/conversations` | 204; every conversation of the citizen |
+
 `GET /health` needs no token. There are no `/docs` or OpenAPI pages. Logs hold the
-request ID and outcome, never the question, answer or token.
+request ID and outcome, never the question, answer, token or citizen.
 
 ### Settings
 
@@ -296,7 +317,7 @@ request ID and outcome, never the question, answer or token.
 | --- | --- |
 | `AGENT_API_AUTH_MODE` | `bearer` (normal) or `none` (local test only, API on 127.0.0.1) |
 | `AGENT_API_TOKEN` | 32+ printable ASCII characters; the same value as core-service's `KNOWLEDGE_AGENT_BEARER_TOKEN` |
-| `AGENT_MEMORY_*` | Optional conversation memory, see "Conversation memory" |
+| `AGENT_MEMORY_*` | Conversations and memory, see "Conversations and memory" |
 
 Make a token with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 Startup stops with an error if the mode or token is invalid.
@@ -330,46 +351,73 @@ uvicorn app.api.main:app --host 127.0.0.1 --port 8030
 
 On Linux the container user (uid 10001) must be able to read the mounted `api-key.pem`.
 
-## Conversation memory
+## Conversations and memory
 
-The agent API remembers the last answered turns of each conversation, so a follow-up such
-as "what about the fee?" is understood. core-service keeps the citizen's full encrypted
-record and checks ownership; the agent keeps only this short working memory, in its own
-`govai_agent` database. core-service sends no history: only the `conversation_id`.
+agent-service owns every conversation. It creates the conversation IDs, records which
+citizen owns each one, keeps every question and answer, and serves the history.
+core-service keeps no conversation data: it verifies the citizen's login and sends the
+agent the citizen's Keycloak subject next to the service token.
 
 ```text
-core-service ─(message, conversation_id)─► agent-api
-                                             ├─ load memory (LangGraph PostgresSaver, thread_id = conversation_id)
-                                             ├─ rewrite a follow-up into a full question (only when there is history)
-                                             ├─ knowledge-service + NVIDIA answer
-                                             └─ save the trimmed memory once, when the run ends; drop older checkpoints
+core-service ─(service token, X-GovAI-Citizen, {message, conversation_id?})─► agent-api
+  1. start the turn in PostgreSQL     new conversation, or check the owner (404 if not theirs)
+                                      same question pending → 409; repeat within 10 min → stored answer
+  2. short-term memory (checkpoint)   missing or out of date → last N answered turns from conversation_turns
+  3. graph                            rewrite a follow-up → knowledge-service + NVIDIA → trim to N turns → save checkpoint
+  4. finish the turn in PostgreSQL    answer saved before it is returned; failed turns are marked failed;
+                                      older checkpoints of the conversation are pruned
 ```
 
-- **What is kept.** At most `AGENT_MEMORY_MAX_TURNS` answered turns (default 6). Invalid
-  questions and "assistant unavailable" replies are not remembered, and a retried question
-  is kept once, matching core-service, which reopens a failed question.
+Both stores are tables in the PostgreSQL database `govai_agent`. Redis is not used for memory.
+
+| Tables | Role | What they hold |
+| --- | --- | --- |
+| `conversations`, `conversation_turns` | Long-term memory, the source of truth | Owner and encrypted title; every question and answer, encrypted, with status |
+| `checkpoints`, `checkpoint_blobs`, `checkpoint_writes` | Short-term memory (LangGraph `AsyncPostgresSaver`, `thread_id` = conversation ID) | One checkpoint per conversation, tagged with the turn it answered: the last `AGENT_MEMORY_MAX_TURNS` answered turns, the last reply and answer, all encrypted |
+
+- **Turn rules** (moved from core-service): a question is saved as pending before the
+  model runs, and no answer is returned before it is saved. The same question asked while
+  pending gets 409. A failed question is retried in the same turn. A repeat within
+  `AGENT_MEMORY_REPLAY_SECONDS` of its answer gets the stored answer without a model call.
+- **What short-term memory keeps.** Only answered turns. Invalid questions get their advice
+  as the answer, but the turn is marked failed and is neither remembered nor shown in history.
 - **Follow-ups.** With history, one extra model call (prompt `REWRITE_PROMPT_VERSION`) turns
-  the message into a standalone question, which is searched and answered. A first message
-  costs no extra call. If the rewrite is unusable the citizen's own words are used; if the
-  model fails, the request fails as any model failure does (503).
-- **Encryption.** Every stored value is AES-256-GCM encrypted with `AGENT_MEMORY_DATA_KEY`
-  (never core-service's key). Memory saved with another key is forgotten and the question
-  answered without it.
-- **Failures.** The API does not start if the memory database is unreachable or not set up.
-  A database error during a request gives 503, like core-service's own storage errors.
-- **No memory.** With `AGENT_MEMORY_DATABASE_URL` blank, or a request without
-  `conversation_id`, the graph runs without a checkpointer, as before. The Chainlit chat
-  and LangGraph Studio never use this memory.
-- **Trust.** The agent trusts `conversation_id` because only core-service holds the service
-  token and it checks ownership first. The agent never receives citizen identity.
+  the message into a standalone question. A first message costs no extra call.
+- **Memory is never ahead of the turns.** Each checkpoint is tagged with the turn its run
+  answered and the answered turn it started from; it is used only when those are the
+  conversation's newest two answered turns. One left by a failed run, by an answer that could
+  not be saved, by two questions answered at the same time, or that cannot be decrypted is
+  deleted and rebuilt from `conversation_turns`. No state is kept in the process, so any
+  number of uvicorn workers can serve one conversation.
+- **PostgreSQL is required.** The API does not start if the database is unreachable or the
+  tables are not set up. A database error during a request gives 503 and marks the turn
+  failed, so a retry reopens it. Both pools check a connection before use, so the API
+  recovers by itself after a database restart.
+- **Encryption.** Questions, answers, titles and every checkpoint value (messages, reply,
+  answer, pending writes) are AES-256-GCM encrypted with the agent key ring. Turn values are
+  also bound to their conversation, turn and field, so a moved value cannot be decrypted;
+  checkpoint values are not (LangGraph's serializer has no place for it). Readable in the
+  checkpoint tables: the conversation ID, version strings, the failure code, and the
+  `request_id`, `conversation_id`, `turn_id` and `after_turn_id` metadata. Turns that cannot
+  be decrypted are left out (and counted in a warning).
+- **Trust (accepted risk).** The agent trusts `X-GovAI-Citizen` because only core-service
+  holds the service token. Anyone with the service token could act as any citizen, so keep
+  it only in the two `.env` files and replace it if it is ever exposed.
+- **No memory.** With `AGENT_MEMORY_DATABASE_URL` blank the API answers every question alone,
+  stores nothing and returns no conversation ID. The Chainlit chat and LangGraph Studio never
+  use this memory.
 
 ### Memory settings
 
 | Variable | Value |
 | --- | --- |
 | `AGENT_MEMORY_DATABASE_URL` | Runtime login `govai_agent_app` for `govai_agent`; blank turns memory off. Host `postgres` from the agent-api container, `127.0.0.1` from a local uvicorn |
-| `AGENT_MEMORY_DATA_KEY` | Secret, base64 of 32 random bytes; keep it stable |
-| `AGENT_MEMORY_MAX_TURNS` | 1-20, default 6 |
+| `AGENT_MEMORY_DATA_KEY` | Secret, base64 of 32 random bytes; back it up apart from the database |
+| `AGENT_MEMORY_DATA_KEY_ID` | 1-255, default 1: the ID stored with every value the key seals |
+| `AGENT_MEMORY_OLD_DATA_KEYS` | Secret, `id:base64,...`: older keys that can still decrypt |
+| `AGENT_MEMORY_MAX_TURNS` | 1-20, default 6: answered turns kept in short-term memory |
+| `AGENT_MEMORY_IN_FLIGHT_SECONDS` | 30-600, default 90: a pending question older than this was abandoned |
+| `AGENT_MEMORY_REPLAY_SECONDS` | 0-3600, default 600 |
 
 ### One-time setup
 
@@ -390,8 +438,25 @@ Remove-Item Env:AGENT_MEMORY_OWNER_DATABASE_URL
 #    AGENT_MEMORY_DATA_KEY=<base64 of 32 random bytes>
 ```
 
-`setup_memory_tables.py` is safe to run again, for example after upgrading
-`langgraph-checkpoint-postgres`: it applies only the missing table changes.
+`setup_memory_tables.py` runs LangGraph's checkpoint migrations, then applies
+`scripts/memory_tables.sql`; it is safe to run again. Run it again after upgrading
+`langgraph-checkpoint-postgres`: the runtime login cannot migrate, so the API does not start
+on an older checkpoint schema.
+
+### Rotating the key
+
+1. Generate a new key. In `.env` set it as `AGENT_MEMORY_DATA_KEY` with a new
+   `AGENT_MEMORY_DATA_KEY_ID`, and move the old one to `AGENT_MEMORY_OLD_DATA_KEYS` (`1:<old key>`).
+2. Restart agent-api: new values use the new key, old ones still read.
+3. Run `python scripts/reencrypt_memory.py` with `AGENT_MEMORY_OWNER_DATABASE_URL` set, until it
+   reports 0 values left; then remove the old key from `.env` and restart.
+
+The script also deletes checkpoints still sealed with an old key; the next question of those
+conversations rebuilds them from `conversation_turns`.
+
+To clear short-term memory (for example after a test), delete the conversation's rows from
+`checkpoints`, `checkpoint_blobs` and `checkpoint_writes` (`thread_id` = conversation ID); the
+next question restores from `conversation_turns`.
 
 ## Run with Docker
 
@@ -557,12 +622,12 @@ pytest
 | `tests/test_question_validation.py` | Nothing |
 | `tests/test_knowledge_rag_client.py` | Nothing (fake HTTP transport) |
 | `tests/test_knowledge_agent.py` | Nothing (fake RAG client and chat model) |
-| `tests/test_workflow.py` | Nothing (fake Knowledge Agent, in-memory checkpointer) |
+| `tests/test_workflow.py`, `test_api.py`, `test_conversation_service.py` | Nothing (fake Knowledge Agent and store, in-memory checkpointer) |
 | `tests/test_question_rewrite.py` | Nothing (fake chat model) |
 | `tests/test_memory_window.py`, `test_memory_encryption.py`, `test_memory_config.py` | Nothing |
 | `tests/test_llm_live.py` | `NVIDIA_API_KEY` and the `LLM_*` settings in `.env`, and internet |
 | `tests/test_rag_live.py` | The above, the `KNOWLEDGE_*` settings, and the knowledge service running |
-| `tests/test_memory_live.py` | `AGENT_MEMORY_*` in `.env` and the memory database set up |
+| `tests/test_memory_live.py` | `AGENT_MEMORY_*` in `.env` and the memory database set up (conversations and checkpoints) |
 
 `test_llm_live.py` sends only a synthetic question and document to the real NVIDIA API.
 It checks that the model answers from the document without a `[1]` marker, gives the

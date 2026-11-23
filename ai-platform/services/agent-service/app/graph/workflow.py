@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 class AgentState(MessagesState):
     """Conversation state shared by every node; messages holds the chat."""
 
-    # The text sent back to the citizen for this question
-    reply: str | None
+    # The message sent back to the citizen; a message, not a str, so memory stores it encrypted
+    reply: AIMessage | None
 
     # The last answer with its scope and prompt version; None when no answer was made
     knowledge_answer: dict | None
@@ -72,9 +72,10 @@ class KnowledgeAgentNode:
             return update
 
         # Add the reply to the chat and keep the full answer for the caller
+        reply = AIMessage(content=answer.answer)
         update = {
-            "messages": [AIMessage(content=answer.answer)],
-            "reply": answer.answer,
+            "messages": [reply],
+            "reply": reply,
             "knowledge_answer": answer.model_dump(),
             "failure": None,
         }
@@ -157,9 +158,10 @@ def latest_question(messages):
 def reply_without_answer(reply, failure):
 
     # A chat reply with no knowledge answer behind it, and the reason why
+    message = AIMessage(content=reply)
     update = {
-        "messages": [AIMessage(content=reply)],
-        "reply": reply,
+        "messages": [message],
+        "reply": message,
         "knowledge_answer": None,
         "failure": failure,
     }
