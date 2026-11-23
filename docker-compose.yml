@@ -10,7 +10,7 @@ services:
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${DATA_DIR:-/srv/govai/data}/postgres:/var/lib/postgresql/data
     networks:
       - govai-network
     healthcheck:
@@ -192,7 +192,6 @@ services:
       - govai-network
 
 volumes:
-  postgres_data:
   redis_data:
   seaweedfs_data:
   seaweedfs_admin_data:

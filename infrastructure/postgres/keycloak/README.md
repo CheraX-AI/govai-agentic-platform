@@ -10,27 +10,18 @@ runs in `govai-keycloak-db`, with its own volume and internal-only network
 `govai-keycloak-dbnet`. There is no host SQL port. This is separate from the Go
 application database `govai-auth-db` on localhost 55432.
 
-Database/schema/runtime role: `govai_keycloak` / `keycloak` / `govai_keycloak`.
-Runtime owns only its dedicated schema, with CONNECT/TEMPORARY but without
-superuser, create-role, create-database, replication or bypass-RLS. Bootstrap
-credentials are separate and are never supplied to Go or Keycloak.
-
-`setup.ps1` requires PowerShell 7+ and is for a fresh installation only: it generates ignored `.env` and
-`../../keycloak/.env.postgres` and refuses existing credentials. Keep credentials with
-their volumes. Do not regenerate passwords for existing data or rerun SQL init by
-removing a volume. Keycloak manages its own SQL tables; Go migrations must not.
-Remote/shared SQL deployments additionally require verified TLS; this local SQL
-connection stays inside the private Docker network.
+Database/user/password: `govai_keycloak` / `admin` / `admin` (VM prototype, single host;
+change before sharing). Keycloak uses the default `public` schema and manages its own
+SQL tables; Go migrations must not. The database stays inside the private Docker network.
 
 ## Normal startup
 
 From `infrastructure/postgres/keycloak`:
 
 ```powershell
-docker compose --env-file .env -f compose.yaml up -d --wait
+docker compose -f compose.yaml up -d --wait
 cd ../../keycloak
-docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml config --quiet
-docker compose --env-file .env --env-file .env.postgres -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml up -d
+docker compose --env-file .env -f compose.yaml -f compose.https.yaml -f compose.postgres.yaml up -d
 ```
 
 Then run `go run ./cmd/api` from `backend/services/auth-service`.

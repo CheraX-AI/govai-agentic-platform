@@ -11,9 +11,8 @@ services:
       - --https-certificate-key-file=/local-tls/keycloak-key.pem
     environment:
       KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/govai_keycloak
-      KC_DB_SCHEMA: keycloak
-      KC_DB_USERNAME: govai_keycloak
-      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Run ../postgres/keycloak/setup.ps1 first}
+      KC_DB_USERNAME: admin
+      KC_DB_PASSWORD: admin
     volumes:
       - keycloak_pg_runtime_data:/opt/keycloak/data
     networks:

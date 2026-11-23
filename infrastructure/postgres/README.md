@@ -8,6 +8,13 @@
 - Root `docker-compose.yml`: existing shared PostgreSQL/Redis/storage/ChromaDB setup,
   unchanged by this folder move. Do not substitute it for either authentication database.
 
+Data lives in `${DATA_DIR:-/srv/govai/data}/<service>` on the VM, outside the repo. Create it once before the first start:
+
+```bash
+sudo mkdir -p /srv/govai/data/{postgres,auth-postgres,keycloak-postgres}
+sudo chown 999:999 /srv/govai/data/{postgres,auth-postgres,keycloak-postgres}
+```
+
 Application SQL migrations stay in
 `backend/services/auth-service/internal/external/postgres/migrations/`; Go queries stay in
 that service. Keycloak manages its own database schema. Moving configuration did
