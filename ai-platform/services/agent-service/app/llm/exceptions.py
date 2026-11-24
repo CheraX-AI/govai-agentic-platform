@@ -1,11 +1,6 @@
 """LLM errors and helpers to summarise them."""
 
-import re
-
 MAX_ERROR_MESSAGE_LENGTH = 200
-
-# The NVIDIA client raises a plain Exception whose message starts with "[401] ..."
-STATUS_CODE_PATTERN = re.compile(r"^\[(\d{3})\]")
 
 
 # Errors
@@ -19,43 +14,28 @@ class LLMConfigError(LLMError):
 
 
 class LLMAuthError(LLMError):
-    """NVIDIA rejected the API key."""
+    """Azure OpenAI rejected the API key."""
 
 
 class LLMTimeoutError(LLMError):
-    """NVIDIA did not answer within the timeout."""
+    """Azure OpenAI did not answer within the timeout."""
 
 
 class LLMUnavailableError(LLMError):
-    """NVIDIA is not reachable, is rate limiting, or had a server error."""
+    """Azure OpenAI is not reachable, is rate limiting, or had a server error."""
 
 
 class LLMRequestError(LLMError):
-    """NVIDIA rejected the request, e.g. an unknown model or a prompt that is too long."""
+    """Azure OpenAI rejected the request, e.g. an unknown deployment or the content filter."""
 
 
 # Public functions
 
-def get_status_code(error):
-    """Read the HTTP status code from an NVIDIA error, or None when it has none."""
-
-    # The NVIDIA client puts the HTTP status at the start of the message
-    match = STATUS_CODE_PATTERN.match(str(error))
-
-    # No status code, e.g. a timeout or a dropped connection
-    if not match:
-        return None
-
-    status_code = int(match.group(1))
-
-    return status_code
-
-
 def error_summary(error):
     """The first line of an error message, shortened.
 
-    Only the first line ("[400] Bad Request") is kept: the lines after it can
-    repeat parts of the request, which holds the citizen's question.
+    Only the first line is kept: the lines after it can repeat parts of the
+    request, which holds the citizen's question.
     """
 
     # Keep the first non-empty line

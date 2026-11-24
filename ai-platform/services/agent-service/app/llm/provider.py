@@ -1,9 +1,10 @@
-"""Creates the NVIDIA chat model and sends messages to it."""
+"""Creates the Azure OpenAI chat model and sends messages to it."""
 
 import logging
 
-import requests
+import openai
 from langchain_core.language_models import BaseChatModel
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ConfigDict
 
 from app.llm.config import ENV_FILE, LLMSettings, load_llm_settings
@@ -15,14 +16,18 @@ from app.llm.exceptions import (
     LLMTimeoutError,
     LLMUnavailableError,
     error_summary,
-    get_status_code,
 )
 
 logger = logging.getLogger(__name__)
 
+# One retry for a dropped connection or a 429/5xx; more would keep the citizen waiting
+MAX_RETRIES = 1
+
 AUTH_STATUS_CODES = {401, 403}
 TIMEOUT_STATUS_CODES = {408, 504}
 RATE_LIMIT_STATUS_CODE = 429
+NOT_FOUND_STATUS_CODE = 404
+CONTENT_FILTER = "content_filter"
 
 
 # Models
@@ -39,36 +44,24 @@ class LLMProvider(BaseModel):
 # Public functions
 
 def create_llm_provider(settings):
-    """Create the NVIDIA chat client from the settings.
-
-    A model in the NVIDIA library's model table is created without calling the
-    API. Any other model name is looked up at NVIDIA first, so that lookup can
-    fail with an authentication or connection error.
-    """
-
-    # Imported here so the client library loads only when the LLM is used
-    from langchain_nvidia_ai_endpoints import ChatNVIDIA
+    """Create the Azure OpenAI chat client from the settings. No API call is made."""
 
     try:
-        # Build the NVIDIA client with the generation settings
-        chat_model = ChatNVIDIA(
+        # The Azure v1 endpoint speaks the OpenAI API, so no api-version is needed
+        chat_model = ChatOpenAI(
             model=settings.model,
-            api_key=settings.api_key.get_secret_value(),
+            base_url=settings.endpoint,
+            api_key=settings.api_key,
             temperature=settings.temperature,
-            max_completion_tokens=settings.max_tokens,
+            max_tokens=settings.max_tokens,
             timeout=settings.timeout_seconds,
-            # Do not send usage statistics to NVIDIA from a government service
-            usage_telemetry_enabled=False,
+            max_retries=MAX_RETRIES,
+            # Chat Completions, which reports when the content filter cut an answer
+            use_responses_api=False,
         )
 
     except Exception as error:
-        llm_error = to_llm_error(error)
-
-        # Errors with no clear cause mean the client itself could not be built
-        if type(llm_error) is LLMError:
-            raise LLMConfigError(f"LLM client could not be created: {error_summary(error)}") from None
-
-        raise llm_error from None
+        raise LLMConfigError(f"LLM client could not be created: {error_summary(error)}") from None
 
     # Keep the client together with its settings
     provider = LLMProvider(chat_model=chat_model, settings=settings)
@@ -82,7 +75,7 @@ def load_llm_provider(env_file=ENV_FILE):
     # Read and check the settings
     settings = load_llm_settings(env_file=env_file)
 
-    # Create the NVIDIA client
+    # Create the Azure OpenAI client
     provider = create_llm_provider(settings)
 
     return provider
@@ -96,11 +89,15 @@ def invoke_llm(provider, messages, config=None):
     """
 
     try:
-        # Send the messages to NVIDIA
+        # Send the messages to Azure OpenAI
         reply = provider.chat_model.invoke(messages, config=config)
 
     except Exception as error:
         raise to_llm_error(error) from None
+
+    # Azure's content filter can stop an answer part way; a partial answer is not shown
+    if reply.response_metadata.get("finish_reason") == CONTENT_FILTER:
+        raise LLMRequestError("Azure OpenAI content filter blocked the answer")
 
     # An empty answer cannot be shown to a citizen
     answer = str(reply.text).strip()
@@ -117,42 +114,50 @@ def invoke_llm(provider, messages, config=None):
 
 
 def to_llm_error(error):
-    """Turn an NVIDIA client error into an LLMError subclass with a short message."""
+    """Turn an Azure OpenAI client error into an LLMError subclass with a short message."""
 
     # Already classified
     if isinstance(error, LLMError):
         return error
 
-    # Timeouts: the request timeout, or the NVIDIA polling timeout
-    if isinstance(error, (requests.exceptions.Timeout, TimeoutError)):
-        llm_error = LLMTimeoutError("NVIDIA did not respond in time")
+    # Timeouts; APITimeoutError is a kind of APIConnectionError, so it is checked first
+    if isinstance(error, (openai.APITimeoutError, TimeoutError)):
+        llm_error = LLMTimeoutError("Azure OpenAI did not respond in time")
         return llm_error
 
-    # Network errors: NVIDIA cannot be reached
-    if isinstance(error, (requests.exceptions.ConnectionError, ConnectionError)):
-        llm_error = LLMUnavailableError("NVIDIA is not reachable")
+    # Network errors: Azure cannot be reached
+    if isinstance(error, (openai.APIConnectionError, ConnectionError)):
+        llm_error = LLMUnavailableError("Azure OpenAI is not reachable")
         return llm_error
 
-    # HTTP errors: the NVIDIA client puts the status code at the start of the message
-    status_code = get_status_code(error)
-    summary = error_summary(error)
+    # Anything else without an HTTP status
+    if not isinstance(error, openai.APIStatusError):
+        llm_error = LLMError(f"LLM request failed: {error_summary(error)}")
+        return llm_error
+
+    # HTTP errors: only the status and Azure's error code are kept, never the error body
+    status_code = error.status_code
+    error_code = error.code or "no error code"
 
     if status_code in AUTH_STATUS_CODES:
-        llm_error = LLMAuthError("NVIDIA rejected the API key")
+        llm_error = LLMAuthError("Azure OpenAI rejected the API key")
 
     elif status_code in TIMEOUT_STATUS_CODES:
-        llm_error = LLMTimeoutError("NVIDIA did not respond in time")
+        llm_error = LLMTimeoutError("Azure OpenAI did not respond in time")
 
     elif status_code == RATE_LIMIT_STATUS_CODE:
-        llm_error = LLMUnavailableError("NVIDIA rate limit reached")
+        llm_error = LLMUnavailableError("Azure OpenAI rate limit reached")
 
-    elif status_code is not None and status_code >= 500:
-        llm_error = LLMUnavailableError(f"NVIDIA server error: {summary}")
+    elif status_code >= 500:
+        llm_error = LLMUnavailableError(f"Azure OpenAI server error ({status_code} {error_code})")
 
-    elif status_code is not None and status_code >= 400:
-        llm_error = LLMRequestError(f"NVIDIA rejected the request: {summary}")
+    elif error_code == CONTENT_FILTER:
+        llm_error = LLMRequestError("Azure OpenAI content filter blocked the request")
+
+    elif status_code == NOT_FOUND_STATUS_CODE:
+        llm_error = LLMRequestError(f"Azure OpenAI deployment not found, check LLM_MODEL ({error_code})")
 
     else:
-        llm_error = LLMError(f"LLM request failed: {summary}")
+        llm_error = LLMRequestError(f"Azure OpenAI rejected the request ({status_code} {error_code})")
 
     return llm_error

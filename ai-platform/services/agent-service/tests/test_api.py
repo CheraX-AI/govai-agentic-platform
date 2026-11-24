@@ -210,12 +210,12 @@ def test_real_graph_invalid_question_is_not_an_outage():
 
 def test_rag_or_llm_failure_is_503_not_an_answer():
 
-    graph = build_graph(FakeKnowledgeAgent(error=LLMTimeoutError("NVIDIA did not respond")))
+    graph = build_graph(FakeKnowledgeAgent(error=LLMTimeoutError("Azure OpenAI did not respond")))
 
     response = post(make_client(graph))
 
     assert response.status_code == 503
-    assert "NVIDIA" not in response.text
+    assert "Azure" not in response.text
 
 
 def test_unexpected_graph_error_is_503_without_details():

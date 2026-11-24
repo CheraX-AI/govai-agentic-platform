@@ -1,4 +1,4 @@
-"""End-to-end tests: the real Knowledge Agent with the running knowledge service and NVIDIA.
+"""End-to-end tests: the real Knowledge Agent with the running knowledge service and Azure OpenAI.
 
 Skipped unless agent-service/.env has the LLM and KNOWLEDGE_* settings and the
 knowledge service answers /health. The checks do not depend on which documents
@@ -35,11 +35,11 @@ def knowledge_agent():
     except httpx.HTTPError:
         pytest.skip(f"knowledge service is not running at {settings.base_url}")
 
-    # The NVIDIA settings must be in .env too
+    # The Azure OpenAI settings must be in .env too
     try:
         agent = create_knowledge_agent()
     except LLMConfigError as error:
-        pytest.skip(f"NVIDIA LLM settings are not available in agent-service/.env ({error})")
+        pytest.skip(f"Azure OpenAI LLM settings are not available in agent-service/.env ({error})")
 
     return agent
 

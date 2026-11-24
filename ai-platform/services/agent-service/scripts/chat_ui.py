@@ -8,7 +8,7 @@ In Docker, the agent-chat service runs it (see ai-platform/docker-compose.ai.yml
 
 Each message goes through the same LangGraph graph as LangGraph Studio: the
 Knowledge Agent retrieves the documents from the knowledge service (RAG) and
-the NVIDIA model answers from them. With LANGSMITH_TRACING=true every question
+the Azure OpenAI model answers from them. With LANGSMITH_TRACING=true every question
 is one LangSmith trace named "govai_chat".
 
 The chat has no login yet; it is for development and testing, on 127.0.0.1 only.

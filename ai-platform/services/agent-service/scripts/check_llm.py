@@ -1,11 +1,11 @@
-"""Send one synthetic passport question to the configured NVIDIA chat model.
+"""Send one synthetic passport question to the configured Azure OpenAI chat model.
 
 Usage (from the agent-service folder):
 
     python scripts/check_llm.py
 
 Checks that the LLM settings in .env work: it builds the RAG prompt with one
-synthetic test document, sends it to NVIDIA, and prints the answer. When
+synthetic test document, sends it to Azure OpenAI, and prints the answer. When
 LANGSMITH_TRACING=true in .env, the call is also sent to LangSmith as one
 trace named "knowledge_agent_answer".
 
@@ -64,7 +64,7 @@ def main(argv=None):
     load_dotenv(args.env_file)
 
     try:
-        # Read the LLM settings and create the NVIDIA client
+        # Read the LLM settings and create the Azure OpenAI client
         provider = load_llm_provider(env_file=args.env_file)
 
     except LLMConfigError as error:
@@ -100,7 +100,7 @@ def main(argv=None):
 
 def parse_arguments(argv):
 
-    parser = argparse.ArgumentParser(description="Check the NVIDIA LLM settings with one synthetic question.")
+    parser = argparse.ArgumentParser(description="Check the Azure OpenAI LLM settings with one synthetic question.")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE, help="Settings file, default agent-service/.env")
 
     args = parser.parse_args(argv)
@@ -112,7 +112,8 @@ def print_result(provider, answer):
 
     # The settings used, without the API key
     settings = provider.settings
-    print(f"Model:          {settings.model}")
+    print(f"Endpoint:       {settings.endpoint}")
+    print(f"Deployment:     {settings.model}")
     print(f"Temperature:    {settings.temperature}")
     print(f"Max tokens:     {settings.max_tokens}")
     print(f"Prompt version: {PROMPT_VERSION}")

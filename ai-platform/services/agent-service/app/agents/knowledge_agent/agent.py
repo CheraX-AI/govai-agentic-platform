@@ -108,12 +108,12 @@ class KnowledgeAgent:
 # Public functions
 
 def create_knowledge_agent(env_file=ENV_FILE):
-    """Build the Knowledge Agent with the RAG client and the NVIDIA LLM from .env."""
+    """Build the Knowledge Agent with the RAG client and the Azure OpenAI LLM from .env."""
 
     # The RAG client first: it needs no connection to be created
     rag_client = create_rag_client(env_file=env_file)
 
-    # The NVIDIA chat model
+    # The Azure OpenAI chat model
     provider = load_llm_provider(env_file=env_file)
 
     agent = KnowledgeAgent(provider=provider, rag_client=rag_client)

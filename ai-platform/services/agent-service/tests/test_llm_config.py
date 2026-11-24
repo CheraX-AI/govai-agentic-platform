@@ -4,7 +4,7 @@ import pytest
 
 from app.llm.config import REQUIRED_VARIABLES, load_llm_settings
 from app.llm.exceptions import LLMConfigError
-from helpers import TEST_MODEL, TEST_NVIDIA_KEY, make_env, write_env_file
+from helpers import TEST_API_KEY, TEST_ENDPOINT, TEST_MODEL, make_env, write_env_file
 
 
 # Helper functions
@@ -23,7 +23,8 @@ def test_every_setting_is_read_from_env_values():
     # All model details come from .env, none from code defaults
     settings = load_llm_settings(make_env())
 
-    assert settings.api_key.get_secret_value() == TEST_NVIDIA_KEY
+    assert settings.endpoint == TEST_ENDPOINT
+    assert settings.api_key.get_secret_value() == TEST_API_KEY
     assert settings.model == TEST_MODEL
     assert settings.temperature == 0.1
     assert settings.max_tokens == 512
@@ -34,11 +35,11 @@ def test_settings_are_read_from_the_env_file(tmp_path, monkeypatch):
 
     # Without explicit values, the given .env file is read
     clear_llm_variables(monkeypatch)
-    env_file = write_env_file(tmp_path / ".env", make_env(LLM_MODEL="nvidia/from-file"))
+    env_file = write_env_file(tmp_path / ".env", make_env(LLM_MODEL="gpt-from-file"))
 
     settings = load_llm_settings(env_file=env_file)
 
-    assert settings.model == "nvidia/from-file"
+    assert settings.model == "gpt-from-file"
 
 
 def test_environment_variables_override_the_env_file(tmp_path, monkeypatch):
@@ -63,10 +64,10 @@ def test_values_are_trimmed():
 
 def test_missing_env_file_reports_the_first_setting(tmp_path, monkeypatch):
 
-    # No file and no environment variables: the key is reported first
+    # No file and no environment variables: the endpoint is reported first
     clear_llm_variables(monkeypatch)
 
-    with pytest.raises(LLMConfigError, match="NVIDIA_API_KEY is required in .env"):
+    with pytest.raises(LLMConfigError, match="AZURE_OPENAI_ENDPOINT is required in .env"):
         load_llm_settings(env_file=tmp_path / "missing.env")
 
 
@@ -115,10 +116,34 @@ def test_out_of_range_values_are_rejected_by_name(name, value):
         load_llm_settings(make_env(**{name: value}))
 
 
-def test_key_without_nvidia_prefix_is_rejected():
+def test_trailing_slash_is_removed_from_the_endpoint():
 
-    with pytest.raises(LLMConfigError, match="NVIDIA_API_KEY: .*nvapi-"):
-        load_llm_settings(make_env(NVIDIA_API_KEY="sk-wrong-provider-key"))
+    settings = load_llm_settings(make_env(AZURE_OPENAI_ENDPOINT=TEST_ENDPOINT + "/"))
+
+    assert settings.endpoint == TEST_ENDPOINT
+
+
+def test_endpoint_without_https_is_rejected():
+
+    # Questions may hold personal details, so plain HTTP is refused
+    endpoint = TEST_ENDPOINT.replace("https://", "http://")
+
+    with pytest.raises(LLMConfigError, match="AZURE_OPENAI_ENDPOINT: .*https"):
+        load_llm_settings(make_env(AZURE_OPENAI_ENDPOINT=endpoint))
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://govai-test.services.ai.azure.com",
+        "https://govai-test.openai.azure.com/openai",
+        "https://govai-test.openai.azure.com/openai/deployments/gpt-4.1-mini",
+    ],
+)
+def test_endpoint_must_be_the_v1_api(endpoint):
+
+    with pytest.raises(LLMConfigError, match="AZURE_OPENAI_ENDPOINT: .*/openai/v1"):
+        load_llm_settings(make_env(AZURE_OPENAI_ENDPOINT=endpoint))
 
 
 def test_errors_never_show_the_api_key():
@@ -127,7 +152,7 @@ def test_errors_never_show_the_api_key():
     secret = "sk-secret-value-9876"
 
     with pytest.raises(LLMConfigError) as error:
-        load_llm_settings(make_env(NVIDIA_API_KEY=secret, LLM_TEMPERATURE="5"))
+        load_llm_settings(make_env(AZURE_OPENAI_API_KEY=secret, LLM_TEMPERATURE="5"))
 
     assert secret not in str(error.value)
     assert error.value.__cause__ is None
@@ -138,5 +163,5 @@ def test_settings_hide_the_api_key_when_printed():
     # SecretStr keeps the key out of repr and str, and so out of logs
     settings = load_llm_settings(make_env())
 
-    assert TEST_NVIDIA_KEY not in repr(settings)
-    assert TEST_NVIDIA_KEY not in str(settings)
+    assert TEST_API_KEY not in repr(settings)
+    assert TEST_API_KEY not in str(settings)

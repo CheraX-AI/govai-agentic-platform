@@ -3,7 +3,7 @@
 # The default command starts the Chainlit chat; the agent-studio compose service
 # runs the same image with `langgraph dev` for LangGraph Studio, and agent-api
 # runs it with uvicorn for the internal chat API that core-service calls.
-# Settings (NVIDIA, knowledge service, LangSmith) come from the environment at
+# Settings (Azure OpenAI, knowledge service, LangSmith) come from the environment at
 # runtime, never from the image. See ai-platform/docker-compose.ai.yml.
 
 FROM python:3.13-slim
