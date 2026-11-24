@@ -7,8 +7,8 @@ langgraph-cli[inmem]==0.4.40
 # Prompt templates and messages (ChatPromptTemplate)
 langchain-core==1.7.3
 
-# NVIDIA chat model (ChatNVIDIA)
-langchain-nvidia-ai-endpoints==1.5.0
+# Azure OpenAI chat model (ChatOpenAI on the Azure v1 endpoint)
+langchain-openai==1.7.3
 
 # Chat UI for the agent (scripts/chat_ui.py)
 chainlit==2.12.0

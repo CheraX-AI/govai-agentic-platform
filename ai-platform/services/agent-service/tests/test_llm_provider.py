@@ -1,16 +1,14 @@
-"""Tests for app/llm/provider.py without calling NVIDIA.
-
-Network access is blocked in these tests, so creating the provider is checked
-to make no API call. invoke_llm is tested with LangChain's fake chat model.
-"""
+"""Tests for app/llm/provider.py without calling Azure OpenAI."""
 
 import json
 
+import httpx2
+import openai
 import pytest
-import requests
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.load import dumpd
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 from app.llm.exceptions import (
     LLMAuthError,
@@ -20,10 +18,12 @@ from app.llm.exceptions import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
-from app.llm.provider import LLMProvider, create_llm_provider, invoke_llm, load_llm_provider, to_llm_error
-from helpers import TEST_MODEL, TEST_NVIDIA_KEY, make_env, make_settings, write_env_file
+from app.llm.provider import MAX_RETRIES, LLMProvider, create_llm_provider, invoke_llm, load_llm_provider, to_llm_error
+from helpers import TEST_API_KEY, TEST_ENDPOINT, TEST_MODEL, make_env, make_settings, write_env_file
 
 MESSAGES = [HumanMessage(content="Synthetic test question")]
+
+REQUEST = httpx2.Request("POST", f"{TEST_ENDPOINT}/chat/completions")
 
 
 # Fakes
@@ -38,6 +38,16 @@ class FailingChatModel(FakeListChatModel):
         raise self.error
 
 
+class FilteredChatModel(FakeListChatModel):
+    """A chat model whose answer Azure's content filter stopped part way."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+
+        message = AIMessage(content="Partial answer", response_metadata={"finish_reason": "content_filter"})
+
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+
 @pytest.fixture(autouse=True)
 def block_network(monkeypatch):
 
@@ -45,7 +55,7 @@ def block_network(monkeypatch):
     def fail_request(*arguments, **keyword_arguments):
         raise AssertionError("a test tried to call the network")
 
-    monkeypatch.setattr(requests.Session, "send", fail_request)
+    monkeypatch.setattr(httpx2.Client, "send", fail_request)
 
 
 def make_provider(responses):
@@ -56,19 +66,38 @@ def make_provider(responses):
     return provider
 
 
+def status_error(status_code, code=None):
+
+    # An openai HTTP error as the SDK raises it, with Azure's error code in the body
+    response = httpx2.Response(status_code, request=REQUEST)
+    body = {"code": code, "message": "Synthetic error"} if code else None
+    error = openai.APIStatusError(f"Error code: {status_code}", response=response, body=body)
+
+    return error
+
+
 # Creating the provider
 
 def test_provider_uses_every_setting():
 
-    # The NVIDIA client gets the model and generation settings from .env
+    # The client gets the endpoint, deployment, and generation settings from .env
     provider = create_llm_provider(make_settings())
     chat_model = provider.chat_model
 
-    assert chat_model.model == TEST_MODEL
+    assert chat_model.model_name == TEST_MODEL
+    assert chat_model.openai_api_base == TEST_ENDPOINT
+    assert chat_model.openai_api_key.get_secret_value() == TEST_API_KEY
     assert chat_model.temperature == 0.1
     assert chat_model.max_tokens == 512
-    assert chat_model._client.timeout == 15
-    assert chat_model._client.api_key.get_secret_value() == TEST_NVIDIA_KEY
+    assert chat_model.root_client.timeout == 15
+    assert chat_model.root_client.max_retries == MAX_RETRIES
+
+
+def test_provider_uses_chat_completions():
+
+    provider = create_llm_provider(make_settings())
+
+    assert provider.chat_model.use_responses_api is False
 
 
 def test_provider_keeps_its_settings():
@@ -78,14 +107,6 @@ def test_provider_keeps_its_settings():
     provider = create_llm_provider(settings)
 
     assert provider.settings == settings
-
-
-def test_usage_telemetry_is_turned_off():
-
-    # No usage statistics are sent to NVIDIA
-    provider = create_llm_provider(make_settings())
-
-    assert provider.chat_model.usage_telemetry_enabled is False
 
 
 def test_provider_is_loaded_from_the_env_file(tmp_path, monkeypatch):
@@ -105,20 +126,8 @@ def test_missing_settings_stop_before_the_client_is_built(tmp_path, monkeypatch)
     for name in make_env():
         monkeypatch.delenv(name, raising=False)
 
-    with pytest.raises(LLMConfigError, match="NVIDIA_API_KEY is required"):
+    with pytest.raises(LLMConfigError, match="AZURE_OPENAI_ENDPOINT is required"):
         load_llm_provider(env_file=tmp_path / "missing.env")
-
-
-def test_unknown_model_lookup_failure_is_an_llm_error(monkeypatch):
-
-    # A model outside the library's table is looked up at NVIDIA; here the network is down
-    def no_network(*arguments, **keyword_arguments):
-        raise requests.exceptions.ConnectionError("connection refused")
-
-    monkeypatch.setattr(requests.Session, "send", no_network)
-
-    with pytest.raises(LLMUnavailableError, match="NVIDIA is not reachable"):
-        create_llm_provider(make_settings(LLM_MODEL="nvidia/unknown-test-model"))
 
 
 def test_api_key_is_never_in_trace_data():
@@ -126,10 +135,10 @@ def test_api_key_is_never_in_trace_data():
     # LangSmith records the serialized model and its parameters; neither holds the key
     chat_model = create_llm_provider(make_settings()).chat_model
 
-    assert TEST_NVIDIA_KEY not in json.dumps(dumpd(chat_model))
-    assert TEST_NVIDIA_KEY not in str(chat_model._get_invocation_params())
-    assert TEST_NVIDIA_KEY not in str(chat_model._get_ls_params())
-    assert TEST_NVIDIA_KEY not in repr(chat_model)
+    assert TEST_API_KEY not in json.dumps(dumpd(chat_model))
+    assert TEST_API_KEY not in str(chat_model._get_invocation_params())
+    assert TEST_API_KEY not in str(chat_model._get_ls_params())
+    assert TEST_API_KEY not in repr(chat_model)
 
 
 # Calling the model
@@ -162,13 +171,35 @@ def test_empty_answer_is_an_error():
         invoke_llm(provider, MESSAGES)
 
 
+def test_filtered_answer_is_not_returned():
+
+    # A partial answer cut by the content filter is never shown to the citizen
+    provider = LLMProvider(chat_model=FilteredChatModel(responses=["unused"]), settings=make_settings())
+
+    with pytest.raises(LLMRequestError, match="content filter blocked the answer"):
+        invoke_llm(provider, MESSAGES)
+
+
 def test_invoke_turns_provider_errors_into_llm_errors():
 
     # A rejected key during the call becomes LLMAuthError
-    chat_model = FailingChatModel(responses=["unused"], error=Exception("[401] Unauthorized\nPlease check your key."))
+    chat_model = FailingChatModel(responses=["unused"], error=status_error(401))
     provider = LLMProvider(chat_model=chat_model, settings=make_settings())
 
-    with pytest.raises(LLMAuthError, match="NVIDIA rejected the API key"):
+    with pytest.raises(LLMAuthError, match="Azure OpenAI rejected the API key"):
+        invoke_llm(provider, MESSAGES)
+
+
+def test_real_client_errors_become_llm_errors(monkeypatch):
+
+    # The real client with the network down: the openai error is classified
+    def no_network(*arguments, **keyword_arguments):
+        raise httpx2.ConnectError("connection refused")
+
+    monkeypatch.setattr(httpx2.Client, "send", no_network)
+    provider = create_llm_provider(make_settings())
+
+    with pytest.raises(LLMUnavailableError, match="Azure OpenAI is not reachable"):
         invoke_llm(provider, MESSAGES)
 
 
@@ -177,18 +208,18 @@ def test_invoke_turns_provider_errors_into_llm_errors():
 @pytest.mark.parametrize(
     "error, error_class",
     [
-        (Exception("[401] Unauthorized"), LLMAuthError),
-        (Exception("[403] Forbidden"), LLMAuthError),
-        (Exception("[408] Request Timeout"), LLMTimeoutError),
-        (Exception("[504] Gateway Timeout"), LLMTimeoutError),
-        (Exception("[429] Too Many Requests"), LLMUnavailableError),
-        (Exception("[500] Internal Server Error"), LLMUnavailableError),
-        (Exception("[503] Service Unavailable"), LLMUnavailableError),
-        (Exception("[400] Bad Request"), LLMRequestError),
-        (Exception("[404] Not Found"), LLMRequestError),
-        (requests.exceptions.ReadTimeout("read timed out"), LLMTimeoutError),
-        (TimeoutError("polling timed out"), LLMTimeoutError),
-        (requests.exceptions.ConnectionError("refused"), LLMUnavailableError),
+        (status_error(401), LLMAuthError),
+        (status_error(403), LLMAuthError),
+        (status_error(408), LLMTimeoutError),
+        (status_error(504), LLMTimeoutError),
+        (status_error(429), LLMUnavailableError),
+        (status_error(500), LLMUnavailableError),
+        (status_error(503), LLMUnavailableError),
+        (status_error(400), LLMRequestError),
+        (status_error(404, "DeploymentNotFound"), LLMRequestError),
+        (openai.APITimeoutError(request=REQUEST), LLMTimeoutError),
+        (openai.APIConnectionError(request=REQUEST), LLMUnavailableError),
+        (TimeoutError("timed out"), LLMTimeoutError),
         (ConnectionError("reset"), LLMUnavailableError),
     ],
 )
@@ -197,6 +228,22 @@ def test_errors_are_classified(error, error_class):
     llm_error = to_llm_error(error)
 
     assert type(llm_error) is error_class
+
+
+def test_content_filter_is_named():
+
+    llm_error = to_llm_error(status_error(400, "content_filter"))
+
+    assert type(llm_error) is LLMRequestError
+    assert "content filter blocked the request" in str(llm_error)
+
+
+def test_unknown_deployment_points_to_the_setting():
+
+    llm_error = to_llm_error(status_error(404, "DeploymentNotFound"))
+
+    assert "LLM_MODEL" in str(llm_error)
+    assert "DeploymentNotFound" in str(llm_error)
 
 
 def test_unknown_errors_become_the_base_error():
@@ -214,12 +261,24 @@ def test_llm_errors_are_returned_unchanged():
     assert to_llm_error(error) is error
 
 
-def test_error_message_keeps_only_the_first_line():
+def test_http_error_body_is_never_in_the_message():
 
-    # Lines after the first can repeat the request, which holds the citizen's question
-    error = Exception("[400] Bad Request\nInput: my NIC is 200012345678")
+    # The error body can repeat the request, which holds the citizen's question
+    response = httpx2.Response(400, request=REQUEST)
+    body = {"code": "invalid_request", "message": "Input: my NIC is 200012345678"}
+    error = openai.BadRequestError("Error code: 400 - Input: my NIC is 200012345678", response=response, body=body)
 
     llm_error = to_llm_error(error)
 
-    assert "Bad Request" in str(llm_error)
+    assert "invalid_request" in str(llm_error)
+    assert "200012345678" not in str(llm_error)
+
+
+def test_other_error_messages_keep_only_the_first_line():
+
+    error = Exception("Something failed\nInput: my NIC is 200012345678")
+
+    llm_error = to_llm_error(error)
+
+    assert "Something failed" in str(llm_error)
     assert "200012345678" not in str(llm_error)

@@ -1,7 +1,8 @@
-"""NVIDIA chat model settings, read from .env."""
+"""Azure OpenAI chat model settings, read from .env."""
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
@@ -14,11 +15,14 @@ ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 MAX_TEMPERATURE = 1
 MAX_TOKENS_LIMIT = 4096
 MAX_TIMEOUT_SECONDS = 120
-NVIDIA_KEY_PREFIX = "nvapi-"
+
+# The OpenAI-compatible v1 API of an Azure OpenAI or Azure AI Foundry resource
+ENDPOINT_PATH = "/openai/v1"
 
 # Every setting must be present in .env (or the environment)
 REQUIRED_VARIABLES = [
-    "NVIDIA_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AZURE_OPENAI_API_KEY",
     "LLM_MODEL",
     "LLM_TEMPERATURE",
     "LLM_MAX_TOKENS",
@@ -36,22 +40,30 @@ class LLMSettings(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    api_key: SecretStr = Field(alias="NVIDIA_API_KEY")
+    endpoint: str = Field(alias="AZURE_OPENAI_ENDPOINT")
+    api_key: SecretStr = Field(alias="AZURE_OPENAI_API_KEY")
+    # The Azure deployment name, e.g. gpt-4.1-mini-1
     model: str = Field(alias="LLM_MODEL", min_length=1)
     # Low values keep answers close to the documents
     temperature: float = Field(alias="LLM_TEMPERATURE", ge=0, le=MAX_TEMPERATURE, allow_inf_nan=False)
     max_tokens: int = Field(alias="LLM_MAX_TOKENS", ge=1, le=MAX_TOKENS_LIMIT)
     timeout_seconds: float = Field(alias="LLM_TIMEOUT_SECONDS", gt=0, le=MAX_TIMEOUT_SECONDS, allow_inf_nan=False)
 
-    @field_validator("api_key")
+    @field_validator("endpoint")
     @classmethod
-    def check_api_key(cls, api_key):
+    def check_endpoint(cls, endpoint):
 
-        # NVIDIA keys always start with "nvapi-"
-        if not api_key.get_secret_value().startswith(NVIDIA_KEY_PREFIX):
-            raise ValueError(f"must start with '{NVIDIA_KEY_PREFIX}'")
+        # Questions may hold personal details, so they are only sent over HTTPS
+        endpoint = endpoint.rstrip("/")
+        url = urlparse(endpoint)
+        if url.scheme != "https" or not url.netloc:
+            raise ValueError("must be an https:// URL")
 
-        return api_key
+        # Other paths are older Azure APIs that need an api-version
+        if url.path != ENDPOINT_PATH:
+            raise ValueError(f"must end with '{ENDPOINT_PATH}'")
+
+        return endpoint
 
 
 # Public functions

@@ -124,7 +124,7 @@ def test_unavailable_knowledge_service_gives_a_safe_reply():
 
 def test_llm_failure_gives_a_safe_reply():
 
-    agent = FakeKnowledgeAgent(error=LLMTimeoutError("NVIDIA did not respond in time"))
+    agent = FakeKnowledgeAgent(error=LLMTimeoutError("Azure OpenAI did not respond in time"))
 
     result = ask(build_graph(agent), "Synthetic question?")
 

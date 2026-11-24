@@ -21,8 +21,9 @@ Copy-Item ai-platform/services/agent-service/.env.example ai-platform/services/a
 Copy-Item ai-platform/services/knowledge-service/rag/.env.example ai-platform/services/knowledge-service/rag/.env
 ```
 
-You need an NVIDIA API key (build.nvidia.com) in both service `.env` files, and the
-`LLM_MODEL` you use in `agent-service/.env`.
+`knowledge-service/rag/.env` needs an NVIDIA API key (build.nvidia.com) for the
+embeddings. `agent-service/.env` needs the Azure OpenAI endpoint, API key, and
+deployment name (`LLM_MODEL`) for the chat model.
 
 ## 2. Use both compose files (once per terminal)
 

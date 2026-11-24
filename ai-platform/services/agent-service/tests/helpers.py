@@ -9,11 +9,14 @@ import pytest
 from app.llm.config import LLMSettings, load_llm_settings
 from app.llm.exceptions import LLMConfigError
 
-# Has the NVIDIA key format, so settings accept it, but it is not a real key: NVIDIA rejects it
-TEST_NVIDIA_KEY = "nvapi-test-key-not-real-1234"
+# Not a real key: Azure rejects it
+TEST_API_KEY = "test-azure-key-not-real-1234"
 
-# A model in the NVIDIA library's model table, so creating the client makes no API call
-TEST_MODEL = "meta/llama-3.3-70b-instruct"
+# A made-up resource; the provider tests block the network, so it is never called
+TEST_ENDPOINT = "https://govai-test.services.ai.azure.com/openai/v1"
+
+# An Azure deployment name
+TEST_MODEL = "gpt-4.1-mini-test"
 
 # A clearly fictional document, so no real passport rule is ever stated by a test
 SYNTHETIC_SOURCE = {
@@ -40,7 +43,8 @@ def make_env(**overrides):
 
     # Valid values for every required variable
     env = {
-        "NVIDIA_API_KEY": TEST_NVIDIA_KEY,
+        "AZURE_OPENAI_ENDPOINT": TEST_ENDPOINT,
+        "AZURE_OPENAI_API_KEY": TEST_API_KEY,
         "LLM_MODEL": TEST_MODEL,
         "LLM_TEMPERATURE": "0.1",
         "LLM_MAX_TOKENS": "512",
@@ -73,15 +77,15 @@ def write_env_file(path, values):
     return path
 
 
-# Real NVIDIA
+# Real Azure OpenAI
 
 def real_settings():
     """The settings from agent-service/.env. Skips the test when they are missing."""
 
-    # Load the real settings; without them the test cannot reach NVIDIA
+    # Load the real settings; without them the test cannot reach Azure OpenAI
     try:
         settings = load_llm_settings()
     except LLMConfigError as error:
-        pytest.skip(f"real NVIDIA LLM settings are not available in agent-service/.env ({error})")
+        pytest.skip(f"real Azure OpenAI LLM settings are not available in agent-service/.env ({error})")
 
     return settings

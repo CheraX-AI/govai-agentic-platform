@@ -37,7 +37,7 @@ class RecordingChatModel(FakeListChatModel):
 
 
 class FailingChatModel(FakeListChatModel):
-    """A fake chat model that always fails, like an NVIDIA timeout."""
+    """A fake chat model that always fails, like an Azure OpenAI timeout."""
 
     def invoke(self, messages, config=None, **kwargs):
 

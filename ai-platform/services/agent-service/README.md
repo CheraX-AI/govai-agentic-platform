@@ -11,7 +11,7 @@ Client (Chainlit chat, LangGraph Studio)         │
          └─► KnowledgeAgent
          ├─ KnowledgeRagClient ── POST /api/v1/retrieve ──► knowledge-service (RAG)
          ├─ RAG prompt with the numbered chunks
-         └─ NVIDIA chat model ─► answer (sources are not shown)
+         └─ Azure OpenAI chat model ─► answer (sources are not shown)
 ```
 
 ## Folder structure
@@ -52,9 +52,9 @@ agent-service/
 │   ├── tools/
 │   │   └── knowledge_rag_client.py # KnowledgeRagClient for the knowledge-service retrieval API
 │   └── llm/
-│       ├── config.py               # NVIDIA chat model settings read from .env
-│       ├── exceptions.py           # LLM errors and NVIDIA error classification
-│       └── provider.py             # LLMProvider: create the NVIDIA client, invoke it
+│       ├── config.py               # Azure OpenAI chat model settings read from .env
+│       ├── exceptions.py           # LLM errors and safe error summaries
+│       └── provider.py             # LLMProvider: create the Azure OpenAI client, invoke it, classify errors
 ├── scripts/
 │   ├── chat_ui.py                  # Chainlit chat with the agent graph
 │   ├── check_llm.py                # Sends one synthetic question to the configured model
@@ -65,7 +65,7 @@ agent-service/
 ├── tests/                          # Unit tests, and live tests skipped without the services
 ├── Dockerfile                      # Image for the Chainlit chat, LangGraph Studio and the chat API
 ├── .dockerignore                   # Keeps .env, .venv, tests, and caches out of the image
-├── .env.example                    # Template for .env (NVIDIA, LLM, knowledge service, agent API, LangSmith)
+├── .env.example                    # Template for .env (Azure OpenAI LLM, knowledge service, agent API, LangSmith)
 ├── langgraph.json
 ├── pytest.ini
 └── requirements.txt
@@ -86,20 +86,25 @@ On macOS or Linux, use `source .venv/bin/activate`.
 
 ## LLM settings
 
-All LLM settings, including the NVIDIA API key, live in `agent-service/.env`. The
-code has no default values, so each variable below is required.
+The agents use a chat model deployed in Azure OpenAI (Azure AI Foundry), through the
+resource's OpenAI-compatible v1 endpoint. All LLM settings, including the API key, live
+in `agent-service/.env`. The code has no default values, so each variable below is
+required. (The knowledge service still uses NVIDIA for embeddings, with its own key in
+`knowledge-service/rag/.env`.)
 
 1. Copy the template: `Copy-Item .env.example .env`
-2. Set `NVIDIA_API_KEY` to your key from [build.nvidia.com](https://build.nvidia.com)
-   and `LLM_MODEL` to the NVIDIA chat model you chose.
+2. In the Azure portal, open the resource's **Keys and Endpoint** page. Set
+   `AZURE_OPENAI_ENDPOINT` to the endpoint followed by `/openai/v1`,
+   `AZURE_OPENAI_API_KEY` to one of the keys, and `LLM_MODEL` to the deployment name.
 
 | Variable | Example | Purpose |
 | --- | --- | --- |
-| `NVIDIA_API_KEY` | `nvapi-...` | Secret API key; must start with `nvapi-` |
-| `LLM_MODEL` | an NVIDIA chat model ID | The chat model the agents use |
+| `AZURE_OPENAI_ENDPOINT` | `https://<resource>.services.ai.azure.com/openai/v1` | The v1 endpoint; must be `https` and end with `/openai/v1` |
+| `AZURE_OPENAI_API_KEY` | | Secret API key of the Azure resource |
+| `LLM_MODEL` | `gpt-4.1-mini-1` | The Azure **deployment name** the agents use |
 | `LLM_TEMPERATURE` | `0.1` | Sampling temperature, 0–1; low values keep answers close to the documents |
 | `LLM_MAX_TOKENS` | `1024` | Maximum tokens in one answer, 1–4096 |
-| `LLM_TIMEOUT_SECONDS` | `30` | Seconds to wait for NVIDIA, up to 120 |
+| `LLM_TIMEOUT_SECONDS` | `30` | Seconds to wait for Azure OpenAI, up to 120 (one retry on a dropped connection, 429, or 5xx) |
 
 ### How the settings are loaded
 
@@ -115,9 +120,9 @@ code has no default values, so each variable below is required.
 - `.env` is ignored by Git. Never commit it, and never put the key in code, logs, or chat.
 - The key is a Pydantic `SecretStr`, so it is hidden when settings are printed, and
   error messages never include it.
-- The NVIDIA client treats the key as a secret field, so it is never part of a LangSmith
+- The OpenAI client treats the key as a secret field, so it is never part of a LangSmith
   trace (checked in `tests/test_llm_provider.py`).
-- NVIDIA usage telemetry is turned off in the provider.
+- Requests go only to `AZURE_OPENAI_ENDPOINT`, over HTTPS.
 
 ### Check the settings
 
@@ -126,7 +131,7 @@ python scripts/check_llm.py
 ```
 
 The script sends one synthetic question with one synthetic document (no real
-government information) and prints the model, the prompt version, whether the call
+government information) and prints the endpoint, the deployment, the prompt version, whether the call
 was traced to LangSmith, and the answer.
 
 Exit codes: `0` the model answered, `1` the call failed, `2` invalid settings.
@@ -145,21 +150,20 @@ messages = build_rag_messages(question, sources)
 answer = invoke_llm(provider, messages, config=build_trace_config())
 ```
 
-Creating the provider does not call NVIDIA when the model is in the NVIDIA library's
-model table. Any other model name is looked up at NVIDIA first, so creating the
-provider can then raise `LLMAuthError` or `LLMUnavailableError`.
+Creating the provider makes no API call, so a wrong key or deployment name shows up on
+the first question.
 
 | Error | Meaning |
 | --- | --- |
 | `LLMConfigError` | A setting is missing or invalid, or the client could not be created |
-| `LLMAuthError` | NVIDIA rejected the API key (401, 403) |
-| `LLMTimeoutError` | NVIDIA did not answer within `LLM_TIMEOUT_SECONDS` (or 408, 504) |
-| `LLMUnavailableError` | NVIDIA is not reachable, rate limiting (429), or had a server error (5xx) |
-| `LLMRequestError` | NVIDIA rejected the request, e.g. an unknown model or a prompt that is too long |
+| `LLMAuthError` | Azure OpenAI rejected the API key (401, 403) |
+| `LLMTimeoutError` | Azure OpenAI did not answer within `LLM_TIMEOUT_SECONDS` (or 408, 504) |
+| `LLMUnavailableError` | Azure OpenAI is not reachable, rate limiting (429), or had a server error (5xx) |
+| `LLMRequestError` | Azure OpenAI rejected the request: unknown deployment (404), the content filter blocked the question or answer, or e.g. a prompt that is too long |
 | `LLMError` | Base class; also an empty answer or an unexpected failure |
 
-Error messages keep only the first line of the NVIDIA error, because the lines after
-it can repeat the request, which holds the citizen's question.
+Error messages keep only the HTTP status and Azure's error code (e.g. `DeploymentNotFound`),
+never the error body, because it can repeat the request, which holds the citizen's question.
 
 ## Knowledge Agent and RAG
 
@@ -174,7 +178,7 @@ For each question, `KnowledgeAgent.answer()`:
    every published document;
 2. when nothing matches, returns `INSUFFICIENT_INFORMATION_REPLY` **without calling the
    LLM**, so the model can never answer from its own knowledge;
-3. otherwise builds the RAG prompt with the numbered chunks and calls the NVIDIA model;
+3. otherwise builds the RAG prompt with the numbered chunks and calls the Azure OpenAI model;
 4. removes any `[n]` document numbers the model still wrote (an answer of only numbers
    is an `LLMError`);
 5. returns a `KnowledgeAnswer`: the answer, the scope, and the prompt version. Citizens
@@ -210,7 +214,7 @@ Add these to `agent-service/.env` (all required, no defaults):
    Or run everything in Docker, see [Run with Docker](#run-with-docker).
 
 Every question is one LangSmith trace: the graph run, the `knowledge_rag_retrieve`
-retriever step (the chunks used), and the `knowledge_agent_answer` NVIDIA call.
+retriever step (the chunks used), and the `knowledge_agent_answer` Azure OpenAI call.
 
 ### Use in code
 
@@ -238,7 +242,7 @@ The graph never shows internal errors. The details are logged with the request I
 | Not about government services | `OUT_OF_SCOPE_REPLY`, a friendly pointer to government services |
 | No matching documents | `INSUFFICIENT_INFORMATION_REPLY` |
 | Knowledge service down or timed out (`KnowledgeServiceUnavailableError`) | "The GovAI assistant is temporarily unavailable. Please try again in a few moments." |
-| NVIDIA failed (`LLMError` subclasses) | The same message |
+| Azure OpenAI failed (`LLMError` subclasses) | The same message |
 | Empty, too short (e.g. "?"), or too long question | A reply that says how to ask, e.g. "Please ask a full question, for example: What documents do I need?" (the knowledge service is not called) |
 | Missing setting | `create_graph()` stops with a message naming the variable |
 
@@ -259,7 +263,7 @@ forwards only the question text.
 ```text
 Citizen app ─► core-service POST /api/chat/message (JWT, citizen)
                  └─► agent-api POST /api/v1/chat (service token, X-Request-ID)
-                       └─► graph ─► Knowledge Agent ─► knowledge-service + NVIDIA
+                       └─► graph ─► Knowledge Agent ─► knowledge-service + Azure OpenAI
 ```
 
 The API runs the graph, not the Knowledge Agent, so a Coordinator Agent can be added
@@ -298,7 +302,7 @@ are not shown which ones. core-service still sends the apps `"sources": []`.
 | Empty, too short or too long question | 200 | advice on how to ask, as the answer |
 | Conversation unknown or another citizen's | 404 | `{"detail": "Conversation not found."}` |
 | The same question is still being answered | 409 | `{"detail": "..."}`, `Retry-After: 2` |
-| Knowledge service, NVIDIA or the conversation database failed | 503 | `{"detail": "..."}` |
+| Knowledge service, Azure OpenAI or the conversation database failed | 503 | `{"detail": "..."}` |
 | Missing or wrong token, or missing or invalid `X-GovAI-Citizen` (checked before the body) | 401 | `{"detail": "..."}` |
 | Body is not exactly `{"message": "<1-4000 characters>"}` plus an optional valid `conversation_id` | 422 | fixed message; the input is never echoed |
 
@@ -366,7 +370,7 @@ core-service ─(service token, X-GovAI-Citizen, {message, conversation_id?})─
   1. start the turn in PostgreSQL     new conversation, or check the owner (404 if not theirs)
                                       same question pending → 409; repeat within 10 min → stored answer
   2. short-term memory (checkpoint)   missing or out of date → last N answered turns from conversation_turns
-  3. graph                            rewrite a follow-up → knowledge-service + NVIDIA → trim to N turns → save checkpoint
+  3. graph                            rewrite a follow-up → knowledge-service + Azure OpenAI → trim to N turns → save checkpoint
   4. finish the turn in PostgreSQL    answer saved before it is returned; failed turns are marked failed;
                                       older checkpoints of the conversation are pruned
 ```
@@ -590,11 +594,11 @@ variables are set; there is no tracing code in this service.
    | `LANGSMITH_HIDE_OUTPUTS` | `true` | Hide the answer |
 
 3. Run `python scripts/check_llm.py`. A trace named `knowledge_agent_answer` appears in
-   the project, with the NVIDIA call, model, token counts, and timing.
+   the project, with the Azure OpenAI call, model, token counts, and timing.
 
 `langgraph dev` loads `.env` through `langgraph.json`, so LangGraph Studio runs are
 traced the same way. One Studio or Chainlit question shows the full path: the graph
-run, the `knowledge_rag_retrieve` retriever step, and the NVIDIA call.
+run, the `knowledge_rag_retrieve` retriever step, and the Azure OpenAI call.
 
 ### What is sent
 
@@ -607,7 +611,7 @@ run, the `knowledge_rag_retrieve` retriever step, and the NVIDIA call.
   same ID the knowledge service logs.
 - With `LANGSMITH_HIDE_INPUTS` and `LANGSMITH_HIDE_OUTPUTS` set to `true`, the question,
   documents, and answer text are not sent.
-- The NVIDIA API key is never sent.
+- The Azure OpenAI API key is never sent.
 
 ### Data rules
 
@@ -633,11 +637,11 @@ pytest
 | `tests/test_workflow.py`, `test_api.py`, `test_conversation_service.py` | Nothing (fake Knowledge Agent and store, in-memory checkpointer) |
 | `tests/test_question_rewrite.py` | Nothing (fake chat model) |
 | `tests/test_memory_window.py`, `test_memory_encryption.py`, `test_memory_config.py` | Nothing |
-| `tests/test_llm_live.py` | `NVIDIA_API_KEY` and the `LLM_*` settings in `.env`, and internet |
+| `tests/test_llm_live.py` | `AZURE_OPENAI_*` and the `LLM_*` settings in `.env`, and internet |
 | `tests/test_rag_live.py` | The above, the `KNOWLEDGE_*` settings, and the knowledge service running |
 | `tests/test_memory_live.py` | `AGENT_MEMORY_*` in `.env` and the memory database set up (conversations and checkpoints) |
 
-`test_llm_live.py` sends only a synthetic question and document to the real NVIDIA API.
+`test_llm_live.py` sends only a synthetic question and document to the real Azure OpenAI deployment.
 It checks that the model answers from the document without a `[1]` marker, gives the
 insufficient-information reply when there are no documents, and that a rejected key
 raises `LLMAuthError`.
