@@ -6,6 +6,7 @@
 #   $env:COMPOSE_FILE = "docker-compose.yml;ai-platform/docker-compose.ai.yml"
 #   docker compose up -d --build knowledge-service agent-chat
 #   docker compose up -d --build knowledge-service agent-api   # chat API for core-service
+#   docker compose up -d --build knowledge-dashboard           # PDF upload dashboard, http://127.0.0.1:8503
 #
 # Compose resolves every path from the folder of the first -f file, so the paths
 # below start at the repository root.
@@ -35,6 +36,33 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    depends_on:
+      - chromadb
+      - seaweedfs
+    networks:
+      - govai-network
+
+  knowledge-dashboard:
+    # Development only: no login, so it is published on localhost and never beyond it
+    build: ./ai-platform/services/knowledge-service/rag
+    image: govai-knowledge-service
+    container_name: govai-knowledge-dashboard
+    restart: unless-stopped
+    command:
+      - streamlit
+      - run
+      - dashboard.py
+      - --server.address=0.0.0.0
+      - --server.port=8503
+      - --server.headless=true
+      - --browser.gatherUsageStats=false
+    env_file: ./ai-platform/services/knowledge-service/rag/.env
+    environment:
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      OBJECT_STORAGE_ENDPOINT: http://seaweedfs:8333
+    ports:
+      - "127.0.0.1:${KNOWLEDGE_DASHBOARD_PORT:-8503}:8503"
     depends_on:
       - chromadb
       - seaweedfs
@@ -96,7 +124,7 @@ services:
     depends_on:
       knowledge-service:
         condition: service_healthy
-      # Conversation memory (AGENT_MEMORY_DATABASE_URL, host postgres) in the root compose file
+      # Conversations and memory checkpoints (AGENT_MEMORY_DATABASE_URL, host postgres): required
       postgres:
         condition: service_healthy
     networks:

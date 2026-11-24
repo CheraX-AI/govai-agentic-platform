@@ -89,13 +89,15 @@ def create_embedder(settings):
     return embedder
 
 
-def embed_chunks(chunks, embedder):
+def embed_chunks(chunks, embedder, on_progress=None):
     """Embed chunks in batches.
 
     A failed batch is recorded and the remaining batches continue, so one bad
     batch never discards the chunks that were embedded successfully. After an
     authentication failure the remaining chunks are marked failed without
     calling NVIDIA again.
+
+    on_progress(done, total), when given, is called after each batch.
     """
 
     settings = embedder.settings
@@ -136,10 +138,14 @@ def embed_chunks(chunks, embedder):
                 "embedding batch failed",
                 extra={"chunks": len(chunk_ids), "error_type": type(error).__name__},
             )
+            if on_progress is not None:
+                on_progress(start + len(batch), len(chunks))
             continue
 
         # The first successful batch sets the dimension for the rest
         expected_dimension = len(vectors[0])
+        if on_progress is not None:
+            on_progress(start + len(batch), len(chunks))
 
         # Keep each vector with its chunk ID, text, and metadata
         for chunk, vector in zip(batch, vectors):
@@ -181,7 +187,7 @@ def embed_query(embedder, question):
     return vector
 
 
-def embed_document(chunks, embedder):
+def embed_document(chunks, embedder, on_progress=None):
     """Embed one document's chunks and return its DocumentEmbeddingResult.
 
     A failed batch is recorded and the other batches are kept. Nothing is saved
@@ -193,7 +199,7 @@ def embed_document(chunks, embedder):
     document_id = chunks[0].metadata["document_id"]
 
     # Embed the chunks in batches, in chunk order
-    result = embed_chunks(chunks, embedder)
+    result = embed_chunks(chunks, embedder, on_progress)
 
     # A rejected key fails every document the same way, so stop here
     if result.auth_failed:
