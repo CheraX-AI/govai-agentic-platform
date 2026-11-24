@@ -151,6 +151,18 @@ class VectorStore:
 
         return removed_count
 
+    def embedded_document_ids(self, document_ids):
+        """Return which of the given documents have chunks stored."""
+
+        if not document_ids:
+            return set()
+
+        # Chunk IDs are "<document_id>:<index>", so the IDs alone say which documents exist
+        chunk_ids = self.chunk_ids_where({"document_id": {"$in": list(document_ids)}})
+        embedded_ids = {chunk_id.rsplit(":", 1)[0] for chunk_id in chunk_ids}
+
+        return embedded_ids
+
     def get_document_chunks(self, document_id):
         """Return a document's chunks in reading order."""
 

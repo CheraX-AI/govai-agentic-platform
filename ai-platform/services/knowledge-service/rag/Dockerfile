@@ -20,6 +20,7 @@ RUN pip install -r requirements.txt
 # Copy the service code
 COPY app ./app
 COPY scripts ./scripts
+COPY dashboard.py ./dashboard.py
 
 # Run as a non-root user
 RUN useradd --create-home --uid 10001 govai \

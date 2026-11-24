@@ -44,6 +44,9 @@ DOCUMENTS_PREFIX = "documents"
 # Department guidelines have no service, so they share one folder per department
 DEPARTMENT_FOLDER = "_department"
 
+# Empty object that makes an empty folder visible, since S3 has no real folders
+FOLDER_MARKER = ".keep"
+
 PDF_CONTENT_TYPE = "application/pdf"
 DOWNLOAD_BLOCK_SIZE = 1024 * 1024
 
@@ -251,20 +254,89 @@ class DocumentStore:
 
         return object_keys
 
+    def list_folders(self):
+        """Return {department: {service folder: [PDF keys]}}, read from the storage keys.
+
+        A .keep marker makes an empty folder appear; markers are never listed as PDFs.
+        """
+
+        folders = {}
+        for item in self.list_objects(f"{DOCUMENTS_PREFIX}/"):
+
+            # Keys look like documents/<department>/<service folder>/<file>
+            parts = item["Key"].split("/")
+            if len(parts) < 3:
+                continue
+
+            services = folders.setdefault(parts[1], {})
+            if len(parts) == 3:
+                continue
+
+            pdf_keys = services.setdefault(parts[2], [])
+            if parts[-1].endswith(".pdf"):
+                pdf_keys.append(item["Key"])
+
+        return folders
+
+    def create_folder(self, department_id, service_id=None):
+        """Create an empty department folder, or a service folder inside a department."""
+
+        # Both IDs become folder names, so they must be safe in a key
+        check_safe_id(department_id, "department_id")
+        folder = f"{DOCUMENTS_PREFIX}/{department_id}/"
+        if service_id is not None:
+            check_safe_id(service_id, "service_id")
+            folder += f"{service_id}/"
+
+        self.put_empty_object(f"{folder}{FOLDER_MARKER}")
+
+    def delete_document(self, object_key):
+        """Delete one stored PDF. Deleting a PDF that is already gone is not an error."""
+
+        # Only document keys may be deleted, never a folder or a marker
+        document_id_from_key(object_key)
+
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=object_key)
+
+        except ClientError as error:
+            raise to_storage_error(error)
+
+        except (BotoConnectionError, HTTPClientError):
+            raise StorageConnectionError("Object storage is not reachable")
+
+        logger.info("document deleted", extra={"object_key": object_key})
+
+    def read_file_name(self, object_key):
+        """The original file name of a stored PDF."""
+
+        headers = self.read_headers(object_key)
+        file_name = stored_file_name(headers, object_key)
+
+        return file_name
+
     # Helper methods
 
-    def list_pdf_objects(self, source):
+    def put_empty_object(self, object_key):
 
-        prefix = prefix_for(source)
+        try:
+            self.client.put_object(Bucket=self.bucket, Key=object_key, Body=b"")
+
+        except ClientError as error:
+            raise to_storage_error(error)
+
+        except (BotoConnectionError, HTTPClientError):
+            raise StorageConnectionError("Object storage is not reachable")
+
+    def list_objects(self, prefix):
+
         items = []
 
         try:
             # A listing returns at most 1000 keys, so read every page
             paginator = self.client.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
-                for item in page.get("Contents", []):
-                    if item["Key"].endswith(".pdf"):
-                        items.append(item)
+                items.extend(page.get("Contents", []))
 
         except ClientError as error:
             if is_not_found(error):
@@ -273,6 +345,15 @@ class DocumentStore:
 
         except (BotoConnectionError, HTTPClientError):
             raise StorageConnectionError("Object storage is not reachable")
+
+        return items
+
+    def list_pdf_objects(self, source):
+
+        items = []
+        for item in self.list_objects(prefix_for(source)):
+            if item["Key"].endswith(".pdf"):
+                items.append(item)
 
         return items
 

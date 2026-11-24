@@ -34,6 +34,7 @@ rag/
 │       ├── config.py             # ChromaDB settings read from .env
 │       ├── exceptions.py         # Vector database errors
 │       └── vector_store.py       # VectorStore: store, read, delete, search chunks in ChromaDB
+├── dashboard.py                  # Development dashboard: SeaweedFS folders, PDF upload, live embedding steps
 ├── scripts/
 │   ├── upload_documents.py       # Uploads PDF files to SeaweedFS
 │   ├── process_documents.py      # SeaweedFS PDFs → chunks → embeddings → ChromaDB
@@ -481,6 +482,26 @@ and that document is not stored, so a partly embedded version never replaces a c
 one; run the script again to embed and store it. Every run embeds all chunks again;
 ChromaDB updates the records by `chunk_id`, so nothing is duplicated. If NVIDIA rejects
 the API key, embedding stops, but the remaining PDFs are still extracted and chunked.
+
+## Dashboard (development)
+
+`dashboard.py` is a small Streamlit page for uploading PDFs without the scripts. It shows the
+SeaweedFS folders (`documents/<department>/<service>/`), uploads a PDF into a folder, then
+extracts, embeds, and stores it in ChromaDB one step at a time. The icon on the right of each
+PDF opens the steps with their times; a failed PDF has a Retry button, and Delete removes the
+PDF and its embeddings. It has no login, so it is for development only.
+
+```powershell
+# From the repository root, with the root and ai-platform compose files (see ai-platform/README.md)
+docker compose up -d --build knowledge-dashboard
+```
+
+Open http://127.0.0.1:8503. Without Docker, run `streamlit run dashboard.py` from this folder.
+
+Folders are only key prefixes, so a new empty folder is a zero-byte `.keep` object (hidden from
+the PDF lists). The upload by file name reads `Department_Service.pdf`, for example
+`IRD_TIN_REGISTRATION.pdf`; a name without `_` is a department guideline. Uploading the same
+file name again replaces the old version.
 
 ## Searching documents
 

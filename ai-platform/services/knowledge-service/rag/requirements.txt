@@ -28,6 +28,9 @@ chromadb-client==1.5.9
 fastapi==0.162.0
 uvicorn==0.54.0
 
+# Development dashboard for uploading PDFs (dashboard.py)
+streamlit==1.66.1
+
 # Loads embedding, storage, and vector database settings from .env
 python-dotenv==1.2.4
 
