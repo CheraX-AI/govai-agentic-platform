@@ -2,6 +2,12 @@ import type { Conversation } from '../chat/useConversation'
 import { ChatComposer } from '../components/chat/ChatComposer'
 import { Icon } from '../components/Icon'
 
+const quickActions = [
+  ['search', 'Find services', 'Which government service do I need to '],
+  ['status', 'Check application status', 'How can I check the status of my '],
+  ['documents', 'Required documents', 'What documents do I need for '],
+] as const
+
 export default function HomePage({ conversation, onOpenChat }: {
   conversation: Conversation
   onOpenChat: () => void
@@ -9,9 +15,9 @@ export default function HomePage({ conversation, onOpenChat }: {
   return (
     <>
       <div className="home-hero">
-        <p>Hello 👋</p>
+        <p>Ayubowan 👋</p>
         <h1>How can I help you today?</h1>
-        <p>Ask me anything about government services in Sri Lanka.</p>
+        <p>Ask about any government service in Sri Lanka: documents, applications, fees and more.</p>
       </div>
       <div className="home-chat-entry">
         <ChatComposer conversation={conversation} onSend={onOpenChat} />
@@ -23,17 +29,25 @@ export default function HomePage({ conversation, onOpenChat }: {
       {conversation.messages.length > 0 && (
         <a href="/app/chat">Open current conversation</a>
       )}
-      <div className="suggestion-previews">
-        {[
-          ['search', 'Find government services'],
-          ['status', 'Check application status'],
-          ['request', 'Submit a request'],
-          ['documents', 'Get required documents'],
-        ].map(([icon, label]) => (
-          <div className={`suggestion-preview ${icon}`} key={icon}>
+      <div className="suggestion-previews" aria-label="Quick actions">
+        {quickActions.map(([icon, label, prompt]) => (
+          <button
+            type="button"
+            className={`suggestion-preview ${icon}`}
+            key={icon}
+            onClick={() => {
+              // Fill the input so the citizen can finish the question before sending.
+              conversation.setDraft(prompt)
+              requestAnimationFrame(() => {
+                const input = document.getElementById('chat-message') as HTMLTextAreaElement | null
+                input?.focus()
+                input?.setSelectionRange(prompt.length, prompt.length)
+              })
+            }}
+          >
             <span><Icon collection="shell" name={`suggest-${icon}`} /></span>
-            <strong>{label}</strong>
-          </div>
+            {label}
+          </button>
         ))}
       </div>
     </>

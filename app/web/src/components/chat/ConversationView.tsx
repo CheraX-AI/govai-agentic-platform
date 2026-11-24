@@ -2,10 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { Conversation } from '../../chat/useConversation'
 import { ChatMessage } from './ChatMessage'
 
-export function ConversationView({ conversation, showDate = true }: {
-  conversation: Conversation
-  showDate?: boolean
-}) {
+export function ConversationView({ conversation }: { conversation: Conversation }) {
   const viewport = useRef<HTMLDivElement>(null)
   const following = useRef(true)
   const [latest, setLatest] = useState(false)
@@ -51,7 +48,7 @@ export function ConversationView({ conversation, showDate = true }: {
               message; earlier messages remain in this page.
             </p>
           </div>
-        ) : showDate && <p className="chat-date">Today</p>}
+        ) : <p className="chat-date">Today</p>}
         {conversation.messages.map(message => <ChatMessage key={message.id} message={message} />)}
         <div className="chat-feedback" role="status">
           {conversation.status === 'pending'

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import { ApplicationHeader } from './ApplicationHeader'
 import { Sidebar } from './Sidebar'
 import type { ApplicationPage } from './Sidebar'
 import { ContentContainer } from './ContentContainer'
+import { TopBar } from './TopBar'
 import '../../styles/application.css'
+import '../../styles/theme-dark.css'
 
 export function ApplicationLayout({
   page,
@@ -76,22 +77,22 @@ export function ApplicationLayout({
       >
         Skip to content
       </a>
-      <ApplicationHeader
-        onLogout={onLogout}
-        onOpenMenu={() => {
-          opener.current = document.querySelector<HTMLElement>('.menu-toggle')
-          dialog.current?.showModal()
-        }}
-      />
       <div className="application-body">
         <aside className="desktop-sidebar">
           <Sidebar
             page={page}
+            onLogout={onLogout}
             onNewChat={onNewChat}
             conversationAvailable={conversationAvailable}
           />
         </aside>
-        <ContentContainer page={page}>{children}</ContentContainer>
+        <div className="application-main">
+          <TopBar onOpenMenu={button => {
+            opener.current = button
+            dialog.current?.showModal()
+          }} />
+          <ContentContainer page={page}>{children}</ContentContainer>
+        </div>
       </div>
       <dialog
         ref={dialog}
@@ -116,12 +117,15 @@ export function ApplicationLayout({
 
             // Navigation commands such as New chat are buttons, not just links.
 
-            if ((event.target as HTMLElement).closest('a[href], button:not(:disabled)')) {
+            // The account gear only opens its menu, so the drawer stays open.
+            const target = event.target as HTMLElement
+            if (target.closest('a[href], button:not(:disabled)') && !target.closest('.sidebar-account-settings')) {
               closeMenu()
             }
           }}>
             <Sidebar
               page={page}
+              onLogout={onLogout}
               onNewChat={onNewChat}
               conversationAvailable={conversationAvailable}
             />

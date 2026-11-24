@@ -1,23 +1,34 @@
 import { NavigationItem } from './NavigationItem'
+import { SidebarAccount } from './SidebarAccount'
 
 export type ApplicationPage = 'home' | 'recent' | 'chat'
 
-export function Sidebar({ page, onNewChat, conversationAvailable }: {
+export function Sidebar({ page, onLogout, onNewChat, conversationAvailable }: {
   page: ApplicationPage
+  onLogout: () => void
   onNewChat?: () => void
   conversationAvailable?: boolean
 }) {
   return (
     <nav className="application-sidebar" aria-label="Application">
-      <NavigationItem
-        label="New chat"
-        icon="new-chat"
-        href="/app/home"
-        onClick={onNewChat}
-        newChat
-        active={page === 'home'}
-      />
+      <a className="sidebar-brand" href="/app/home" aria-label="GovAI home">
+        <img src="/assets/figma/shell/emblem.png" width="57" height="48" alt="" />
+        <span className="sidebar-brand-divider" />
+        <span className="sidebar-brand-text">
+          <span className="wordmark"><span>Gov</span><span>AI</span></span>
+          <small>Government Assistant</small>
+        </span>
+      </a>
+      <p className="sidebar-section-label">Workspace</p>
       <div className="primary-navigation">
+        <NavigationItem
+          label="New chat"
+          icon="new-chat"
+          href="/app/home"
+          onClick={onNewChat}
+          newChat
+          active={page === 'home'}
+        />
         {conversationAvailable && (
           <NavigationItem
             label="Current conversation"
@@ -34,11 +45,10 @@ export function Sidebar({ page, onNewChat, conversationAvailable }: {
         />
         <NavigationItem label="My requests" icon="requests" />
         <NavigationItem label="Services" icon="services" />
+        <NavigationItem label="Artifacts" icon="artifacts" />
       </div>
       <div className="sidebar-utilities">
-        <p className="unavailable-note">Other destinations unavailable</p>
-        <NavigationItem label="Help & support" icon="help" />
-        <NavigationItem label="Settings" icon="settings" />
+        <SidebarAccount onLogout={onLogout} />
       </div>
     </nav>
   )
