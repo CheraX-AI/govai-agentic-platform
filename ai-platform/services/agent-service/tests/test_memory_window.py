@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.memory.window import earlier_messages, messages_to_forget
+from app.memory.window import earlier_messages, messages_to_forget, turns_to_messages
 
 
 # Helpers
@@ -118,3 +118,26 @@ def test_first_question_has_no_earlier_messages():
 
     assert earlier_messages(turn("One?")) == []
     assert earlier_messages([]) == []
+
+
+# Restored turns
+
+class StoredTurn:
+
+    def __init__(self, question, answer):
+
+        self.question = question
+        self.answer = answer
+
+
+def test_stored_turns_become_question_answer_pairs_oldest_first():
+
+    messages = turns_to_messages([StoredTurn("One?", "1"), StoredTurn("Two?", "2")])
+
+    assert [type(message) for message in messages] == [HumanMessage, AIMessage, HumanMessage, AIMessage]
+    assert [message.content for message in messages] == ["One?", "1", "Two?", "2"]
+
+
+def test_no_stored_turns_give_no_messages():
+
+    assert turns_to_messages([]) == []

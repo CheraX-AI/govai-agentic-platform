@@ -11,7 +11,16 @@ import (
 var (
 	ErrUnavailable = errors.New("knowledge agent unavailable")
 	ErrResponse    = errors.New("invalid knowledge agent response")
+
+	// ErrNotFound: the agent has no such conversation for this citizen (unknown or another citizen's).
+	ErrNotFound = errors.New("conversation not found")
+
+	// ErrBusy: the agent is still answering the same question in this conversation.
+	ErrBusy = errors.New("question is still being answered")
 )
+
+// maxCitizenLength matches the agent's limit for a Keycloak subject.
+const maxCitizenLength = 255
 
 type Agent interface {
 	Ask(context.Context, chatcontract.Question) (chatcontract.Reply, error)
@@ -40,21 +49,28 @@ func requestIDFrom(ctx context.Context) string {
 	return id
 }
 
-type conversationIDKey struct{}
+type citizenKey struct{}
 
-// WithConversationID lets the HTTP adapter forward the resolved, ownership-checked
-// conversation ID upstream, as "conversation_id" in the agent request body.
-func WithConversationID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, conversationIDKey{}, id)
+// WithCitizen carries the verified token subject to the HTTP adapter, which sends it
+// as X-GovAI-Citizen. agent-service owns conversations and checks ownership with it.
+func WithCitizen(ctx context.Context, subject string) context.Context {
+	return context.WithValue(ctx, citizenKey{}, subject)
 }
 
-func conversationIDFrom(ctx context.Context) string {
-	id, _ := ctx.Value(conversationIDKey{}).(string)
-	if !chatcontract.ValidConversationID(id) {
+func citizenFrom(ctx context.Context) string {
+	subject, _ := ctx.Value(citizenKey{}).(string)
+	if len(subject) == 0 || len(subject) > maxCitizenLength {
 		return ""
 	}
 
-	return id
+	// Printable ASCII only, so the value is a safe header
+	for _, r := range subject {
+		if r <= 32 || r >= 127 {
+			return ""
+		}
+	}
+
+	return subject
 }
 
 // Unavailable is used when no knowledge agent is configured.

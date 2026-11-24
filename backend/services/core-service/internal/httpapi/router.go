@@ -14,25 +14,8 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation"
 	"github.com/gin-gonic/gin"
 )
-
-// Conversations resolves the conversation ID for a citizen's message
-// (conversation.Service). owner is always the verified token subject.
-type Conversations interface {
-	Resolve(ctx context.Context, owner, requested string) (string, error)
-}
-
-// Messages keeps the encrypted record of each exchange (conversation.Messages).
-type Messages interface {
-	Start(ctx context.Context, owner, conversationID, text string) (conversation.Turn, error)
-	Complete(ctx context.Context, turn conversation.Turn, answer string) error
-	Fail(ctx context.Context, turn conversation.Turn) error
-}
-
-// recordTimeout bounds saving a turn's outcome after the agent call.
-const recordTimeout = 5 * time.Second
 
 func fail(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": message, "code": code})
@@ -45,16 +28,15 @@ type Settings struct {
 	MaxConcurrent int           // chats answered at the same time, all users (default 8, 1-64)
 }
 
-// NewRouter protects chat requests and applies shared request limits.
+// NewRouter protects chat requests and applies shared request limits. It stores
+// nothing: agent-service owns conversations and their messages.
 func NewRouter(
 	verifier *authn.Verifier,
 	agent chat.Agent,
-	conversations Conversations,
-	messages Messages,
 	logger *slog.Logger,
 	settings Settings,
 ) (*gin.Engine, error) {
-	if verifier == nil || agent == nil || conversations == nil || messages == nil {
+	if verifier == nil || agent == nil {
 		return nil, errors.New("invalid chat router dependencies")
 	}
 
@@ -249,102 +231,38 @@ func NewRouter(
 				return
 			}
 
-			// The owner is the verified token subject, never a client-supplied value.
-			// Unknown and other citizens' IDs both get 404, so IDs cannot be probed.
-			conversationID, err := conversations.Resolve(ctx, identity.Subject, question.ConversationID())
-			if err != nil {
-				switch {
-				case errors.Is(err, conversation.ErrNotFound):
-					fail(c, 404, "conversation_not_found", "Conversation not found.")
-				case errors.Is(ctx.Err(), context.DeadlineExceeded):
-					fail(c, 504, "chat_timeout", "Chat request timed out.")
-				default:
-					logger.Warn("conversation storage unavailable", "request_id", c.Writer.Header().Get("X-Request-ID"))
-					fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
-				}
-
-				return
-			}
-
-			// The question is saved (encrypted, pending) before the agent is asked.
-			requestID := c.Writer.Header().Get("X-Request-ID")
-			turn, err := messages.Start(ctx, identity.Subject, conversationID, question.Text())
-			if err != nil {
-				switch {
-				case errors.Is(err, conversation.ErrNotFound):
-					fail(c, 404, "conversation_not_found", "Conversation not found.")
-				case errors.Is(err, conversation.ErrInProgress):
-					c.Header("Retry-After", "2")
-					fail(c, 503, "chat_busy", "This message is still being answered. Try again shortly.")
-				case errors.Is(ctx.Err(), context.DeadlineExceeded):
-					fail(c, 504, "chat_timeout", "Chat request timed out.")
-				default:
-					logger.Warn("message storage unavailable", "request_id", requestID)
-					fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
-				}
-
-				return
-			}
-
-			// A retry of an answered question gets the stored answer; the agent is not asked again.
-			if answer, ok := turn.Answered(); ok {
-				encoded, err := chatcontract.Encode(chatcontract.Reply{Answer: answer, ConversationID: conversationID})
-				if err != nil {
-					fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
-					return
-				}
-
-				c.Data(200, "application/json; charset=utf-8", encoded)
-				return
-			}
-
-			// Outcomes are saved even if the client has gone, within their own short budget.
-			failTurn := func() {
-				record, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
-				defer cancel()
-				if messages.Fail(record, turn) != nil {
-					logger.Warn("message status not saved", "request_id", requestID)
-				}
-			}
-
-			ctx = chat.WithConversationID(ctx, conversationID)
+			// agent-service owns conversations: it creates the ID or checks that this
+			// citizen owns it, using the verified token subject, never a client value.
+			ctx = chat.WithCitizen(ctx, identity.Subject)
 			reply, err := agent.Ask(ctx, question)
 			if err != nil || ctx.Err() != nil {
-				failTurn()
-				if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				switch {
+				case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
 					fail(c, 504, "chat_timeout", "Chat request timed out.")
-				} else if errors.Is(err, chat.ErrResponse) {
+				// Unknown and other citizens' IDs both get 404, so IDs cannot be probed
+				case errors.Is(err, chat.ErrNotFound):
+					fail(c, 404, "conversation_not_found", "Conversation not found.")
+				case errors.Is(err, chat.ErrBusy):
+					c.Header("Retry-After", "2")
+					fail(c, 503, "chat_busy", "This message is still being answered. Try again shortly.")
+				case errors.Is(err, chat.ErrResponse):
 					fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")
-				} else {
+				default:
 					fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
 				}
 
 				return
 			}
 
-			// The agent does not choose the conversation; core-service does. An agent
-			// that echoes a different ID is broken, so its answer is not trusted.
-			if reply.ConversationID != "" && reply.ConversationID != conversationID {
-				failTurn()
+			// An agent that answers in a different conversation than the one asked about is broken
+			if requested := question.ConversationID(); requested != "" && reply.ConversationID != requested {
 				fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")
 				return
 			}
 
-			reply.ConversationID = conversationID
 			encoded, err := chatcontract.Encode(reply)
 			if err != nil {
-				failTurn()
 				fail(c, 502, "invalid_agent_response", "Unable to retrieve a valid answer.")
-				return
-			}
-
-			// The answer is returned only once it is saved: no success without a record.
-			record, cancel := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
-			err = messages.Complete(record, turn, reply.Answer)
-			cancel()
-			if err != nil {
-				logger.Warn("answer not saved", "request_id", requestID)
-				fail(c, 503, "chat_unavailable", "Chat temporarily unavailable. Try again later.")
 				return
 			}
 

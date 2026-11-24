@@ -36,9 +36,9 @@ media/TLS/CORS boundaries, cookie-only rejection, safe failures/logs and concurr
 admission limits. Success answers/citations in tests are explicitly synthetic.
 Local server startup and trusted-CA health 200 / unauthenticated chat 401 passed.
 Existing authentication/profile storage remains in auth-service; core only relies
-on validated JWT citizen/email claims and performs no profile lookup. Its only
-database use is conversation ownership (see "Conversation IDs") and the encrypted
-message record (see "Conversation messages").
+on validated JWT citizen/email claims and performs no profile lookup. It stores no
+conversation data: agent-service owns conversations (see "Conversations (owned by
+agent-service)").
 
 ## Current GA-65 limits
 
@@ -154,32 +154,45 @@ real generated answers/citations, and teammate web/mobile integration remain
 pending. The adapter remains disabled in the local configuration. Clients must
 render agent text safely; this backend does not turn AI output into trusted HTML.
 
-## Conversation IDs
+## Conversations (owned by agent-service)
 
-Each chat belongs to a conversation, identified by a UUID and owned by one
-citizen. The ID and its owner are stored, and every exchange is saved encrypted
-(see "Conversation messages"). An internal read for recent messages exists, but no prompt memory uses it yet.
+agent-service owns conversations: it creates the IDs, records and checks the owner,
+keeps every question and answer (encrypted with its own keys), and holds the history.
+core-service stores no conversation data. It verifies the citizen's token, then
+forwards the question with the citizen's identity.
 
-- Request: `{"message": "...", "conversation_id": "<uuid>"}`. `conversation_id`
-  is optional, so existing clients keep working; leaving it out starts a new
-  conversation.
-- Reply: `{"answer": "...", "sources": [], "conversation_id": "<uuid>"}`. Send the
-  ID back with the next message to continue the same conversation.
+- Request: `{"message": "...", "conversation_id": "<uuid>"}`. `conversation_id` is
+  optional; leaving it out starts a new conversation, which agent-service creates.
+- Reply: `{"answer": "...", "sources": [], "conversation_id": "<uuid>"}`. Send the ID
+  back with the next message to continue the same conversation.
 - The owner is always the verified token subject (`sub`), never a request field;
   unknown fields such as `citizen_id` are rejected.
-- Malformed ID (not a lowercase UUID): **400** `invalid_conversation_id`. Unknown ID,
-  or another citizen's: **404** `conversation_not_found` (the same answer, so IDs
-  cannot be probed). Storage down: **503** `chat_unavailable`.
-- The resolved ID goes to agent-service in the request body:
-  `{"message": "...", "conversation_id": "<uuid>"}`. The agent returns the same ID; a
-  reply with a different ID is rejected (**502** `invalid_agent_response`), so only
-  core-service decides the conversation.
+- What core sends agent-service: the body `{"message", "conversation_id"?}` exactly as
+  the citizen sent it, plus `Authorization: Bearer <KNOWLEDGE_AGENT_BEARER_TOKEN>` and
+  `X-GovAI-Citizen: <sub>`. agent-service trusts the citizen header only together with
+  the service token, so keep that token secret (accepted risk in the memory plan:
+  anyone with it could act as any citizen).
 
-Storage is the `govai_core` database on the shared PostgreSQL server, separate from
-every other service's database. Table `core.conversations` (`internal/database/migrations/001_conversations.sql`). The
-API login `govai_core_app` can only read and insert; it cannot update or delete
-owners. After pulling a new migration, run `go run ./cmd/migrate` again. The API refuses to start if `CORE_DATABASE_URL` is missing, the schema is not
-migrated, or the login is too privileged.
+| Situation | Status and code |
+| --- | --- |
+| Malformed ID (not a lowercase UUID) | **400** `invalid_conversation_id` (agent not called) |
+| Unknown ID, or another citizen's (agent 404) | **404** `conversation_not_found`: the same answer, so IDs cannot be probed |
+| The same question is still being answered (agent 409) | **503** `chat_busy` with `Retry-After: 2` |
+| A reply that names a different conversation than the one asked about | **502** `invalid_agent_response` |
+| Agent or its storage down | **503** `chat_unavailable` |
+
+Retries, the quick-repeat replay and stale pending questions are handled by
+agent-service with the same rules core-service used before (see the agent-service
+README, "Conversations and memory").
+
+## Database
+
+core-service keeps its `govai_core` database for its own features; it holds no
+conversation tables. Migration `004_drop_conversations.sql` removed
+`core.conversations` and `core.conversation_messages` (test data only) when
+conversations moved to agent-service. After pulling a new migration, run
+`go run ./cmd/migrate` again. The API refuses to start if `CORE_DATABASE_URL` is
+missing, the schema is not migrated, or the login is too privileged.
 
 One-time setup, from this folder:
 
@@ -189,120 +202,15 @@ psql -U postgres -h 127.0.0.1 -p <port> -v owner_password='<random>' -v app_pass
 # 2. Put CORE_MIGRATION_DATABASE_URL (owner) in .env.migrate and CORE_DATABASE_URL (app) in .env
 # 3. Apply the schema with the owner login
 go run ./cmd/migrate
-# 4. Optional live test with the app login
-$env:CORE_TEST_DATABASE_URL = "<CORE_DATABASE_URL value>"; go test -tags integration ./internal/conversation/pgstore/
-# 5. Optional migration test: needs a login that can create databases and SET ROLE govai_core_app
+# 4. Optional migration test: needs a login that can create databases and SET ROLE govai_core_app
 #    (a local superuser); each test creates and drops its own govai_core_test_* database
 $env:CORE_TEST_ADMIN_DATABASE_URL = "postgres://postgres:<password>@127.0.0.1:<port>/postgres?sslmode=disable"; go test -tags integration ./internal/database/
 ```
 
-Tests: `internal/conversation` (new UUID, reuse, citizen A vs B, unknown and
-malformed IDs, storage failures), `internal/httpapi/conversation_test.go` (the same
-through the authenticated router, plus 400/404/503 codes), and the agent HTTP test
-checks that the agent request body carries the ID.
-
-## Conversation messages
-
-Each exchange is saved, encrypted, in `core.conversation_messages`
-(`internal/database/migrations/002_conversation_messages.sql` and `003_message_turns.sql`).
-`Messages.Recent` reads the recent window internally; there is no history API and no AI memory yet.
-
-How a chat request is recorded (`internal/conversation/messages.go`):
-
-1. After the conversation is resolved, the question is saved as a `citizen` message,
-   `pending`, before the agent is asked. If that save fails: **503**
-   `chat_unavailable`, and the agent is not called.
-2. Agent answer: the `assistant` message is added and the question marked `completed`
-   in one transaction. Only then is the answer returned. If the save fails the citizen
-   gets **503** `chat_unavailable`, never an unsaved answer.
-3. Agent failure (error, timeout, invalid or mismatched reply): the question is marked
-   `failed` and the usual error is returned.
-
-Outcomes (steps 2 and 3) are saved even if the client disconnects, within 5 seconds.
-
-Retries never add a second turn. The client contract has no idempotency key, so a
-retry is a message equal to the conversation's last question:
-
-- last question `failed`: it is reopened (`pending` again) and the agent is asked again;
-- last question `completed` less than 10 minutes ago: the stored answer is returned
-  (same JSON: `answer`, `sources: []`, `conversation_id`) and the agent is not asked;
-  after 10 minutes the same text is a new question;
-- last question still `pending`: **503** `chat_busy` with `Retry-After: 2`. A question
-  pending longer than `CHAT_REQUEST_TIMEOUT` + 30s belongs to a lost request; it is
-  marked `failed` and can be retried.
-
-A per-conversation advisory lock makes this decision safe under concurrent requests.
-
-Storage:
-
-- `message_id` (UUID primary key) and `conversation_id`, a foreign key to
-  `core.conversations`. Ownership stays on the conversation: every write checks the
-  verified token subject. A conversation that has messages cannot be deleted.
-- `ordinal` is assigned by the database and orders a conversation's messages;
-  the `(conversation_id, ordinal)` index serves ordered reads.
-- `role` is `citizen` or `assistant`. An assistant message has `reply_to`, its
-  question in the same conversation; each question has at most one answer.
-- `status`: a question is `pending`, `completed` or `failed`; pending may complete or
-  fail, failed may be retried, completed is final. Answers are always `completed`.
-- `created_at` and `updated_at` are set by the database.
-- `content_ciphertext`: the original text sealed with AES-256-GCM (nonce + ciphertext
-  + tag, as in auth-service), never plaintext. The additional data binds it to its
-  conversation, message ID and role, so it cannot be moved to another row. No tokens
-  or credentials are stored, and message text is never logged.
-- `govai_core_app` may read, insert and set `status`; it cannot choose the ordinal or
-  timestamps, rewrite content, move or delete messages.
-
-### Reading recent messages
-
-`Messages.Recent(ctx, owner, conversationID, limit)` is the internal read for the
-future memory loader. There is no HTTP endpoint for it and nothing calls it yet.
-
-- The owner must be the verified token subject. Unknown and other citizens'
-  conversations both return `ErrNotFound`.
-- It returns the last `limit` completed turns (1 to 50), each as the citizen message
-  then the assistant message, oldest first. Failed and pending questions are left out.
-- Order comes from the database `ordinal`, so it is the same after a restart.
-- A turn that does not decrypt (sealed with another key) is skipped, not fatal.
-- Storage errors return `ErrUnavailable`, with no database detail.
-
-### Encryption and key handling
-
-- Message text is encrypted in core-service before it reaches PostgreSQL, with
-  AES-256-GCM: a random 12-byte nonce, the ciphertext and a 16-byte tag, as in
-  auth-service. The database never sees plaintext or the key.
-- The additional data binds each value to its conversation, message ID and role, so a
-  stored value copied to another row does not decrypt.
-- The key is `CORE_CONVERSATION_DATA_KEY` (required): base64 of 32 random bytes, kept
-  in the git-ignored `.env` or the deployment's secret store, never in the database,
-  logs or responses. The API refuses to start if it is missing, malformed, not 32
-  bytes or all zero. Generate one:
-
-  ```powershell
-  [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-  ```
-
-- Keep it stable. Messages sealed with an old key cannot be read with a new one: they
-  are skipped by `Recent`, and a repeated question starts a new turn. There is no key
-  rotation yet, as in auth-service.
-
-### Retention
-
-Messages are kept indefinitely. The runtime login cannot delete messages or
-conversations, and there is no deletion job, the same as auth-service ("No automatic
-key rotation, retention deletion or schema downgrade"). A retention period and
-deletion (for example on citizen request) need a separate decision and migration.
-
-### Masking and metadata
-
-- No masked copy is stored. The only copy is the encrypted original, which already
-  keeps the text unreadable at rest. The project has no message-masking design to follow
-  (masking exists only for email and phone in account recovery). If the agent ever needs
-  masked history, mask when the memory is built, not in storage.
-- No agent retrieval metadata (sources, document names, scores) is stored. Citizens are
-  not shown sources, and core-service only keeps what is needed to rebuild the chat.
-- Stored per message: IDs, conversation, role, status, the encrypted text and two
-  timestamps. Not stored: access tokens, passwords, credentials, the token subject (it
-  stays on `core.conversations`), IP addresses, user agents or request IDs.
+Tests: `internal/httpapi/router_test.go` (conversation ID passed through, agent 404 and
+409 mapped, a reply in another conversation rejected), `internal/chat/http_agent_test.go`
+(the citizen header is always sent and never empty; 404 and 409 mapping) and the agent
+HTTP test through the authenticated router.
 
 Migration checksums are taken over LF line endings, so a Windows checkout (CRLF) and
 the Linux image agree. `internal/database/database_test.go` pins every shipped

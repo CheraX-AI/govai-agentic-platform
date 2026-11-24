@@ -1,4 +1,4 @@
-"""The agent graph: START -> knowledge_agent -> [remember] -> END."""
+"""The agent graph: START -> small_talk or knowledge_agent -> [remember] -> END."""
 
 import logging
 
@@ -7,12 +7,14 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.agents.knowledge_agent.agent import create_knowledge_agent
 from app.agents.knowledge_agent.validation import EMPTY_QUESTION_REPLY, InvalidQuestionError
+from app.agents.small_talk import small_talk_reply
 from app.graph.constants import (
     ASSISTANT_UNAVAILABLE_REPLY,
     FAILURE_INVALID_QUESTION,
     FAILURE_UNAVAILABLE,
     KNOWLEDGE_AGENT_NODE,
     REMEMBER_NODE,
+    SMALL_TALK_NODE,
 )
 from app.llm.exceptions import LLMError
 from app.memory.config import DEFAULT_MAX_TURNS
@@ -83,6 +85,23 @@ class KnowledgeAgentNode:
         return update
 
 
+class SmallTalkNode:
+    """Graph node that answers a greeting, thanks or acknowledgment with a fixed reply, without the documents."""
+
+    def __call__(self, state):
+
+        # route_message sent only small talk here, so there is always a reply
+        reply = AIMessage(content=small_talk_reply(latest_question(state["messages"])))
+        update = {
+            "messages": [reply],
+            "reply": reply,
+            "knowledge_answer": None,
+            "failure": None,
+        }
+
+        return update
+
+
 class RememberNode:
     """Graph node that trims the remembered chat before it is saved."""
 
@@ -116,17 +135,20 @@ def build_graph(knowledge_agent, checkpointer=None, max_turns=DEFAULT_MAX_TURNS)
     # Create the graph with the shared conversation state
     builder = StateGraph(AgentState)
 
-    # Add the agent node: start -> knowledge agent
+    # Add the answer nodes: start -> small talk or knowledge agent
+    builder.add_node(SMALL_TALK_NODE, SmallTalkNode())
     builder.add_node(KNOWLEDGE_AGENT_NODE, KnowledgeAgentNode(knowledge_agent))
-    builder.add_edge(START, KNOWLEDGE_AGENT_NODE)
+    builder.add_conditional_edges(START, route_message, [SMALL_TALK_NODE, KNOWLEDGE_AGENT_NODE])
 
     # Only a remembering graph trims its chat; without memory nothing is kept anyway
-    if checkpointer is None:
-        builder.add_edge(KNOWLEDGE_AGENT_NODE, END)
-    else:
+    last_node = END
+    if checkpointer is not None:
         builder.add_node(REMEMBER_NODE, RememberNode(max_turns))
-        builder.add_edge(KNOWLEDGE_AGENT_NODE, REMEMBER_NODE)
         builder.add_edge(REMEMBER_NODE, END)
+        last_node = REMEMBER_NODE
+
+    builder.add_edge(SMALL_TALK_NODE, last_node)
+    builder.add_edge(KNOWLEDGE_AGENT_NODE, last_node)
 
     graph = builder.compile(checkpointer=checkpointer)
 
@@ -143,6 +165,19 @@ def create_graph():
 
 
 # Helper functions
+
+def route_message(state):
+
+    # Greetings, thanks and acknowledgments need no documents; everything else goes to the Knowledge Agent
+    try:
+        question = latest_question(state["messages"])
+    except InvalidQuestionError:
+        return KNOWLEDGE_AGENT_NODE
+
+    node = SMALL_TALK_NODE if small_talk_reply(question) is not None else KNOWLEDGE_AGENT_NODE
+
+    return node
+
 
 def latest_question(messages):
 

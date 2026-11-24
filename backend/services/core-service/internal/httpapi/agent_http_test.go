@@ -103,20 +103,19 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 			f := newFixture(t)
 			var calls atomic.Int32
 			var upstreamRequestID atomic.Value
-			var upstreamConversationID atomic.Value
+			var upstreamCitizen atomic.Value
 			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
 				upstreamRequestID.Store(r.Header.Get("X-Request-ID"))
-				// The agent gets only the question and the resolved conversation ID, in the body
+				upstreamCitizen.Store(r.Header.Get("X-GovAI-Citizen"))
+				// A new conversation: only the question is in the body; the agent creates the ID
 				var sent map[string]string
 				if json.NewDecoder(r.Body).Decode(&sent) != nil ||
-					len(sent) != 2 ||
-					sent["message"] != "private-question" ||
-					r.Header.Get("X-Conversation-ID") != "" {
+					len(sent) != 1 ||
+					sent["message"] != "private-question" {
 					t.Error("unexpected agent request body")
 				}
 
-				upstreamConversationID.Store(sent["conversation_id"])
 				if r.Header.Get("Authorization") != "Bearer synthetic-service-key" ||
 					r.Header.Get("Cookie") != "" {
 					t.Error("incorrect upstream credentials")
@@ -158,8 +157,6 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 			f.router, err = httpapi.NewRouter(
 				f.verifier,
 				agent,
-				f.conversations,
-				f.messages,
 				slog.New(slog.NewJSONHandler(f.logs, nil)),
 				httpapi.Settings{},
 			)
@@ -189,10 +186,9 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 				t.Fatal("request ID not forwarded to the agent")
 			}
 
-			// The ownership-checked conversation ID goes to the agent as a header
-			forwarded, _ := upstreamConversationID.Load().(string)
-			if !chatcontract.ValidConversationID(forwarded) || f.store.Owner(forwarded) != "synthetic-subject" {
-				t.Fatal("conversation ID not forwarded to the agent")
+			// The verified token subject goes to the agent, which owns conversations
+			if upstreamCitizen.Load() != "synthetic-subject" {
+				t.Fatal("citizen not forwarded to the agent")
 			}
 
 			if tc.status == 200 {
@@ -200,7 +196,7 @@ func TestAgentHTTPResponseBoundary(t *testing.T) {
 				if json.Unmarshal(r.Body.Bytes(), &got) != nil ||
 					got.Answer != "Synthetic answer only." ||
 					got.Sources == nil ||
-					got.ConversationID != forwarded {
+					got.ConversationID != "" {
 					t.Fatal("response contract mismatch")
 				}
 

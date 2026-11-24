@@ -147,9 +147,12 @@ class ConversationStore:
     def conversations(self, subject, offset, limit):
         """A page of the citizen's conversations, newest first, and the offset of the next page."""
 
+        # Only conversations with an answer: one whose first question failed or is still pending is not shown
         rows = self.fetch(
-            "SELECT id::text AS id, title_ciphertext, created_at, last_turn_at FROM conversations "
-            "WHERE owner_subject = %s ORDER BY last_turn_at DESC, id DESC LIMIT %s OFFSET %s",
+            "SELECT id::text AS id, title_ciphertext, created_at, last_turn_at FROM conversations c "
+            "WHERE owner_subject = %s AND EXISTS ("
+            "SELECT 1 FROM conversation_turns t WHERE t.conversation_id = c.id AND t.status = 'completed') "
+            "ORDER BY last_turn_at DESC, id DESC LIMIT %s OFFSET %s",
             (subject, limit + 1, offset),
         )
 

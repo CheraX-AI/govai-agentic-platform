@@ -22,22 +22,23 @@ import (
 
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation/conversationtest"
+	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/httpapi"
 )
 
 type fakeAgent struct {
-	calls     int
-	message   string
-	reply     chatcontract.Reply
-	err       error
-	panicCall bool
+	calls          int
+	message        string
+	conversationID string
+	reply          chatcontract.Reply
+	err            error
+	panicCall      bool
 }
 
 func (f *fakeAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontract.Reply, error) {
 	f.calls++
 	f.message = q.Text()
+	f.conversationID = q.ConversationID()
 	if f.panicCall {
 		panic("private upstream details")
 	}
@@ -45,36 +46,13 @@ func (f *fakeAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontr
 	return f.reply, f.err
 }
 
-// messageKey is a synthetic content key for router tests only.
-var messageKey = bytes.Repeat([]byte{0x5a}, 32)
-
-// newConversations builds the real conversation services on an in-memory store.
-func newConversations(t *testing.T) (*conversation.Service, *conversation.Messages, *conversationtest.Store) {
-	t.Helper()
-	store := conversationtest.New()
-	service, err := conversation.NewService(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	messages, err := conversation.NewMessages(store, messageKey, time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return service, messages, store
-}
-
 type fixture struct {
-	verifier      *authn.Verifier
-	router        http.Handler
-	key           *rsa.PrivateKey
-	issuer        string
-	agent         *fakeAgent
-	logs          *bytes.Buffer
-	conversations *conversation.Service
-	messages      *conversation.Messages
-	store         *conversationtest.Store
+	verifier *authn.Verifier
+	router   http.Handler
+	key      *rsa.PrivateKey
+	issuer   string
+	agent    *fakeAgent
+	logs     *bytes.Buffer
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -120,12 +98,9 @@ func newFixture(t *testing.T) *fixture {
 		},
 	}
 	logs := &bytes.Buffer{}
-	conversations, messages, store := newConversations(t)
 	router, err := httpapi.NewRouter(
 		verifier,
 		agent,
-		conversations,
-		messages,
 		slog.New(slog.NewJSONHandler(logs, nil)),
 		httpapi.Settings{Origins: []string{"https://web.example.test"}},
 	)
@@ -134,15 +109,12 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	return &fixture{
-		verifier:      verifier,
-		router:        router,
-		key:           key,
-		issuer:        issuer,
-		agent:         agent,
-		logs:          logs,
-		conversations: conversations,
-		messages:      messages,
-		store:         store,
+		verifier: verifier,
+		router:   router,
+		key:      key,
+		issuer:   issuer,
+		agent:    agent,
+		logs:     logs,
 	}
 }
 
@@ -394,7 +366,7 @@ func TestRouterRejectsInvalidSettings(t *testing.T) {
 		{Timeout: 500 * time.Millisecond},
 		{Timeout: 2 * time.Minute},
 	} {
-		if _, err := httpapi.NewRouter(f.verifier, &blockingAgent{}, f.conversations, f.messages, logger, s); err == nil {
+		if _, err := httpapi.NewRouter(f.verifier, &blockingAgent{}, logger, s); err == nil {
 			t.Fatalf("invalid settings accepted: %+v", s)
 		}
 	}
@@ -408,8 +380,6 @@ func checkConcurrencyBound(t *testing.T, settings httpapi.Settings, limit int) {
 	router, err := httpapi.NewRouter(
 		f.verifier,
 		agent,
-		f.conversations,
-		f.messages,
 		slog.New(slog.NewJSONHandler(io.Discard, nil)),
 		settings,
 	)
@@ -447,5 +417,59 @@ func checkConcurrencyBound(t *testing.T, settings httpapi.Settings, limit int) {
 		case <-time.After(3 * time.Second):
 			t.Fatal("admitted requests did not finish")
 		}
+	}
+}
+
+// agent-service owns conversations; core only forwards the citizen's ID and maps the agent's answer.
+func TestConversationIDGoesToTheAgentUnchanged(t *testing.T) {
+	f := newFixture(t)
+	id := "3f2b8c1e-9a4d-4f6b-8c2e-1d7a5b9e0f34"
+	f.agent.reply.ConversationID = id
+	r := f.send(f.token(t, nil), `{"message":"hello","conversation_id":"`+id+`"}`)
+	var reply chatcontract.Reply
+	if r.Code != 200 || f.agent.conversationID != id || json.Unmarshal(r.Body.Bytes(), &reply) != nil || reply.ConversationID != id {
+		t.Fatal("conversation ID not passed through")
+	}
+}
+
+func TestNewConversationIDComesFromTheAgent(t *testing.T) {
+	f := newFixture(t)
+	f.agent.reply.ConversationID = "01936f3e-7b2a-7c4d-9e5f-0a1b2c3d4e5f"
+	r := f.send(f.token(t, nil), `{"message":"hello"}`)
+	var reply chatcontract.Reply
+	if r.Code != 200 || f.agent.conversationID != "" || json.Unmarshal(r.Body.Bytes(), &reply) != nil ||
+		reply.ConversationID != "01936f3e-7b2a-7c4d-9e5f-0a1b2c3d4e5f" {
+		t.Fatal("agent conversation ID not returned")
+	}
+}
+
+func TestAgentConversationErrorsAreMapped(t *testing.T) {
+	f := newFixture(t)
+	token := f.token(t, nil)
+	body := `{"message":"hello","conversation_id":"3f2b8c1e-9a4d-4f6b-8c2e-1d7a5b9e0f34"}`
+	for _, tc := range []struct {
+		err          error
+		status       int
+		code, header string
+	}{
+		{chat.ErrNotFound, 404, "conversation_not_found", ""},
+		{chat.ErrBusy, 503, "chat_busy", "2"},
+	} {
+		f.agent.err = tc.err
+		r := f.send(token, body)
+		var got map[string]string
+		if r.Code != tc.status || json.Unmarshal(r.Body.Bytes(), &got) != nil || got["code"] != tc.code ||
+			r.Header().Get("Retry-After") != tc.header {
+			t.Fatalf("%v not mapped: status=%d", tc.err, r.Code)
+		}
+	}
+}
+
+func TestReplyInAnotherConversationIsRejected(t *testing.T) {
+	f := newFixture(t)
+	f.agent.reply.ConversationID = "01936f3e-7b2a-7c4d-9e5f-0a1b2c3d4e5f"
+	r := f.send(f.token(t, nil), `{"message":"hello","conversation_id":"3f2b8c1e-9a4d-4f6b-8c2e-1d7a5b9e0f34"}`)
+	if r.Code != 502 {
+		t.Fatal("answer for another conversation accepted")
 	}
 }
