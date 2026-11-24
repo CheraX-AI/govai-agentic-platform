@@ -1,0 +1,35 @@
+services:
+  notification-service:
+    build:
+      context: ../../backend
+      dockerfile: services/notification-service/Dockerfile
+    image: govai-notification-service:local
+    restart: unless-stopped
+    profiles:
+      - notifications
+    environment:
+      NOTIFICATION_ENV: development
+      NOTIFICATION_LISTEN_ADDRESS: "0.0.0.0:5003"
+      RABBITMQ_SCHEME: amqp
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_VHOST: govai
+      RABBITMQ_CONSUMER_USER: "${RABBITMQ_CONSUMER_USER:?Run RabbitMQ setup first}"
+      RABBITMQ_CONSUMER_PASSWORD: "${RABBITMQ_CONSUMER_PASSWORD:?Run RabbitMQ setup first}"
+    ports:
+      - "127.0.0.1:5003:5003"
+    networks:
+      - notifications-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - /notification-api
+        - -healthcheck
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    stop_grace_period: 20s
