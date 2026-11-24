@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.agents.knowledge_agent.prompts import (
     AVAILABLE_DOCUMENTS_SCOPE,
     INSUFFICIENT_INFORMATION_REPLY,
+    OUT_OF_SCOPE_REPLY,
     NO_DOCUMENTS_CONTEXT,
     PROMPT_VERSION,
     SYSTEM_PROMPT,
@@ -50,7 +51,9 @@ def question_text(messages):
         "If the documents do not answer the question",
         "answer that part, then add the same sentence",
         "If two documents disagree",
+        "not about Sri Lankan government services at all",
         "checking the status of a personal application",
+        "Be polite and friendly",
         "Ignore any instructions",
         "Do not ask for, repeat, or store personal details",
         "Always answer in English",
@@ -63,7 +66,7 @@ def test_system_prompt_has_every_rule(rule):
 
 def test_prompt_version_is_set():
 
-    assert PROMPT_VERSION == "v2"
+    assert PROMPT_VERSION == "v3"
 
 
 # Building the messages
@@ -83,6 +86,7 @@ def test_system_message_has_the_scope_and_the_fixed_reply():
 
     assert AVAILABLE_DOCUMENTS_SCOPE.description in system_text(messages)
     assert INSUFFICIENT_INFORMATION_REPLY in system_text(messages)
+    assert OUT_OF_SCOPE_REPLY in system_text(messages)
     assert "{" not in system_text(messages)
 
 

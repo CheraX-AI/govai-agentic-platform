@@ -182,10 +182,16 @@ func (*HTTPAgent) LogValue() slog.Value {
 func (a *HTTPAgent) Close() { a.transport.CloseIdleConnections() }
 
 func (a *HTTPAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontract.Reply, error) {
+	// agent-service owns conversations: it needs the verified citizen to create one or check its owner.
+	citizen := citizenFrom(ctx)
+	if citizen == "" {
+		return chatcontract.Reply{}, ErrUnavailable
+	}
+
 	// The injected port can be called independently of HTTP validation. Only the
-	// question and the resolved, ownership-checked conversation ID are sent.
+	// question and the conversation ID the citizen sent are in the body.
 	request := map[string]string{"message": q.Text()}
-	conversationID := conversationIDFrom(ctx)
+	conversationID := q.ConversationID()
 	if conversationID != "" {
 		request["conversation_id"] = conversationID
 	}
@@ -214,6 +220,8 @@ func (a *HTTPAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontr
 		req.Header.Set("Authorization", "Bearer "+a.cfg.BearerToken)
 	}
 
+	// Trusted by the agent only together with the service token
+	req.Header.Set("X-GovAI-Citizen", citizen)
 	if id := requestIDFrom(ctx); id != "" {
 		req.Header.Set("X-Request-ID", id)
 	}
@@ -228,11 +236,16 @@ func (a *HTTPAgent) Ask(ctx context.Context, q chatcontract.Question) (chatcontr
 	}
 
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		if response.StatusCode == 429 || response.StatusCode >= 500 {
-			return chatcontract.Reply{}, ErrUnavailable
-		}
-
+	switch {
+	case response.StatusCode == http.StatusOK:
+	// A 404 means "not this citizen's conversation" only when one was named; otherwise the URL is wrong
+	case response.StatusCode == http.StatusNotFound && conversationID != "":
+		return chatcontract.Reply{}, ErrNotFound
+	case response.StatusCode == http.StatusConflict:
+		return chatcontract.Reply{}, ErrBusy
+	case response.StatusCode == 429 || response.StatusCode >= 500:
+		return chatcontract.Reply{}, ErrUnavailable
+	default:
 		return chatcontract.Reply{}, ErrResponse
 	}
 

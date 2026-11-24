@@ -16,7 +16,6 @@ import (
 	"github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/chat"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/config"
-	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/conversation"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/database"
 	"github.com/CheraX-AI/govai-agentic-platform/backend/services/core-service/internal/httpapi"
 	"github.com/gin-gonic/gin"
@@ -67,8 +66,8 @@ func run() error {
 
 	defer verifier.Close()
 
-	// Conversation storage is required: refuse to start without a migrated
-	// database and a least-privileged runtime login.
+	// core's database stays for its own features (agent-service owns conversations):
+	// refuse to start without a migrated database and a least-privileged runtime login.
 	startup, cancelStartup := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelStartup()
 	pool, err := database.Open(startup, c.DatabaseURL)
@@ -78,16 +77,6 @@ func run() error {
 
 	defer pool.Close()
 	if err := database.Ready(startup, pool); err != nil {
-		return err
-	}
-
-	store, err := conversation.NewPostgresStore(pool)
-	if err != nil {
-		return err
-	}
-
-	conversations, err := conversation.NewService(store)
-	if err != nil {
 		return err
 	}
 
@@ -118,7 +107,7 @@ func run() error {
 	}
 
 	// Mount protected chat routes and start the HTTPS server.
-	router, err := httpapi.NewRouter(verifier, agent, conversations, slog.Default(), httpapi.Settings{
+	router, err := httpapi.NewRouter(verifier, agent, slog.Default(), httpapi.Settings{
 		Origins:       c.Origins,
 		Timeout:       c.RequestTimeout,
 		MaxConcurrent: c.MaxConcurrent,

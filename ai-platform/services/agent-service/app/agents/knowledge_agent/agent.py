@@ -11,6 +11,7 @@ from app.agents.knowledge_agent.prompts import (
     build_rag_messages,
     build_trace_config,
 )
+from app.agents.knowledge_agent.rewrite import rewrite_question
 from app.agents.knowledge_agent.schemas import KnowledgeAnswer
 from app.agents.knowledge_agent.validation import clean_question
 from app.llm.exceptions import LLMError
@@ -36,8 +37,8 @@ class KnowledgeAgent:
         self.rag_client = rag_client
         self.service_scope = service_scope
 
-    def answer(self, question, request_id=None):
-        """Answer one question.
+    def answer(self, question, request_id=None, history=()):
+        """Answer one question; history is the earlier conversation, oldest first.
 
         Raises InvalidQuestionError for an empty, too short, or too long question
         (before any service is called), a KnowledgeServiceError when the
@@ -46,6 +47,9 @@ class KnowledgeAgent:
         """
 
         question = clean_question(question)
+
+        # Turn a follow-up such as "what about the fee?" into a full question before searching
+        question = rewrite_question(self.provider, question, history, request_id=request_id)
 
         # Find the matching chunks, limited to the scope's department and service if it has them
         sources = self.rag_client.retrieve(
