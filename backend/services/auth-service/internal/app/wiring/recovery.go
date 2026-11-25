@@ -66,7 +66,12 @@ func Recovery(
 		return fail()
 	}
 
-	tokens, err := postgres.NewRecoveryChallenges(raw)
+	var tokens *postgres.RecoveryChallenges
+	if c.NotificationIssuer == "" {
+		tokens, err = postgres.NewRecoveryChallenges(raw)
+	} else {
+		tokens, err = postgres.NewRecoveryChallengesWithNotifications(raw, c.NotificationIssuer)
+	}
 	if err != nil {
 		return fail()
 	}

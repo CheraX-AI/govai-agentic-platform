@@ -18,15 +18,22 @@ import (
 
 // App is the assembled authentication service, ready to Run.
 type App struct {
-	server  *http.Server
-	port    string
-	tls     bool
-	closers []func()
+	notifications      notificationWorker
+	emailVerifications emailVerificationWorker
+	server             *http.Server
+	port               string
+	tls                bool
+	closers            []func()
 }
 
 // New connects the database, builds every enabled feature and mounts the routes.
 // On failure it releases whatever it had already opened.
 func New(ctx context.Context, cfg Config) (_ *App, err error) {
+	cfg, err = cfg.prepareNotificationEvents()
+	if err != nil {
+		return nil, err
+	}
+
 	a := &App{port: cfg.Base.Port, tls: cfg.tlsEnabled()}
 	defer func() {
 		if err != nil {
@@ -48,6 +55,10 @@ func New(ctx context.Context, cfg Config) (_ *App, err error) {
 
 	pool, store, err := a.openDatabase(ctx, cfg.Database)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := a.prepareNotificationWorker(ctx, cfg, pool); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +142,8 @@ func readyHandler(cfg Config, pool *pgxpool.Pool) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		if postgres.Ready(ctx, pool) != nil ||
 			(cfg.Web.Enabled && postgres.WebSessionsReady(ctx, pool) != nil) ||
-			(len(cfg.Recovery.FenceKey) > 0 && postgres.RecoveryReady(ctx, pool) != nil) {
+			(len(cfg.Recovery.FenceKey) > 0 && postgres.RecoveryReady(ctx, pool) != nil) ||
+			(cfg.NotificationEvents.Enabled && postgres.NotificationOutboxReady(ctx, pool) != nil) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
 			return
 		}

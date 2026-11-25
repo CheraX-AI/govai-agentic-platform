@@ -60,6 +60,7 @@ type WebSnapshot struct {
 }
 
 type WebSessionStore struct {
+	notifications *NotificationOutbox
 	webPrivate
 	pool *pgxpool.Pool
 	aead cipher.AEAD
@@ -178,33 +179,24 @@ func (s *WebSessionStore) open(b, hash []byte) (WebCredentials, error) {
 	return c, nil
 }
 
-func (s *WebSessionStore) Create(ctx context.Context, c WebCredentials, expires time.Time) (string, error) {
-	if !expires.After(time.Now()) || expires.After(time.Now().Add(24*time.Hour)) {
-		return "", ErrStore
+func (s *WebSessionStore) Create(
+	ctx context.Context, c WebCredentials, expires time.Time,
+) (string, error) {
+	raw, hash, sealed, err := s.prepareSession(c, expires)
+	if err != nil {
+		return "", err
 	}
-
-	var random [32]byte
-	if _, err := rand.Read(random[:]); err != nil {
-		return "", ErrStore
-	}
-
-	raw := base64.RawURLEncoding.EncodeToString(random[:])
-	hash, _ := webHash(raw)
-	sealed, err := s.seal(c, hash)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", ErrStore
 	}
-
-	if _, err = s.pool.Exec(
-		ctx,
-		"INSERT INTO auth.web_sessions(session_hash,ciphertext,expires_at) VALUES($1,$2,$3)",
-		hash,
-		sealed,
-		expires,
-	); err != nil {
+	defer rollbackRecovery(tx)
+	if s.insertSessionTx(ctx, tx, c, expires, hash, sealed) != nil {
 		return "", ErrStore
 	}
-
+	if tx.Commit(ctx) != nil {
+		return "", ErrStore
+	}
 	return raw, nil
 }
 

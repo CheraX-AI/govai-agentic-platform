@@ -53,7 +53,8 @@ type IdentifierResolver interface {
 }
 
 type Service struct {
-	resolver IdentifierResolver
+	notifications LoginRecorder
+	resolver      IdentifierResolver
 	privateValue
 	provider PasswordProvider
 	verifier AccessVerifier
@@ -150,6 +151,21 @@ func (s *Service) Login(ctx context.Context, r Request) (Access, error) {
 		return Access{}, ErrUnavailable
 	}
 
+	if s.notifications != nil {
+		if s.notifications.RecordLogin(ctx, claims.Issuer, claims.Subject) != nil {
+			return Access{}, ErrUnavailable
+		}
+
+		// Database work consumes token lifetime too; recheck before releasing tokens.
+
+		remaining = int64(claims.Expires.Sub(s.now()).Seconds())
+		if remaining > issued.ExpiresIn {
+			remaining = issued.ExpiresIn
+		}
+		if remaining <= 0 || ctx.Err() != nil {
+			return Access{}, ErrUnavailable
+		}
+	}
 	return Access{
 		Token:            issued.Token,
 		ExpiresIn:        remaining,

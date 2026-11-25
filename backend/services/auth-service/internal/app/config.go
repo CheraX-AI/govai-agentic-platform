@@ -4,14 +4,15 @@ import "github.com/CheraX-AI/govai-agentic-platform/backend/services/auth-servic
 
 // Config holds the settings of every feature, loaded once at startup.
 type Config struct {
-	Base          config.Config
-	Database      config.Database
-	Registration  config.Registration
-	Login         config.Login
-	Authorization config.Authorization
-	Web           config.Web
-	WebChat       config.WebChat
-	Recovery      config.Recovery
+	NotificationEvents config.NotificationEvents
+	Base               config.Config
+	Database           config.Database
+	Registration       config.Registration
+	Login              config.Login
+	Authorization      config.Authorization
+	Web                config.Web
+	WebChat            config.WebChat
+	Recovery           config.Recovery
 }
 
 // LoadConfig reads envFile (process environment settings win) and validates
@@ -28,6 +29,10 @@ func LoadConfig(envFile string) (Config, error) {
 	}
 
 	if c.Database, err = config.LoadDatabase(); err != nil {
+		return Config{}, err
+	}
+
+	if c.NotificationEvents, err = config.LoadNotificationEvents(); err != nil {
 		return Config{}, err
 	}
 

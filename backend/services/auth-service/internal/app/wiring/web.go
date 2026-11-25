@@ -69,7 +69,14 @@ func webWithIdentifiers(
 		return fail()
 	}
 
-	store, err := postgres.NewWebSessionStore(pool, c.DataKey)
+	var store *postgres.WebSessionStore
+	if c.NotificationIssuer == "" {
+		store, err = postgres.NewWebSessionStore(pool, c.DataKey)
+	} else {
+		store, err = postgres.NewWebSessionStoreWithNotifications(
+			pool, c.DataKey, c.NotificationIssuer,
+		)
+	}
 	if err != nil {
 		return fail()
 	}

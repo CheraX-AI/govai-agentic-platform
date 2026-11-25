@@ -37,7 +37,18 @@ func LoginWithSessions(c config.Login, store *postgres.Store, resolvers ...login
 		provider.Close()
 		return nil, nil, nil, login.ErrUnavailable
 	}
-	service, e := login.NewService(provider, provider, store, resolvers...)
+	var service *login.Service
+	if c.NotificationIssuer == "" {
+		service, e = login.NewService(provider, provider, store, resolvers...)
+	} else {
+		recorder, recordError := postgres.NewLoginEventRecorder(store, c.NotificationIssuer)
+		if recordError != nil {
+			return fail()
+		}
+		service, e = login.NewServiceWithNotifications(
+			provider, provider, store, recorder, resolvers...,
+		)
+	}
 	if e != nil {
 		return fail()
 	}

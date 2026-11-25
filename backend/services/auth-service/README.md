@@ -481,3 +481,130 @@ identifier buckets, not a unified distributed account lockout.
 Automated tests cover legacy email, email/NIC identifiers, old/new NIC syntax,
 ambiguous/phone rejection, redaction, resolution failure, mismatched token subject,
 and both HTTP entry points. User-confirmed Postman tests after API restart returned 200 for mobile/Postman and web NIC login with a synthetic registered account. Actual frontend/mobile UI integration remains pending.
+
+## GA-268: account events and durable publication
+
+Implemented behind AUTH_NOTIFICATION_EVENTS_ENABLED=false by default. GovAI
+auth-service owns these source events; GA-208 separately owns the notification
+inbox database. No cross-service database access is introduced.
+
+| Confirmed event | Priority | RabbitMQ queue |
+| --- | --- | --- |
+| citizen.login.succeeded | High | notifications.security.v1 |
+| citizen.password.changed | High | notifications.security.v1 |
+| citizen.email.verified | Normal | notifications.account.v1 |
+
+Events contain stable IDs, version, trusted issuer+subject and occurrence time.
+They never contain passwords, raw tokens, email addresses, NIC, IP addresses,
+reset links or arbitrary message text. Priority is derived from the event type.
+
+### Source checkpoints
+
+Native login records an event only after credentials, JWT, role, linked profile
+and expiry checks succeed. Tokens are returned only after the local checkpoint
+commits; expiry is checked again afterward. Browser login commits the session,
+recovery binding and event in one transaction after its recovery guard passes.
+Browser wiring avoids the native recorder, preventing a second source event.
+Refresh, logout, failed credentials and session reads do not create login events.
+
+Password recovery persists a prepared checkpoint when it claims the reset token,
+before requesting a Keycloak password mutation. Positive provider confirmation
+commits the checkpoint and outbox event together. Pre-mutation failure cancels
+the intent; uncertain provider results create no success event or automatic reset
+replay. A later logout failure does not erase a confirmed password change.
+
+Keycloak and PostgreSQL cannot share a transaction. A crash or database outage
+after provider acceptance can leave a prepared/uncertain checkpoint requiring
+owner review against Keycloak evidence. This code does not automatically reconcile
+that uncertainty or detect password changes outside GovAI's recovery flow.
+
+The email observer reuses registration's existing ownership-checked ReadOwned
+adapter. It requires the matching enabled account's emailVerified=true, not an
+email-send result. Its first startup stores a durable issuer-specific cutover;
+only registrations after that cutover are watched. Older pending accounts and
+email changes/reverification need an explicit future adoption policy. Confirmation,
+outbox insert and completed watch commit together. occurred_at is the first
+verified observation, not a claimed verification-click time. Checks are bounded
+to one per second per instance; unsuccessful checks wait 30 seconds plus queueing.
+
+### Storage and publication
+
+Migration 007_notification_outbox.sql adds the auth-owned outbox. Migration
+008_notification_checkpoints.sql adds reset checkpoints, observer settings and
+email watches. Existing migrations and their checksums are unchanged. Runtime
+credentials have restricted column-level grants and cannot delete/truncate these
+rows. Published-row retention and owner cleanup need agreement before production;
+pending events must not be discarded because the broker is unavailable.
+
+EnqueueTx participates in the caller's transaction. Stable event/action identity
+and normalized UTC microsecond times distinguish matching retries from conflicting
+reuse. Separate high/normal dispatch loops claim due rows with short fenced leases
+and never hold a SQL transaction open during broker I/O.
+
+The publisher uses persistent messages, stable MessageId, mandatory routing and
+publisher confirms on the notifications exchange. Only positive confirmation
+without a return marks publication complete. Broker outages, unroutable messages
+and lost confirmations remain pending with bounded backoff; a lost confirmation
+can publish the same event again. This is at-least-once publication. Consumer-side
+deduplication still belongs to GA-208/GA-267 and is not established by these tests.
+
+App.Run cancels and joins publisher/observer workers before closing their providers
+and database pool. Auth readiness requires valid schema/configuration when enabled;
+it does not require RabbitMQ to be available. Requests never publish synchronously.
+Feature-disabled paths do not require the optional notification tables.
+
+### Teammate rollout and remaining acceptance
+
+The remaining live authentication integration/test is assigned to a teammate.
+No real service database has been migrated or private feature flag enabled here.
+Keep GA-268 open until real login, password change and verification have been
+tested with the teammate's working Keycloak setup and their events inspected.
+No exactly-once external mutation, inbox UI or final email delivery is claimed.
+
+Coordinate migration numbering and deployment with the auth-service owner. From
+the auth-service directory, use private owner/runtime settings with these explicit
+commands (the API never applies DDL):
+
+    go run ./tools/db migrate-outbox
+    go run ./tools/db check-outbox
+    go run ./tools/db status-notifications
+
+migrate-outbox checks the existing registration baseline and atomically applies or
+verifies 007 and 008 with versioned checksums. status-notifications reports counts
+of password checkpoints only; review prepared/uncertain cases before reconciliation.
+
+Enable only after schema readiness and coordinated configuration. The trusted
+AUTH_NOTIFICATION_ISSUER_URL must exactly match each enabled auth feature.
+AUTH_NOTIFICATION_RABBITMQ_* uses the restricted publisher login, fixed govai vhost
+and verified AMQPS by default. Local plaintext requires explicit development mode,
+scheme amqp and port 5672. Do not regenerate existing credentials or share .env files.
+Registration must also be enabled for the email observer to run.
+
+### Verification and Docker
+
+Build from the repository root:
+
+    $dockerfile = 'backend/services/auth-service/Dockerfile'
+    docker build --target checks -t govai-auth-checks:local -f $dockerfile backend
+    docker build -t govai-auth-service:local -f $dockerfile backend
+
+The build includes shared authn, chatcontract and notificationcontract modules.
+The checks stage runs auth unit tests and Go analysis. The runtime is a non-root
+binary-only image. No private environment files are packaged.
+
+The isolated test helper uses generated passwords and disposable PostgreSQL 16.14
+and optional RabbitMQ 4.4.0 containers, publishes no host ports, reads no private
+service settings and removes only its own fixtures. Run from the repository root:
+
+    .\backend\services\auth-service\scripts\test-notification-outbox.ps1 -Publisher
+
+Previously completed synthetic checks covered atomic rollback/commit, concurrent
+duplicates/conflicts, restricted grants, checksums, leases, native/browser source
+checkpoints, confirmed/uncertain password changes, owned verification observations,
+restart durability, all three broker event routes, lost confirms and outage recovery.
+The latest repeat was interrupted at the user's request; it passed storage, restart,
+runtime, routing and outage-down checks before cancellation. Do not describe that
+interrupted repeat as a completed recovery run. Live Keycloak acceptance is pending.
+
+Failed-login alerts, task reminders, notification preferences, SMTP retries and
+templates are outside this commit. GA-269/GA-271 are tracked separately.

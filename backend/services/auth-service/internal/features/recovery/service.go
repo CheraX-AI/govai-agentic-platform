@@ -216,6 +216,7 @@ func (s *Service) Request(ctx context.Context, nic string) (Receipt, error) {
 		cleanup, stop := context.WithTimeout(context.Background(), 2*time.Second)
 		defer stop()
 		if _, err := s.tokens.Claim(cleanup, token); err == nil {
+			_ = s.passwordNotification(cleanup, token, "cancelled")
 			_ = s.finish(token, false)
 		}
 
@@ -248,7 +249,11 @@ func (s *Service) Reset(ctx context.Context, rawToken, newPassword string) error
 		return ErrInvalid
 	}
 
+	mutationStarted := false
 	failed := func() error {
+		if !mutationStarted {
+			_ = s.passwordNotification(ctx, token, "cancelled")
+		}
 
 		_ = s.finish(token, false)
 		return ErrUnavailable
@@ -271,10 +276,13 @@ func (s *Service) Reset(ctx context.Context, rawToken, newPassword string) error
 		return failed()
 	}
 
+	mutationStarted = true
 	if s.provider.Reset(ctx, challenge.Account, password) != nil {
+		_ = s.passwordNotification(ctx, token, "uncertain")
 		return failed()
 	}
 
+	notificationError := s.passwordNotification(ctx, token, "confirmed")
 	if s.provider.Logout(ctx, challenge.Account) != nil {
 		return failed()
 	}
@@ -284,5 +292,8 @@ func (s *Service) Reset(ctx context.Context, rawToken, newPassword string) error
 		return failed()
 	}
 
+	if notificationError != nil {
+		return failed()
+	}
 	return s.finish(token, true)
 }

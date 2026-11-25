@@ -12,11 +12,12 @@ import (
 )
 
 type Login struct {
-	Enabled  bool
-	Provider login.KeycloakConfig
-	RateKey  []byte
-	CAFile   string
-	Limits   RateLimits // set in cmd/api from *_RATE_LIMIT
+	NotificationIssuer string
+	Enabled            bool
+	Provider           login.KeycloakConfig
+	RateKey            []byte
+	CAFile             string
+	Limits             RateLimits // set in cmd/api from *_RATE_LIMIT
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).

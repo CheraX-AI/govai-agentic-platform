@@ -89,3 +89,10 @@ The notification-service Docker checks stage runs formatting, this package's
 tests/Go analysis, and service tests/analysis, including routing-isolation tests.
 The tests use synthetic events and do not touch the running RabbitMQ queues.
 They do not demonstrate durable deduplication: that requires PostgreSQL.
+
+GA-268 source timing: login and password-change times come from confirmed auth
+checkpoints. Initial email verification is observed through an ownership-checked
+Keycloak read; occurred_at records that first positive observation, not an unknown
+provider click timestamp. The observer uses a persistent registration cutover and
+does not backfill pre-cutover profiles. Ambiguous password mutations do not create
+success events and must not be automatically retried as provider mutations.

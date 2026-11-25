@@ -1,4 +1,5 @@
 // db explicitly checks or migrates the configured authentication database.
+
 package main
 
 import (
@@ -15,7 +16,8 @@ func main() {
 	if run() != nil {
 		fmt.Fprintln(
 			os.Stderr,
-			"authentication database command failed; check configuration, privileges and database availability",
+			"authentication database command failed; "+
+				"check configuration, privileges and database availability",
 		)
 		os.Exit(1)
 	}
@@ -30,15 +32,23 @@ func run() error {
 			os.Args[1] != "prune-web" &&
 			os.Args[1] != "prune-web-jobs" &&
 			os.Args[1] != "migrate-recovery" &&
+			os.Args[1] != "migrate-outbox" &&
+			os.Args[1] != "check-outbox" &&
+			os.Args[1] != "status-notifications" &&
 			os.Args[1] != "check-recovery") {
 		return fmt.Errorf(
-			"usage: go run ./tools/db migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|migrate-recovery|check-recovery",
+			"usage: go run ./tools/db " +
+				"migrate|check|migrate-web|check-web|prune-web|prune-web-jobs|" +
+				"migrate-recovery|check-recovery|migrate-outbox|check-outbox|status-notifications",
 		)
 	}
 
-	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" || os.Args[1] == "migrate-recovery"
+	isMigration := os.Args[1] == "migrate" || os.Args[1] == "migrate-web" ||
+		os.Args[1] == "migrate-recovery" || os.Args[1] == "migrate-outbox"
 	isPrivileged := isMigration || os.Args[1] == "prune-web" || os.Args[1] == "prune-web-jobs"
+
 	// Only privileged commands load the owner login; the API never reads .env.migrate.
+
 	if isPrivileged && config.LoadLocalEnv(".env.migrate") != nil {
 		return postgres.ErrStore
 	}
@@ -66,6 +76,20 @@ func run() error {
 		err = postgres.MigrateWebSessions(ctx, p)
 	} else if os.Args[1] == "migrate-recovery" {
 		err = postgres.MigrateRecoverySessions(ctx, p)
+	} else if os.Args[1] == "migrate-outbox" {
+		err = postgres.MigrateNotificationOutbox(ctx, p)
+	} else if os.Args[1] == "check-outbox" {
+		err = postgres.NotificationOutboxReady(ctx, p)
+	} else if os.Args[1] == "status-notifications" {
+		err = postgres.NotificationOutboxReady(ctx, p)
+		if err == nil {
+			var status postgres.NotificationCheckpointStatus
+			status, err = postgres.NotificationPasswordStatus(ctx, p)
+			if err == nil {
+				fmt.Printf("password checkpoints: prepared=%d uncertain=%d confirmed=%d cancelled=%d\n",
+					status.Prepared, status.Uncertain, status.Confirmed, status.Cancelled)
+			}
+		}
 	} else if os.Args[1] == "check-recovery" {
 		err = postgres.RecoveryReady(ctx, p)
 	} else if os.Args[1] == "check-web" {

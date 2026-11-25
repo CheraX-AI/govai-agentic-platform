@@ -77,6 +77,7 @@ func (a *RecoveryAccounts) Lookup(ctx context.Context, issuer string, nic regist
 }
 
 type RecoveryChallenges struct {
+	notifications *NotificationOutbox
 	webPrivate
 	store *RecoveryStore
 }
@@ -148,6 +149,10 @@ func (a *RecoveryChallenges) Issue(ctx context.Context, c recovery.Challenge, tt
 }
 
 func (a *RecoveryChallenges) Claim(ctx context.Context, token recovery.Token) (recovery.Challenge, error) {
+	if a.notifications != nil {
+		return a.claimNotificationReset(ctx, token)
+	}
+
 	hash, err := token.Digest()
 	if err != nil {
 		return recovery.Challenge{}, recovery.ErrInvalid

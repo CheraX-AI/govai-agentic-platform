@@ -11,8 +11,11 @@ require (
 	github.com/nyaruka/phonenumbers/v2 v2.0.14
 )
 
+require github.com/rabbitmq/amqp091-go v1.15.0 // indirect
+
 require (
 	github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn v0.0.0
+	github.com/CheraX-AI/govai-agentic-platform/backend/pkg/notificationcontract v0.0.0
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
@@ -53,3 +56,5 @@ require (
 replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/authn => ../../pkg/authn
 
 replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/chatcontract => ../../pkg/chatcontract
+
+replace github.com/CheraX-AI/govai-agentic-platform/backend/pkg/notificationcontract => ../../pkg/notificationcontract

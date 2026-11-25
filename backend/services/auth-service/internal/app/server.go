@@ -10,6 +10,9 @@ import (
 
 // Run serves requests until ctx is canceled, then lets active requests finish.
 func (a *App) Run(ctx context.Context) error {
+	stopNotifications := a.startNotificationWorkers(ctx)
+	defer stopNotifications()
+
 	serverErrors := make(chan error, 1)
 	go func() {
 		slog.Info("starting HTTP server", "port", a.port, "tls", a.tls)

@@ -125,60 +125,44 @@ func (s *RecoveryWebStore) Create(context.Context, WebCredentials, time.Time) (s
 	return "", ErrStore
 }
 
-func (s *RecoveryWebStore) CreateFenced(ctx context.Context, c WebCredentials, expires time.Time, mark int64) (string, error) {
+// CreateFenced commits the session, recovery binding and optional event together.
+
+func (s *RecoveryWebStore) CreateFenced(
+	ctx context.Context, c WebCredentials, expires time.Time, mark int64,
+) (string, error) {
 	identity, err := s.identity(c.Issuer, c.Subject)
 	if err != nil || mark <= 0 {
 		return "", ErrStore
 	}
-
-	raw, err := s.WebSessionStore.Create(ctx, c, expires)
+	raw, hash, sealed, err := s.prepareSession(c, expires)
 	if err != nil {
 		return "", err
 	}
-
-	committed := false
-	defer func() {
-		if !committed {
-			cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			_ = s.WebSessionStore.Terminate(cleanup, raw)
-		}
-	}()
 	tx, err := s.lock(ctx, identity)
 	if err != nil {
 		return "", err
 	}
-
 	defer rollbackRecovery(tx)
 	var cutoff int64
-	if tx.QueryRow(
-		ctx,
-		"SELECT COALESCE((SELECT revoked_through FROM auth.web_recovery_fences WHERE identity_hash=$1),0)",
-		identity,
-	).Scan(&cutoff) != nil {
+	if tx.QueryRow(ctx, `
+SELECT COALESCE((SELECT revoked_through FROM auth.web_recovery_fences
+ WHERE identity_hash=$1), 0)`, identity).Scan(&cutoff) != nil {
 		return "", ErrStore
 	}
-
 	if mark <= cutoff {
 		return "", ErrWebSessionMissing
 	}
-
-	hash, _ := webHash(raw)
-	if _, err = tx.Exec(
-		ctx,
-		"INSERT INTO auth.web_recovery_sessions(session_hash,identity_hash,login_order) VALUES($1,$2,$3)",
-		hash,
-		identity,
-		mark,
-	); err != nil {
+	if s.insertSessionTx(ctx, tx, c, expires, hash, sealed) != nil {
 		return "", ErrStore
 	}
-
+	if _, err := tx.Exec(ctx, `
+INSERT INTO auth.web_recovery_sessions(session_hash, identity_hash, login_order)
+VALUES ($1, $2, $3)`, hash, identity, mark); err != nil {
+		return "", ErrStore
+	}
 	if tx.Commit(ctx) != nil {
 		return "", ErrStore
 	}
-
-	committed = true
 	return raw, nil
 }
 

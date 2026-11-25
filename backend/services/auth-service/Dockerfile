@@ -1,20 +1,29 @@
-# Build from the backend/ folder (it needs pkg/authn):
-#   docker build -f services/auth-service/Dockerfile -t govai-auth .
+# Build from backend/ so shared Go modules are available.
 
-# ---- Build: compile a static Linux binary ----
-FROM golang:1.26-alpine AS build
+FROM golang:1.26-alpine AS dependencies
 WORKDIR /src
 
-# Download dependencies first so Docker can cache them between builds.
+# Download dependencies before copying service source for stable build caching.
+
 COPY pkg/authn/ pkg/authn/
+COPY pkg/chatcontract/ pkg/chatcontract/
+COPY pkg/notificationcontract/ pkg/notificationcontract/
 COPY services/auth-service/go.mod services/auth-service/go.sum services/auth-service/
 WORKDIR /src/services/auth-service
 RUN go mod download
-
 COPY services/auth-service/ .
+
+# Database integration tests remain opt-in and use disposable fixtures only.
+
+FROM dependencies AS checks
+RUN go test ./...
+RUN go vet ./...
+
+FROM dependencies AS build
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/auth-api ./cmd/api
 
-# ---- Run: only the binary, no shell, non-root user ----
+# Package only the binary and run without root privileges.
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/auth-api /auth-api
 USER nonroot:nonroot

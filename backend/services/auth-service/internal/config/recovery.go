@@ -18,11 +18,12 @@ import (
 var ErrRecoveryConfig = errors.New("invalid recovery runtime configuration")
 
 type Recovery struct {
-	Enabled           bool
-	Service           recovery.Config
-	SMTP              recovery.SMTPConfig
-	FenceKey, RateKey []byte
-	Origin            string
+	NotificationIssuer string
+	Enabled            bool
+	Service            recovery.Config
+	SMTP               recovery.SMTPConfig
+	FenceKey, RateKey  []byte
+	Origin             string
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
