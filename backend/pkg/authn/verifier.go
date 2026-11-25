@@ -58,6 +58,7 @@ func (v *Verifier) Close() {
 
 // keycloakClaims are the extra token fields Keycloak adds.
 type keycloakClaims struct {
+	Email         string `json:"email"`
 	Type          string `json:"typ"`
 	Client        string `json:"azp"`
 	EmailVerified bool   `json:"email_verified"`
@@ -102,6 +103,7 @@ func (v *Verifier) Verify(ctx context.Context, rawToken string) (Identity, error
 	}
 
 	return Identity{
+		Email:         claims.Email,
 		Issuer:        token.Issuer,
 		Subject:       token.Subject,
 		Client:        claims.Client,

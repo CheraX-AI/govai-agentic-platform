@@ -7,6 +7,9 @@ import (
 )
 
 func (h *WebSessionHandler) isPath(path string) bool {
+	if path == "/api/v1/web/profile" {
+		return h.profile != nil
+	}
 	if path == "/api/v1/web/chat" {
 		return h.chat != nil
 	}
@@ -53,6 +56,13 @@ func (h *WebSessionHandler) cors(c *gin.Context) {
 
 	c.Writer.Header().Add("Vary", "Access-Control-Request-Method")
 	c.Writer.Header().Add("Vary", "Access-Control-Request-Headers")
+	if h.profile != nil && c.Request.URL.Path == "/api/v1/web/profile" {
+		method = "GET"
+		requested := c.GetHeader("Access-Control-Request-Method")
+		if requested == "PUT" {
+			method = requested
+		}
+	}
 	if c.GetHeader("Access-Control-Request-Method") != method {
 		webFail(c, 403, "preflight_rejected")
 		return

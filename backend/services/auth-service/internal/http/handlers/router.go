@@ -48,7 +48,7 @@ func NewRouter(options RouterOptions) *gin.Engine {
 
 		if (options.Login != nil &&
 			c.Request.URL.Path == "/api/v1/auth/login") ||
-			(options.Protected != nil && c.Request.URL.Path == "/api/v1/me") {
+			(options.Protected != nil && (c.Request.URL.Path == "/api/v1/me" || (options.Protected.profile != nil && c.Request.URL.Path == "/api/v1/profile"))) {
 			c.Header("Cache-Control", "no-store")
 			c.Header("Pragma", "no-cache")
 		}
@@ -125,6 +125,9 @@ func NewRouter(options RouterOptions) *gin.Engine {
 				allowedMethod = "POST"
 			}
 
+			if options.Protected != nil && options.Protected.profile != nil && c.Request.URL.Path == "/api/v1/profile" && method == "PUT" {
+				allowedMethod = "PUT"
+			}
 			if method != allowedMethod {
 				abortJSON(c, http.StatusForbidden, gin.H{"error": "CORS method not allowed"})
 				return
@@ -167,6 +170,10 @@ func NewRouter(options RouterOptions) *gin.Engine {
 			router.POST("/api/v1/web/chat", web.Chat)
 		}
 
+		if web.profile != nil {
+			router.GET("/api/v1/web/profile", web.Profile)
+			router.PUT("/api/v1/web/profile", web.Profile)
+		}
 		router.POST("/api/v1/web/login", web.Login)
 		router.GET("/api/v1/web/session", web.Check)
 		router.GET("/api/v1/web/csrf", web.CSRF)

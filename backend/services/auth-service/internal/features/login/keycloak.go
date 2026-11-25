@@ -196,6 +196,7 @@ func (k *Keycloak) Verify(ctx context.Context, raw string) (Claims, error) {
 	}
 
 	var claims struct {
+		Email     string `json:"email"`
 		Type      string `json:"typ"`
 		Party     string `json:"azp"`
 		Verified  bool   `json:"email_verified"`
@@ -231,6 +232,7 @@ func (k *Keycloak) Verify(ctx context.Context, raw string) (Claims, error) {
 	}
 
 	return Claims{
+		Email:    claims.Email,
 		Issuer:   token.Issuer,
 		Subject:  token.Subject,
 		Expires:  token.Expiry,

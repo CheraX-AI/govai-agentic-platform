@@ -31,6 +31,7 @@ type WebSessionHandler struct {
 	loginLimiter RegistrationLimiter
 	origin       string
 	chat         *webChat
+	profile      *ProfileHandler
 }
 
 // NewWebSessionHandler binds browser requests to an approved origin.
@@ -139,7 +140,11 @@ func (h *WebSessionHandler) begin(c *gin.Context, write bool, isLogin ...bool) (
 		return nil, nil, false
 	}
 
-	if (write && c.Request.Method != "POST") || (!write && c.Request.Method != "GET") {
+	writeMethod := "POST"
+	if h.profile != nil && c.Request.URL.Path == "/api/v1/web/profile" {
+		writeMethod = "PUT"
+	}
+	if (write && c.Request.Method != writeMethod) || (!write && c.Request.Method != "GET") {
 		webFail(c, 405, "method_not_allowed")
 		return nil, nil, false
 	}

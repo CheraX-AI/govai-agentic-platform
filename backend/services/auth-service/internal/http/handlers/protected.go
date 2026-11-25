@@ -15,6 +15,7 @@ type ReadyProfiles interface {
 type Protected struct {
 	verifier *authn.Verifier
 	profiles ReadyProfiles
+	profile  *ProfileHandler
 }
 
 func NewProtected(verifier *authn.Verifier, profiles ReadyProfiles) (*Protected, error) {
@@ -22,7 +23,7 @@ func NewProtected(verifier *authn.Verifier, profiles ReadyProfiles) (*Protected,
 		return nil, authn.ErrConfig
 	}
 
-	return &Protected{verifier, profiles}, nil
+	return &Protected{verifier: verifier, profiles: profiles}, nil
 }
 
 func (p *Protected) readyProfile(c *gin.Context) {
@@ -60,6 +61,10 @@ func (p *Protected) attach(router *gin.Engine) {
 		authn.RequireRole("citizen"),
 		p.readyProfile,
 	)
+	if p.profile != nil {
+		group.GET("/profile", p.profile.Native)
+		group.PUT("/profile", p.profile.Native)
+	}
 	group.GET("/me", func(c *gin.Context) {
 		identity, ok := authn.Current(c)
 		if !ok {

@@ -133,6 +133,7 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 	profiles := &profileDouble{ready: true}
 	service, _ := NewService(provider, provider, profiles)
 	claims := baseClaims(issuer)
+	claims["email"] = "citizen@example.test"
 	token = signToken(t, key, "key-one", claims)
 	access, e := service.Login(context.Background(), request)
 	if e != nil ||
@@ -143,6 +144,10 @@ func TestKeycloakTokenValidationAndCustody(t *testing.T) {
 		t.Fatal("valid login failed")
 	}
 
+	verifiedClaims, verifyErr := provider.Verify(context.Background(), token)
+	if verifyErr != nil || verifiedClaims.Email != "citizen@example.test" {
+		t.Fatal("verified Keycloak email claim missing")
+	}
 	if b, _ := json.Marshal(access); bytes.Contains(b, []byte(token)) {
 		t.Fatal("accidental token serialization")
 	}

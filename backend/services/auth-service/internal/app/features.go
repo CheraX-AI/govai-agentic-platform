@@ -79,6 +79,12 @@ func (a *App) buildFeatures(ctx context.Context, cfg Config, pool *pgxpool.Pool,
 		slog.Info("web session routes enabled with HTTPS")
 	}
 
+	if cfg.Profile.Enabled {
+		if err := wiring.Profile(ctx, pool, store, f.protected, f.web); err != nil {
+			return f, err
+		}
+	}
+
 	closeChat, err := wiring.WebChat(cfg.WebChat, f.web)
 	if err != nil {
 		return f, err

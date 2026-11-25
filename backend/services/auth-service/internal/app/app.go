@@ -131,7 +131,8 @@ func readyHandler(cfg Config, pool *pgxpool.Pool) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		if postgres.Ready(ctx, pool) != nil ||
 			(cfg.Web.Enabled && postgres.WebSessionsReady(ctx, pool) != nil) ||
-			(len(cfg.Recovery.FenceKey) > 0 && postgres.RecoveryReady(ctx, pool) != nil) {
+			(len(cfg.Recovery.FenceKey) > 0 && postgres.RecoveryReady(ctx, pool) != nil) ||
+			(cfg.Profile.Enabled && postgres.CitizenDetailsReady(ctx, pool) != nil) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
 			return
 		}

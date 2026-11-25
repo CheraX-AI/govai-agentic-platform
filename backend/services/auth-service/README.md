@@ -536,8 +536,9 @@ Storage bounds are 200 Unicode code points for each Sinhala/Tamil name,
 64 for gender, and 200/200/100 for address line1/line2/city. Optional values
 can be cleared. DOB is empty or a valid ISO calendar date, year 1 or later,
 not in the future. These are defensive persistence bounds, not final product
-validation: required fields, gender choices and NIC/DOB consistency remain
-subject to the approved GA-253 contract. Semantic validation runs in application
+validation: required fields remain subject to the approved field contract.
+GA-253 adds male/female choices and NIC/DOB correspondence checks as documented
+in `api/profile.md`. Semantic validation runs in application
 code before encryption; SQL checks the encrypted envelope, identity and revision.
 Nothing forwards profile data to AI. Names and other sensitive details must
 remain protected under GA-256.
@@ -557,3 +558,12 @@ new registration, migration replay/checksums, grants, owner selection, non-ready
 profiles, revision conflicts/concurrency, encryption, persistence, photo-reference
 preservation and unchanged registration data. HTTP ownership, browser/mobile
 save/relogin, and actual photo storage remain later subtasks.
+
+## GA-253 citizen profile APIs
+
+See [the profile API contract](api/profile.md) for routes, authentication,
+configuration, examples and error codes. `PROFILE_API_ENABLED` defaults to false
+and requires migration 007. Production validation accepts male/female and checks
+a supplied DOB against the registered NIC's year/day encoding. See the contract
+for old-format century limitations and leap-day handling. Photos and web/mobile
+screens belong to later subtasks.

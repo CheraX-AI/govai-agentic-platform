@@ -11,6 +11,7 @@ const identityKey = "govai.authn.identity"
 
 // Identity is the verified caller. It never holds the raw token.
 type Identity struct {
+	Email         string // optional verified Keycloak claim; never profile persistence
 	Issuer        string
 	Subject       string // Keycloak user ID
 	Client        string // app that requested the token

@@ -26,6 +26,7 @@ type Issued struct {
 
 type Claims struct {
 	privateValue
+	Email             string // verified Keycloak claim, not application storage
 	Issuer, Subject   string
 	Expires           time.Time
 	Verified, Citizen bool

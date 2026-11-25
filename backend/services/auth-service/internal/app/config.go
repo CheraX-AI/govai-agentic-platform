@@ -12,6 +12,7 @@ type Config struct {
 	Web           config.Web
 	WebChat       config.WebChat
 	Recovery      config.Recovery
+	Profile       config.Profile
 }
 
 // LoadConfig reads envFile (process environment settings win) and validates
@@ -55,6 +56,10 @@ func LoadConfig(envFile string) (Config, error) {
 		return Config{}, err
 	}
 
+	if c.Profile, err = config.LoadProfile(c.Authorization, c.Web); err != nil {
+		return Config{}, err
+	}
+
 	// Optional rate-limit overrides, shared by login, web sessions and registration.
 	limits, err := config.LoadRateLimits()
 	if err != nil {
@@ -73,5 +78,5 @@ func (c Config) tlsEnabled() bool {
 		c.Login.Enabled ||
 		c.Authorization.Enabled ||
 		c.Web.Enabled ||
-		c.Recovery.Enabled
+		c.Recovery.Enabled || c.Profile.Enabled
 }
