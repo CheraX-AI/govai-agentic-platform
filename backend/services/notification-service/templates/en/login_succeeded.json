@@ -1,0 +1,22 @@
+{
+  "locale": "en",
+  "email": {
+    "subject": "New sign-in to your GovAI account",
+    "body": [
+      "A successful sign-in to your GovAI account was recorded.",
+      "",
+      "If this wasn't you, use GovAI's official password recovery process",
+      "to secure your account.",
+      "",
+      "GovAI will never ask you to reply with your password or verification code."
+    ]
+  },
+  "in_app": {
+    "title": "New sign-in",
+    "body": [
+      "A successful sign-in to your GovAI account was recorded.",
+      "If this wasn't you, use GovAI's official password recovery process",
+      "to secure your account."
+    ]
+  }
+}

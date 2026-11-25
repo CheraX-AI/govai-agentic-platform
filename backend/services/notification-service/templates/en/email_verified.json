@@ -1,0 +1,17 @@
+{
+  "locale": "en",
+  "email": {
+    "subject": "Your GovAI email address is verified",
+    "body": [
+      "Your email address has been verified for your GovAI account.",
+      "",
+      "This message confirms verification."
+    ]
+  },
+  "in_app": {
+    "title": "Email verified",
+    "body": [
+      "Your email address has been verified for your GovAI account."
+    ]
+  }
+}

@@ -380,3 +380,20 @@ retries, DLQ publications or dashboard changes are enabled. GA-269 remains open.
 To inspect the policy tests after rebuilding govai-notification-checks:local:
 
     docker run --rm govai-notification-checks:local go test -v ./internal/delivery
+
+## GA-271: English account templates
+
+The templates/ directory now contains a validated renderer and three embedded
+English catalogs, with separate email and in-app wording for successful login,
+password change and confirmed email verification. Body lines are kept short for
+review. See templates/README.md for editing, scope and acceptance details.
+
+The renderer validates the trusted issuer and event envelope, uses fixed text,
+and never includes event identity references or dynamic links. Tests exercise
+all three events, invalid envelopes, unsafe text, the real inbox processor with
+an in-memory store, and the SMTP MIME encoder without network connections.
+
+This is an implementation checkpoint awaiting human wording review. It does not
+wire the foundation API to a consumer or delivery worker. Persistent processing,
+preferences and real queue/email integration still depend on the storage work.
+No Sinhala/Tamil translations or native-speaker approvals are claimed.
