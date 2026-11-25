@@ -99,6 +99,26 @@ func LoadRegistration() (Registration, error) {
 		c.Admin.VerificationClientID == "" {
 		return Registration{}, ErrRegistrationConfig
 	}
+
+	// The public issuer may differ from the admin API address (Keycloak's public name);
+	// it must still be an https realm URL for the same realm.
+	if issuer := os.Getenv("REGISTRATION_ISSUER_URL"); issuer != "" {
+		iu, ie := url.Parse(issuer)
+		if ie != nil ||
+			iu.Scheme != "https" ||
+			iu.Hostname() == "" ||
+			iu.User != nil ||
+			iu.RawQuery != "" ||
+			iu.ForceQuery ||
+			iu.Fragment != "" ||
+			iu.RawPath != "" ||
+			iu.Path != "/realms/"+c.Admin.Realm {
+			return Registration{}, ErrRegistrationConfig
+		}
+
+		c.Admin.Issuer = issuer
+	}
+
 	// The adapter also validates URL paths, group and verification callback before
 	// any request. These settings are server-only and never taken from request JSON.
 	return c, nil

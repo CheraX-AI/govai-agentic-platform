@@ -41,7 +41,7 @@ func Registration(c config.Registration, store *postgres.Store) (*handler.Regist
 	}
 	service, e := registration.NewService(
 		registration.ServiceConfig{
-			Issuer:            c.Admin.BaseURL + "/realms/" + c.Admin.Realm,
+			Issuer:            c.Admin.IssuerURL(),
 			FingerprintKey:    c.FingerprintKey,
 			Timeout:           25 * time.Second,
 			EmailRetryBackoff: time.Minute,

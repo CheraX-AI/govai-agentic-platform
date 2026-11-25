@@ -889,3 +889,15 @@ func TestInvalidInputsDoNotDispatch(t *testing.T) {
 	)
 	assertError(t, a.SendVerification(context.Background(), "id", ""), registration.AdminInvalid, false)
 }
+
+func TestIssuerURL(t *testing.T) {
+	cfg := config("https://10.0.0.5:8443")
+	if cfg.IssuerURL() != "https://10.0.0.5:8443/realms/GovAI" {
+		t.Fatal("default issuer must be the admin API realm URL")
+	}
+
+	cfg.Issuer = "https://accounts.example.test/realms/GovAI"
+	if cfg.IssuerURL() != "https://accounts.example.test/realms/GovAI" {
+		t.Fatal("public issuer must win when set")
+	}
+}

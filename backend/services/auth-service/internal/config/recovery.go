@@ -69,7 +69,7 @@ func LoadRecovery(reg Registration, web Web) (Recovery, error) {
 		return Recovery{}, ErrRecoveryConfig
 	}
 
-	issuer := reg.Admin.BaseURL + "/realms/" + reg.Admin.Realm
+	issuer := reg.Admin.IssuerURL()
 	if issuer != web.Provider.Issuer {
 		return Recovery{}, ErrRecoveryConfig
 	}

@@ -31,10 +31,21 @@ type RegistrationConfig struct {
 	RegistrationGroupPath                      string
 	BaseURL, Realm, ClientID, ClientSecret     string
 	VerificationClientID, VerificationRedirect string
-	VerificationLifespan                       time.Duration
-	CallTimeout                                time.Duration
-	MaxResponseBytes                           int64
-	TokenSkew                                  time.Duration
+	// Optional public issuer, used when it differs from the admin API address.
+	Issuer               string
+	VerificationLifespan time.Duration
+	CallTimeout          time.Duration
+	MaxResponseBytes     int64
+	TokenSkew            time.Duration
+}
+
+// IssuerURL is the token issuer: the public issuer when set, else the admin API realm URL.
+func (c RegistrationConfig) IssuerURL() string {
+	if c.Issuer != "" {
+		return c.Issuer
+	}
+
+	return c.BaseURL + "/realms/" + c.Realm
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).
