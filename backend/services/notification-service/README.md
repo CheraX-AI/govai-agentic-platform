@@ -335,3 +335,48 @@ To repeat after rebuilding the checks image, run from the repository root:
 The helper uses a generated password and RAM-backed disposable storage, publishes
 no host port, removes its own test container and restores process environment.
 It does not read local service secrets or modify the project database containers.
+## GA-269: email retry policy checkpoint
+
+internal/delivery/policy.go evaluates the SMTP adapter's result without sending,
+consuming messages or changing database state. Three total SMTP attempts are
+allowed (initial attempt plus two retries), following the current implementation
+plan. Temporary failures schedule the next attempt 30 seconds later in UTC.
+Permanent SMTP rejections, invalid messages and unsafe transport/authentication
+configuration stop immediately. Successful SMTP acceptance remains submitted;
+it does not mean the recipient received or read the email.
+
+A lost final DATA response has an unknown outcome. It requires review and never
+automatically authorizes another SMTP submission. Cancellation is also held for
+review. Contradictory results, unsupported error codes and invalid attempt counts
+fail closed with a generic error; provider text is never copied into decisions.
+
+The three-attempt budget is distinct from RabbitMQ's poison-message delivery
+limit. Queue redelivery is not evidence that another SMTP attempt occurred.
+
+Before this policy can be enabled, GA-208 integration must provide:
+
+- Atomic delivery claiming with a per-attempt lease/fence and a persisted count
+  reserved before SMTP starts, shared across restarts and concurrent workers.
+- Safe recovery of interrupted submissions: an expired in-flight attempt cannot
+  simply be resent, because SMTP may already have accepted it.
+- Persisted submitted/failed/unknown outcomes and retry-due timestamps, independent
+  of the inbox row's read status. Preferences must be checked before sending.
+- A durable dead-letter publication intent for terminal failures, with only safe
+  delivery/event identifiers and an allowlisted reason, never recipient or body.
+- A mandatory, publisher-confirmed DLQ dispatcher; failed/uncertain publication
+  keeps that intent pending with a stable ID for safe broker redelivery.
+- Separate security/normal worker capacity, plus real PostgreSQL and isolated
+  RabbitMQ tests for concurrency, restart recovery, exhaustion and DLQ visibility.
+
+Dead is a decision to persist a dead-letter intent, not proof of broker delivery.
+Review is a worker action; it does not introduce a new database status. Map it to
+unknown/manual investigation in the agreed schema. Do not delete an inbox message
+or reset its read state when email delivery fails.
+
+This checkpoint adds policy and tests only. The application still has
+processing_enabled=false. No delivery table migrations, live workers, automatic
+retries, DLQ publications or dashboard changes are enabled. GA-269 remains open.
+
+To inspect the policy tests after rebuilding govai-notification-checks:local:
+
+    docker run --rm govai-notification-checks:local go test -v ./internal/delivery
