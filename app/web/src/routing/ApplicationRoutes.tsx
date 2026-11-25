@@ -5,6 +5,7 @@ import { useConversation } from '../chat/useConversation'
 import { ApplicationPageLayout } from '../components/layout/ApplicationPageLayout'
 import ChatPage from '../pages/ChatPage'
 import HomePage from '../pages/HomePage'
+import ProfilePage from '../pages/ProfilePage'
 import RecentPage from '../pages/RecentPage'
 import { navigate } from './routes'
 import type { ProtectedDestination } from './routes'
@@ -39,7 +40,7 @@ export default function ApplicationRoutes({ path, onLogout }: {
     reset()
     navigate('/app/home')
   }
-  const page = path === '/app/chat' ? 'chat' : path === '/app/recent' ? 'recent' : 'home'
+  const page = path === '/app/profile' ? 'profile' : path === '/app/chat' ? 'chat' : path === '/app/recent' ? 'recent' : 'home'
 
   return (
     <ProtectedRoute destination={path}>
@@ -49,7 +50,9 @@ export default function ApplicationRoutes({ path, onLogout }: {
         onNewChat={newChat}
         conversationAvailable={conversation.messages.length > 0}
       >
-        {page === 'chat' ? (
+        {page === 'profile' ? (
+          <ProfilePage onLogout={onLogout} />
+        ) : page === 'chat' ? (
           <ChatPage conversation={conversation} />
         ) : page === 'recent' ? (
           <RecentPage conversationAvailable={conversation.messages.length > 0} />

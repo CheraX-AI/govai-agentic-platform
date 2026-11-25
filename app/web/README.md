@@ -17,6 +17,7 @@ gives the browser an HttpOnly session cookie, so no token ever reaches JavaScrip
 | --- | --- | --- |
 | Create an account | `POST /api/v1/registrations` (`Idempotency-Key`, no cookie) | `src/services/registrationApi.ts` |
 | Log in, stay logged in, log out | `/api/v1/web/login`, `/session`, `/csrf`, `/refresh`, `/logout` (cookie + `X-GovAI-Web`, CSRF token on POST) | `src/services/browserAuthAdapter.ts` |
+| Personal information and photo | `GET/PUT /api/v1/web/profile`, `/profile/photo` (cookie + browser header; CSRF on PUT) | `src/services/profileApi.ts` |
 | Chat on Home | `GET /api/v1/web/csrf`, then `POST /api/v1/web/chat` | `src/services/chatApi.ts` |
 | Forgot / reset password | `POST /api/v1/auth/forgot-password`, `/reset-password` | `src/services/recoveryApi.ts` |
 
@@ -34,6 +35,8 @@ In `backend/services/auth-service` (private `.env` files):
 - `WEB_SESSION_ENABLED=true` and `WEB_ORIGIN=https://localhost:5173` (login, chat)
 - `WEB_CHAT_ENABLED=true` (chat; needs web sessions)
 - `RECOVERY_ENABLED=true` (password reset; needs migrations 004-006 and SMTP)
+- `PROFILE_API_ENABLED=true` (personal information; needs migration 007 and existing web sessions)
+- `PROFILE_PHOTO_ENABLED=true` plus private SeaweedFS configuration (profile photos; see the auth-service profile-photo API documentation)
 
 Open the app at **`https://localhost:5173`**, not `127.0.0.1`: the session cookie is
 `SameSite=Strict`, and `localhost:5173` and `localhost:5001` are the same site.
@@ -50,11 +53,13 @@ URLs are normal paths (no `#`). Old `/#/login` style links are redirected.
 | `/reset-password#token=...` | Choose a new password (link from the email; the token is read and removed from the address bar) |
 | `/verify-code` | Asks the user to open a valid reset link |
 | `/app/home`, `/app/chat`, `/app/recent` | Signed-in pages; guests are sent to `/login?returnTo=...` |
+| `/app/profile` | Signed-in Personal information; Settings and account menu link here |
 | `/home`, `/recent` | Redirect to `/app/home`, `/app/recent` |
 
-Not available yet (no backend): the user's name (`/web/session` returns only an ID),
+Not available yet (no backend): the header's user name (`/web/session` returns only an ID),
 chat history, phone login, CAPTCHA, notifications, language switching, My requests,
-Services, Help and Settings. These stay hidden or disabled.
+Services, Help and the other settings categories. These stay hidden or disabled.
+The Settings profile screen is implemented; GovAI Plus plan management remains disabled.
 
 ## Run it
 
@@ -132,6 +137,7 @@ node scripts/check-auth-state.mjs               # routes, return allowlist
 node scripts/check-login.mjs                    # email/NIC login validation
 node scripts/check-registration.mjs             # registration rules + registration API client
 node scripts/check-recovery.mjs                 # recovery NIC validation
+node scripts/integration/check-profile-api.mjs  # profile fields, CSRF, photos, conflicts
 node scripts/integration/check-chat-api.mjs     # chat client: CSRF, sources, errors
 node scripts/integration/check-web-auth-api.mjs # session client transport and errors
 node scripts/integration/check-recovery-api.mjs # recovery client and receipt validation
@@ -167,7 +173,7 @@ create synthetic accounts when explicitly enabled. Historical route/selector
 expectations still require review; live acceptance is not claimed. Keep their opt-in
 flags unset during frontend-only checks; no services are started by this cleanup.
 
-Paused API-integration work remains outside this frontend increment.
+Profile integration is documented in the GA-255 section below; live end-to-end checks remain outstanding.
 
 Limitations: no server-side conversation history, history CRUD, full-transcript context, attachments or voice. Live verification requires available configured services and legitimate test access, and is not part of this frontend-only reconciliation. The destination's existing API/auth behavior is intentionally unchanged; any transport/security improvements belong to the separately paused integration work.
 
@@ -188,3 +194,28 @@ Local browser verification measures sizing, targets, alignment, growth, internal
 scrolling, resize and overflow at widths 1440/768/375/320, plus whitespace,
 Shift+Enter and IME behavior in preview and normal application contexts.
 Preview fixture success is not authenticated backend evidence.
+
+
+## Personal information code structure (GA-255)
+
+The profile feature follows the same separation as chat: pages assemble the UI,
+feature hooks own in-memory state, feature components render controls, services
+call the backend, validation checks form input, and styles remain in styles/.
+
+| Location | Responsibility |
+| --- | --- |
+| `src/pages/ProfilePage.tsx` | Assemble the page and connect the existing authentication context |
+| `src/profile/useProfile.ts` | Loading, editable draft, save/photo operations, cancellation and revision reconciliation |
+| `src/components/profile/` | Profile form, photo controls, field wrapper, settings navigation and its icons |
+| `src/services/profileApi.ts` | Typed profile/photo API contract, secure transport and response checks |
+| `src/validation/profileValidation.ts` | Early field and photo feedback; the backend remains authoritative |
+| `src/styles/profile.css` | Profile appearance and responsive web layout |
+| `src/routing/` | Protected profile route, title and allowed login return destination |
+| `scripts/integration/check-profile-api.mjs` | Self-contained profile request checks with mocked fetch |
+| `scripts/integration/check-profile-browser.mjs` | Optional synthetic browser fixture check; not live integration evidence |
+
+Connection: Settings/account menu -> protected `/app/profile` -> ProfilePage ->
+useProfile -> profileApi -> auth-service. UI components call the hook's actions;
+they do not issue requests or store credentials. See [profile implementation and
+verification](ga255-profile-status.md) for operation details and remaining live
+integration checks. No new registration/login architecture is introduced.

@@ -120,3 +120,11 @@
 .chat-question { font-weight: 600; }
 .chat-exchange ul { padding-left: 20px; }
 @media (max-width: 480px) { .composer-preview textarea { flex-basis: calc(100% - 70px); } }
+
+/* Shared sidebar plan presentation; no subscription data or billing action. */
+.sidebar-plan-card { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 13px 10px; background: #f7f9fc; border-radius: 12px; color: #142033; }
+.sidebar-plan-card strong { display: block; font-size: 14px; font-weight: 700; }
+.sidebar-plan-card small { display: block; margin-top: 3px; font-size: 11px; line-height: 1.4; color: #555e6e; }
+.sidebar-plan-card .crown-tile { width: 28px; height: 28px; }
+.sidebar-plan-card .shell-icon { width: 20px; height: 20px; }
+.application-layout .sidebar-plan-card button { padding: 0; border: 0; min-height: 36px; background: transparent; color: #891b30; font-size: 12px; font-weight: 650; margin-left: auto; cursor: not-allowed; }

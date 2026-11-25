@@ -1,6 +1,7 @@
 import { NavigationItem } from './NavigationItem'
+import { Icon } from '../Icon'
 
-export type ApplicationPage = 'home' | 'recent' | 'chat'
+export type ApplicationPage = 'home' | 'recent' | 'chat' | 'profile'
 
 export function Sidebar({ page, onNewChat, conversationAvailable }: {
   page: ApplicationPage
@@ -36,9 +37,13 @@ export function Sidebar({ page, onNewChat, conversationAvailable }: {
         <NavigationItem label="Services" icon="services" />
       </div>
       <div className="sidebar-utilities">
-        <p className="unavailable-note">Other destinations unavailable</p>
         <NavigationItem label="Help & support" icon="help" />
-        <NavigationItem label="Settings" icon="settings" />
+        <NavigationItem label="Settings" icon="settings" href="/app/profile" active={page === 'profile'} />
+        <div className="sidebar-plan-card" aria-label="GovAI Plus">
+          <span className="crown-tile"><Icon collection="shell" name="crown" /></span>
+          <span><strong>GovAI Plus</strong><small>Plan details unavailable</small></span>
+          <button type="button" disabled title="Plan management is not available yet">Manage</button>
+        </div>
       </div>
     </nav>
   )
