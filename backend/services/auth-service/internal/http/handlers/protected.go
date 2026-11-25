@@ -62,6 +62,10 @@ func (p *Protected) attach(router *gin.Engine) {
 		p.readyProfile,
 	)
 	if p.profile != nil {
+		if p.profile.photo != nil {
+			group.GET("/profile/photo", p.profile.Native)
+			group.PUT("/profile/photo", p.profile.Native)
+		}
 		group.GET("/profile", p.profile.Native)
 		group.PUT("/profile", p.profile.Native)
 	}

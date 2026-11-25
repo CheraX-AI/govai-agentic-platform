@@ -18,7 +18,10 @@ type ProfileService interface {
 	Update(context.Context, profile.Caller, profile.UpdateRequest) (profile.Snapshot, error)
 }
 
-type ProfileHandler struct{ service ProfileService }
+type ProfileHandler struct {
+	service ProfileService
+	photo   *profile.PhotoService
+}
 
 func NewProfileHandler(service ProfileService) (*ProfileHandler, error) {
 	if service == nil {
@@ -126,6 +129,14 @@ func (h *ProfileHandler) serve(c *gin.Context, ctx context.Context, identity pro
 		errorResponse(c, 400, "invalid_request", "Profile requests do not accept query parameters.")
 		return
 	}
+	if strings.HasSuffix(c.Request.URL.Path, "/photo") {
+		if h.photo == nil {
+			c.Status(404)
+			return
+		}
+		h.servePhoto(c, ctx, identity)
+		return
+	}
 	var result profile.Snapshot
 	var err error
 	if c.Request.Method == "GET" {
@@ -168,6 +179,10 @@ func (h *ProfileHandler) serve(c *gin.Context, ctx context.Context, identity pro
 	if result.Email != "" && len(result.Email) <= 254 && strings.IndexFunc(result.Email, unicode.IsControl) < 0 {
 		email = result.Email
 	}
+	var photoURL any
+	if h.photo != nil && result.Details.PhotoObjectKey != "" {
+		photoURL = c.Request.URL.Path + "/photo"
+	}
 	f := result.Details.Fields
 	// Map every public field explicitly: never serialize internal redacted DTOs
 	// or expose issuer, subject, tokens, credentials or SeaweedFS object keys.
@@ -175,7 +190,7 @@ func (h *ProfileHandler) serve(c *gin.Context, ctx context.Context, identity pro
 		"full_name": result.Registered.FullName, "nic": result.Registered.NIC.RestrictedOriginal(), "mobile_number": result.Registered.MobileNumber,
 		"email": email, "name_si": f.NameSI, "name_ta": f.NameTA, "date_of_birth": f.DateOfBirth, "gender": f.Gender,
 		"address":  gin.H{"line1": f.Address.Line1, "line2": f.Address.Line2, "city": f.Address.City},
-		"revision": result.Details.Revision, "has_photo": result.Details.PhotoObjectKey != "", "photo_url": nil,
+		"revision": result.Details.Revision, "has_photo": result.Details.PhotoObjectKey != "", "photo_url": photoURL,
 	})
 }
 

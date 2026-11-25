@@ -7,6 +7,9 @@ import (
 )
 
 func (h *WebSessionHandler) isPath(path string) bool {
+	if path == "/api/v1/web/profile/photo" {
+		return h.profile != nil && h.profile.photo != nil
+	}
 	if path == "/api/v1/web/profile" {
 		return h.profile != nil
 	}
@@ -56,7 +59,7 @@ func (h *WebSessionHandler) cors(c *gin.Context) {
 
 	c.Writer.Header().Add("Vary", "Access-Control-Request-Method")
 	c.Writer.Header().Add("Vary", "Access-Control-Request-Headers")
-	if h.profile != nil && c.Request.URL.Path == "/api/v1/web/profile" {
+	if h.profile != nil && (c.Request.URL.Path == "/api/v1/web/profile" || (h.profile.photo != nil && c.Request.URL.Path == "/api/v1/web/profile/photo")) {
 		method = "GET"
 		requested := c.GetHeader("Access-Control-Request-Method")
 		if requested == "PUT" {
@@ -71,6 +74,11 @@ func (h *WebSessionHandler) cors(c *gin.Context) {
 	for _, value := range strings.Split(c.GetHeader("Access-Control-Request-Headers"), ",") {
 		switch strings.ToLower(strings.TrimSpace(value)) {
 		case "", "content-type", "x-govai-web", "x-csrf-token":
+		case "if-match":
+			if h.profile == nil || h.profile.photo == nil || c.Request.URL.Path != "/api/v1/web/profile/photo" {
+				webFail(c, 403, "preflight_rejected")
+				return
+			}
 		default:
 			webFail(c, 403, "preflight_rejected")
 			return
@@ -78,6 +86,10 @@ func (h *WebSessionHandler) cors(c *gin.Context) {
 	}
 
 	c.Header("Access-Control-Allow-Methods", method)
-	c.Header("Access-Control-Allow-Headers", "Content-Type, X-GovAI-Web, X-CSRF-Token")
+	headers := "Content-Type, X-GovAI-Web, X-CSRF-Token"
+	if h.profile != nil && h.profile.photo != nil && c.Request.URL.Path == "/api/v1/web/profile/photo" {
+		headers += ", If-Match"
+	}
+	c.Header("Access-Control-Allow-Headers", headers)
 	c.AbortWithStatus(204)
 }

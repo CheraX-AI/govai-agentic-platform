@@ -85,6 +85,14 @@ func (a *App) buildFeatures(ctx context.Context, cfg Config, pool *pgxpool.Pool,
 		}
 	}
 
+	if cfg.Photo.Enabled {
+		closePhoto, err := wiring.Photo(cfg.Photo, store, f.protected, f.web)
+		if err != nil {
+			return f, err
+		}
+		a.onClose(closePhoto)
+	}
+
 	closeChat, err := wiring.WebChat(cfg.WebChat, f.web)
 	if err != nil {
 		return f, err

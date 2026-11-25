@@ -79,7 +79,13 @@ func NewRouter(options RouterOptions) *gin.Engine {
 				"duration_ms",
 				time.Since(started).Milliseconds())
 		}()
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		limit := int64(1 << 20)
+		if (options.Protected != nil && options.Protected.profile != nil && options.Protected.profile.photo != nil && c.Request.URL.Path == "/api/v1/profile/photo") || (options.WebSessions != nil && options.WebSessions.profile != nil && options.WebSessions.profile.photo != nil && c.Request.URL.Path == "/api/v1/web/profile/photo") {
+			limit = 2<<20 + 1
+			c.Header("Cache-Control", "no-store")
+			c.Header("Pragma", "no-cache")
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 		c.Next()
 	})
 	router.Use(func(c *gin.Context) {
@@ -125,7 +131,7 @@ func NewRouter(options RouterOptions) *gin.Engine {
 				allowedMethod = "POST"
 			}
 
-			if options.Protected != nil && options.Protected.profile != nil && c.Request.URL.Path == "/api/v1/profile" && method == "PUT" {
+			if options.Protected != nil && options.Protected.profile != nil && (c.Request.URL.Path == "/api/v1/profile" || (options.Protected.profile.photo != nil && c.Request.URL.Path == "/api/v1/profile/photo")) && method == "PUT" {
 				allowedMethod = "PUT"
 			}
 			if method != allowedMethod {
@@ -136,6 +142,11 @@ func NewRouter(options RouterOptions) *gin.Engine {
 			for _, header := range strings.Split(c.GetHeader("Access-Control-Request-Headers"), ",") {
 				switch strings.ToLower(strings.TrimSpace(header)) {
 				case "", "authorization", "content-type":
+				case "if-match":
+					if options.Protected == nil || options.Protected.profile == nil || options.Protected.profile.photo == nil || c.Request.URL.Path != "/api/v1/profile/photo" {
+						abortJSON(c, 403, gin.H{"error": "CORS header not allowed"})
+						return
+					}
 				case "idempotency-key":
 					if !registrationPath {
 						abortJSON(c, http.StatusForbidden, gin.H{"error": "CORS header not allowed"})
@@ -149,6 +160,9 @@ func NewRouter(options RouterOptions) *gin.Engine {
 
 			c.Header("Access-Control-Allow-Methods", allowedMethod)
 			allowedHeaders := "Authorization, Content-Type"
+			if options.Protected != nil && options.Protected.profile != nil && options.Protected.profile.photo != nil && c.Request.URL.Path == "/api/v1/profile/photo" {
+				allowedHeaders += ", If-Match"
+			}
 			if registrationPath {
 				allowedHeaders += ", Idempotency-Key"
 			}
@@ -171,6 +185,10 @@ func NewRouter(options RouterOptions) *gin.Engine {
 		}
 
 		if web.profile != nil {
+			if web.profile.photo != nil {
+				router.GET("/api/v1/web/profile/photo", web.Profile)
+				router.PUT("/api/v1/web/profile/photo", web.Profile)
+			}
 			router.GET("/api/v1/web/profile", web.Profile)
 			router.PUT("/api/v1/web/profile", web.Profile)
 		}

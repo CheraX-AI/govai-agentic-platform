@@ -567,3 +567,11 @@ and requires migration 007. Production validation accepts male/female and checks
 a supplied DOB against the registered NIC's year/day encoding. See the contract
 for old-format century limitations and leap-day handling. Photos and web/mobile
 screens belong to later subtasks.
+
+## GA-254 citizen profile photos
+
+See [the photo API contract](api/profile-photo.md) for private SeaweedFS setup,
+authenticated JPEG/PNG upload/read routes, the 2 MiB limit, revision headers,
+replacement safety, tests and cleanup limitations. `PROFILE_PHOTO_ENABLED` is
+false by default and requires the existing profile API. No live migration,
+bucket or private configuration is changed automatically.

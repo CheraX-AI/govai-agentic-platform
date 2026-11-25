@@ -72,9 +72,10 @@ token issuance time until refresh. No email/credentials are persisted here.
 Issuer, subject, role, encryption keys, credentials and photo object keys are
 never response fields.
 
-GA-254 owns photo upload/retrieval. `has_photo` reports whether a stored reference
-exists; `photo_url` remains null until that integration is implemented. No
-unimplemented URL or direct SeaweedFS key is exposed.
+GA-254 provides authenticated photo upload/retrieval when its optional feature
+is enabled. `has_photo` reports a stored reference; `photo_url` is then the
+matching authenticated adapter path, otherwise null. See [profile photos](profile-photo.md).
+No direct SeaweedFS key or storage credential is exposed.
 
 ## PUT request
 

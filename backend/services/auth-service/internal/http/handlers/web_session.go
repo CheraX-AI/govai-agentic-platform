@@ -141,7 +141,7 @@ func (h *WebSessionHandler) begin(c *gin.Context, write bool, isLogin ...bool) (
 	}
 
 	writeMethod := "POST"
-	if h.profile != nil && c.Request.URL.Path == "/api/v1/web/profile" {
+	if h.profile != nil && (c.Request.URL.Path == "/api/v1/web/profile" || (h.profile.photo != nil && c.Request.URL.Path == "/api/v1/web/profile/photo")) {
 		writeMethod = "PUT"
 	}
 	if (write && c.Request.Method != writeMethod) || (!write && c.Request.Method != "GET") {
