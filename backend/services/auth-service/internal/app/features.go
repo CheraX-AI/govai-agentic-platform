@@ -107,7 +107,7 @@ func (a *App) nicLogin(cfg Config, store *postgres.Store) (login.IdentifierResol
 		return nil, nil
 	}
 
-	expectedIssuer := cfg.Registration.Admin.BaseURL + "/realms/" + cfg.Registration.Admin.Realm
+	expectedIssuer := cfg.Registration.Admin.IssuerURL()
 	if (cfg.Login.Enabled && cfg.Login.Provider.Issuer != expectedIssuer) ||
 		(cfg.Web.Enabled && cfg.Web.Provider.Issuer != expectedIssuer) {
 		return nil, login.ErrUnavailable

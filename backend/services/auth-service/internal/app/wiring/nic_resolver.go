@@ -62,5 +62,5 @@ func NICLogin(c config.Registration, profiles *postgres.Store) (login.Identifier
 		return nil, nil, login.ErrUnavailable
 	}
 
-	return &nicLogin{profiles: profiles, admin: admin, issuer: c.Admin.BaseURL + "/realms/" + c.Admin.Realm}, admin.Close, nil
+	return &nicLogin{profiles: profiles, admin: admin, issuer: c.Admin.IssuerURL()}, admin.Close, nil
 }

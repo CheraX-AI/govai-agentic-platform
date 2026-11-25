@@ -19,7 +19,7 @@ func NewRecoveryProvider(admin *Admin) (*RecoveryProvider, error) {
 		return nil, recovery.ErrUnavailable
 	}
 
-	return &RecoveryProvider{admin: admin, issuer: admin.cfg.BaseURL + "/realms/" + admin.cfg.Realm}, nil
+	return &RecoveryProvider{admin: admin, issuer: admin.cfg.IssuerURL()}, nil
 }
 
 var _ recovery.Provider = (*RecoveryProvider)(nil)

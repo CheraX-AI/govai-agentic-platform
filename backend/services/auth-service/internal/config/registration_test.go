@@ -68,3 +68,43 @@ func TestRegistrationConfiguration(t *testing.T) {
 		}
 	})
 }
+
+func TestRegistrationIssuer(t *testing.T) {
+	t.Run("defaults to the admin API realm URL", func(t *testing.T) {
+		registrationEnv(t)
+		c, e := LoadRegistration()
+		if e != nil || c.Admin.IssuerURL() != "https://identity.example.test/realms/GovAI" {
+			t.Fatal("default issuer wrong")
+		}
+	})
+	t.Run("accepts a public issuer for the same realm", func(t *testing.T) {
+		registrationEnv(t)
+		t.Setenv("REGISTRATION_ISSUER_URL", "https://accounts.example.test/realms/GovAI")
+		c, e := LoadRegistration()
+		if e != nil || c.Admin.IssuerURL() != "https://accounts.example.test/realms/GovAI" {
+			t.Fatal("public issuer rejected")
+		}
+
+		if c.Admin.BaseURL != "https://identity.example.test" {
+			t.Fatal("admin API address changed")
+		}
+	})
+	for name, value := range map[string]string{
+		"http":           "http://accounts.example.test/realms/GovAI",
+		"other realm":    "https://accounts.example.test/realms/Other",
+		"no realm path":  "https://accounts.example.test",
+		"trailing slash": "https://accounts.example.test/realms/GovAI/",
+		"query":          "https://accounts.example.test/realms/GovAI?x=1",
+		"fragment":       "https://accounts.example.test/realms/GovAI#x",
+		"credentials":    "https://user:pass@accounts.example.test/realms/GovAI",
+		"not a url":      "bad",
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			registrationEnv(t)
+			t.Setenv("REGISTRATION_ISSUER_URL", value)
+			if _, e := LoadRegistration(); e == nil {
+				t.Fatal("unsafe issuer accepted")
+			}
+		})
+	}
+}

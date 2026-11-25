@@ -30,7 +30,7 @@ func Recovery(
 		return nil, nil, config.ErrRecoveryConfig
 	}
 
-	if c.Service.Issuer != reg.Admin.BaseURL+"/realms/"+reg.Admin.Realm ||
+	if c.Service.Issuer != reg.Admin.IssuerURL() ||
 		c.Service.Issuer != web.Provider.Issuer ||
 		c.Origin != web.Origin {
 		return nil, nil, config.ErrRecoveryConfig
