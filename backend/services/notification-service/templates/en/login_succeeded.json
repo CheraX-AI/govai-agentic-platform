@@ -5,18 +5,18 @@
     "body": [
       "A successful sign-in to your GovAI account was recorded.",
       "",
-      "If this wasn't you, use GovAI's official password recovery process",
-      "to secure your account.",
+      "If this wasn't you, open GovAI and use Forgot password",
+      "on the login page to reset your password.",
       "",
-      "GovAI will never ask you to reply with your password or verification code."
+      "Never share your password or verification code."
     ]
   },
   "in_app": {
     "title": "New sign-in",
     "body": [
       "A successful sign-in to your GovAI account was recorded.",
-      "If this wasn't you, use GovAI's official password recovery process",
-      "to secure your account."
+      "If this wasn't you, use Forgot password on the login page",
+      "to reset your password."
     ]
   }
 }

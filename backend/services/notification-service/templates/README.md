@@ -15,6 +15,11 @@ Email verification is a confirmation after verification, not an OTP or a link
 that performs verification. Failed-login alerts and task reminders are outside
 the current three-event contract.
 
+The verification-link email belongs to auth-service/Keycloak. This service's
+email_verified template confirms completed verification only; it never generates
+a link or grants access. login_succeeded reports an already successful login and
+does not require an email click to authorize that login.
+
 renderer.go embeds these assets at build time. New requires the trusted HTTPS
 issuer, validates the complete catalog, and creates an immutable renderer.
 Render implements notifications.Renderer; RenderEmail supplies subject/body
@@ -30,12 +35,18 @@ not establish PostgreSQL persistence, live queue processing or final delivery.
 
 ## Review and acceptance
 
-These are English drafts awaiting human wording review. Confirm that the account
-recovery guidance matches the final web/mobile flow before approval. Native-
-speaker review has not been recorded. Sinhala/Tamil are excluded under the
-agreed current English-only scope; if Jira still requires all three languages,
-that scope needs updating or the translations and their reviews remain pending.
-GA-271 must not be marked fully accepted on the basis of automated tests alone.
+The user approved the English email and in-app wording for successful login,
+password change and email verification on 27 November 2026. The password and
+login alerts use explicit Forgot password guidance; match that label to the
+final web/mobile interface during integration. Email verification text confirms
+completed verification and does not replace the authentication verification link.
+
+This records the project owner's wording approval, not an independent native-
+speaker sign-off. Sinhala/Tamil are excluded under the agreed English-only scope;
+if Jira retains a three-language requirement, record that scope change or track
+translations and their reviews separately. The English implementation and wording
+review are prepared for handoff; storage/runtime integration remains documented
+above and live acceptance testing belongs to the teammate handoff.
 
 Run from the repository root after rebuilding the Docker checks image:
 
