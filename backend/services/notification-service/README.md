@@ -397,3 +397,18 @@ This is an implementation checkpoint awaiting human wording review. It does not
 wire the foundation API to a consumer or delivery worker. Persistent processing,
 preferences and real queue/email integration still depend on the storage work.
 No Sinhala/Tamil translations or native-speaker approvals are claimed.
+
+## GA-270: citizen API implementation checkpoint
+
+Authenticated handlers are prepared for listing, marking read, unread counts and
+atomic email/in-app preference replacement. They reuse the shared authn JWT/TLS
+verifier and pass issuer+subject to owner-scoped storage interfaces. Input limits,
+strict JSON, keyset pagination, security inbox policy and local authentication/
+owner-propagation tests are included. See [API handoff](API.md)
+for request/response behavior, SQL requirements and teammate live-test steps.
+
+The foundation application does not register these routes yet. GA-208 adapters,
+API JWT/TLS runtime configuration and the browser BFF proxy remain integration
+work. No in-memory store is installed into the application and readiness remains
+false. The tests establish API behavior against local fixtures, not persistent
+SQL isolation or live acceptance. No new private configuration is required here.

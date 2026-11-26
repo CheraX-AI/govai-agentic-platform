@@ -1,10 +1,12 @@
 # Build from backend/, following the other Go services.
 
 FROM golang:1.26-alpine AS dependencies
+COPY pkg/authn/go.mod pkg/authn/go.sum /src/pkg/authn/
 COPY pkg/notificationcontract/go.mod /src/pkg/notificationcontract/go.mod
 WORKDIR /src/services/notification-service
 COPY services/notification-service/go.mod services/notification-service/go.sum ./
 RUN go mod download
+COPY pkg/authn/ /src/pkg/authn/
 COPY pkg/notificationcontract/ /src/pkg/notificationcontract/
 COPY services/notification-service/ ./
 

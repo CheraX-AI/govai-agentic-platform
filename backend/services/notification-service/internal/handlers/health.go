@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Routes exposes foundation health only; no citizen data endpoints exist yet.
+// Routes exposes foundation health; citizen routes require explicit registration.
 
 func Routes(connected func() bool) *gin.Engine {
 	router := gin.New()
