@@ -2,12 +2,13 @@
 
 ## Repository availability
 
-The frontend screens, navigation, original Figma assets and guarded development
-launchers are included in the repository. Authentication, account recovery and
-chat still contain explicitly labelled development-only simulations; they do not
-authenticate users, send recovery messages or contact an AI service. Real
-backend/API integration, verified identity data, secure sessions and production
-chat behavior are still required.
+The repository contains the mobile screens, original Figma assets, guarded
+previews and native authentication/session, registration, recovery, chat and
+profile API adapters. Real mode requires configured, phone-accessible HTTPS
+services and a valid citizen account. The development-only simulations do not
+authenticate users or demonstrate live backend integration. Historical UI-only
+notes below describe earlier increments; current profile behaviour is documented
+in the GA-288 section.
 
 Optional mock regression and served-bundle diagnostic scripts are kept only in
 the development maintainer's local checkout and are excluded from Git. A GitHub
@@ -1442,3 +1443,121 @@ and ribbon crops, natural overflow, TalkBack notice/heading/button announcements
 Log in with empty fields and Login Back to Welcome, and Android Back from this
 preview to Welcome. No native screenshot, emulator or physical-device rendering
 was performed for this screen.
+
+
+## GA-288 - Mobile Personal Information
+
+### Open the screen
+
+In real mode, log in and choose Profile in the bottom navigation. The screen
+uses the existing native session; access tokens stay inside that session and do
+not become screen props or stored profile data. Set the existing public
+`EXPO_PUBLIC_AUTH_API_URL` to a phone-reachable, TLS-trusted HTTPS origin.
+`localhost` points to the phone and is rejected by the existing configuration.
+The backend requires migration 007 and the profile feature; photos additionally
+require the configured private SeaweedFS storage. No backend environment or
+web code was changed by this mobile task.
+
+To inspect the mobile design independently of backend readiness:
+
+```powershell
+npm.cmd run preview:profile:dev
+# Optional alternate port:
+npm.cmd run preview:profile:dev -- --port 8085
+```
+
+Open the QR/link in an Expo Go version supporting this project's SDK 57. The
+launcher identifies this as a synthetic preview in the terminal. Preview saves stay in memory,
+make no account/API requests and reset on reload. Normal Profile navigation
+uses the authenticated API, never this fixture. The preview module is behind
+`__DEV__` and excluded from the Android production bundle.
+
+### Existing folder conventions
+
+| File | Responsibility |
+| --- | --- |
+| `pages/PersonalInformationScreen.tsx` | Screen composition, safe areas, keyboard/Back behaviour and Save action |
+| `components/PersonalInformationForm.tsx` | Grouped profile fields matching the approved mobile card layout |
+| `components/ProfileField.tsx` | Labelled inputs, read-only states and existing local icon/font assets |
+| `components/ProfileGenderField.tsx` | Accessible Male/Female selection and optional clearing |
+| `components/ProfilePhotoCard.tsx` | Photo preview, explicit Upload and Cancel controls |
+| `auth/useCitizenProfile.ts` | In-memory draft, loading, saves, photos, cancellation and revision reconciliation |
+| `auth/useNativeSession.ts` | Existing secure-session owner; supplies the token-free profile gateway |
+| `services/profileApi.ts` | Native authenticated GET/PUT contracts, validation and safe responses |
+| `services/profilePhotoPicker.ts` | Expo image selection and bounded local file reading |
+| `pages/PersonalInformationPreviewScreen.tsx` | Isolated synthetic development preview |
+| `scripts/integration/check-profile.cjs` | Synthetic API and hook-lifecycle regression checks |
+
+Flow: authenticated Chat Home -> Profile tab -> PersonalInformationScreen ->
+useCitizenProfile -> native session gateway -> auth-service profile API.
+The existing chat stays mounted while Profile is open, retaining its local
+conversation. Hidden chat does not intercept Profile's Android Back action.
+No citizen identifiers or arbitrary photo URLs are accepted from the screen.
+
+### Fields and interactions
+
+English registration name, NIC, mobile and Keycloak email are read-only. Sinhala
+and Tamil names, DOB, Male/Female gender and address are editable. Optional
+values can be cleared. DOB is entered as YYYY-MM-DD; the backend additionally
+checks correspondence to the registered NIC. Read-only fields are excluded
+from update payloads. Personal profile fields are not added to chat/AI requests.
+
+Save updates permitted details. Cancel discards local edits. A stale revision
+(409) or uncertain save retains the draft, blocks further writes and offers
+explicit load-latest/keep-edits or discard choices. Writes are not automatically
+replayed. Leaving with unsaved changes prompts first; Android Back dismisses the
+keyboard before navigating. Network work is cancelled/ignored on unmount.
+
+Change photo opens the system image library. JPEG/PNG files up to 2 MiB are
+checked before upload; the backend remains responsible for complete decoding,
+metadata removal and storage. Selection is previewed, then Upload photo saves
+it separately from the details form using the same current revision. The file
+reader bounds bytes before upload. Photo reads use authenticated requests and
+an in-memory data URI. The image picker may hold a temporary selected copy in
+its own app cache; the app does not add permanent address/profile persistence.
+Camera and microphone permissions are disabled in the image-picker plugin.
+If Android destroys the app while choosing an image, reopen Profile and reselect
+it; no pending photo is automatically restored into another login's profile.
+
+The supplied 400x772 screenshot guides the rounded cards, name groups, gender,
+read-only contact information, maroon Save action and Profile-selected bottom
+navigation. The user also approved a photo section above the form and NIC/address
+fields below. Existing assets and Inter/Sinhala/Tamil fonts are reused. Forms
+always scroll. Controls have 48dp minimum targets and text scaling stays enabled.
+Narrow/enlarged-text layouts stack DOB/gender; short or enlarged layouts place
+the header and Save action inside the scrollable area. Keyboard visibility hides
+bottom navigation, and Android resize/iOS keyboard padding have separate owners.
+An emulator/device check is still necessary to verify the rendered result.
+
+### Checks and current evidence
+
+```powershell
+npm.cmd run typecheck
+node scripts/integration/check-profile.cjs
+node scripts/integration/check-native-session.cjs
+node scripts/integration/check-session-foundation.cjs
+node scripts/integration/check-registration.cjs
+node scripts/integration/check-chat-recovery.cjs
+node scripts/integration/check-conversation-id.cjs
+npm.cmd run check:expo
+npm.cmd run export:android
+```
+
+The profile check tests bearer/no-cookie transport, fixed owner routes, editable
+field allowlisting, photo bytes/revisions, malformed responses, safe errors,
+cancellation and load/save/409/503/photo draft transitions. Hook transitions use
+an in-memory React lifecycle harness, not native rendering. Existing session,
+registration, recovery and chat regression checks also pass. TypeScript and the
+Android production export pass; this export is not an APK.
+
+`check:expo` flags the pre-existing Expo patch level: installed 57.0.31 versus
+recommended ~57.0.34. The task's new image-picker/file-system versions satisfy
+the SDK 57 ranges. The SDK package version itself was not upgraded as part of
+profile implementation. Resolve that patch recommendation with the team before
+release. No automatic audit/SDK-wide upgrade was performed.
+
+Live Keycloak/PostgreSQL/SeaweedFS integration, cross-device persistence,
+physical-phone/keyboard/font-scale checks and AI privacy end-to-end tests are
+not claimed. A temporary read-only Pixel emulator booted, but Expo Go download
+could not complete successfully here; no rendered emulator result is claimed.
+The temporary preview server/download and read-only emulator were stopped.

@@ -1,3 +1,4 @@
+import { PersonalInformationScreen } from './pages/PersonalInformationScreen';
 import { parseResetLink, type RecoveryReceipt } from './services/recoveryApi';
 import { ResetPasswordForm } from './pages/ResetPasswordPreviewScreen';
 import { CheckEmailContent } from './components/CheckEmailContent';
@@ -117,7 +118,17 @@ function Startup() {
   }
   const loginVisit = navigation.current.loginVisit;
   const connectedDemo = __DEV__ && process.env.EXPO_PUBLIC_CONNECTED_UI_DEMO === '1';
-  const nativeAuth = useNativeSession(!connectedDemo);
+  const [profilePreviewOpen, setProfilePreviewOpen] = useState(() => __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1');
+  const nativeAuth = useNativeSession(!connectedDemo && !profilePreviewOpen);
+  const [nativePage, setNativePage] = useState<'chat' | 'profile'>('chat');
+  const wasAuthenticated = useRef(false);
+  useEffect(() => {
+    if (nativeAuth.status !== 'authenticated') {
+      setNativePage('chat');
+      if (wasAuthenticated.current) setScreen('login');
+    }
+    wasAuthenticated.current = nativeAuth.status === 'authenticated';
+  }, [nativeAuth.status]);
   const [recoveryReceipt, setRecoveryReceipt] = useState<RecoveryReceipt | null>(null);
   const [resetToken, setResetToken] = useState<string | null>(null);
   const [resetVisit, setResetVisit] = useState(0);
@@ -209,8 +220,25 @@ function Startup() {
   if (ready && recoveryReceipt) return <CheckEmailContent mode="live" receipt={recoveryReceipt}
     onBack={() => { setRecoveryReceipt(null); setScreen('forgot'); }} onDifferentNic={() => { setRecoveryReceipt(null); setScreen('forgot'); }}
     onLogin={() => { setRecoveryReceipt(null); setScreen('login'); }} />;
+  if (__DEV__) {
+    if (ready && profilePreviewOpen && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1') {
+      const { PersonalInformationPreviewScreen } = require('./pages/PersonalInformationPreviewScreen') as typeof import('./pages/PersonalInformationPreviewScreen');
+      return <PersonalInformationPreviewScreen onExit={() => { setProfilePreviewOpen(false); setScreen('welcome'); }} />;
+    }
+  }
   if (ready && nativeAuth.status === 'checking') return <LoadingScreen fontsLoaded={fontsLoaded} />;
-  if (ready && nativeAuth.status === 'authenticated') return <ChatHomeContent onSendChat={nativeAuth.chat} mode="authenticated" onExit={() => { setScreen('login'); void nativeAuth.logout(); }} />;
+  if (ready && nativeAuth.status === 'authenticated') return (
+    <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, display: nativePage === 'chat' ? 'flex' : 'none' }}
+        accessibilityElementsHidden={nativePage !== 'chat'}
+        importantForAccessibility={nativePage === 'chat' ? 'auto' : 'no-hide-descendants'}>
+        <ChatHomeContent active={nativePage === 'chat'} onSendChat={nativeAuth.chat} mode="authenticated"
+          onOpenProfile={() => { Keyboard.dismiss(); setNativePage('profile'); }}
+          onExit={() => { setScreen('login'); void nativeAuth.logout(); }} />
+      </View>
+      {nativePage === 'profile' && <PersonalInformationScreen api={nativeAuth.profile} onBack={() => setNativePage('chat')} />}
+    </View>
+  );
   if (__DEV__) {
     if (ready && accountPreviewOpen && process.env.EXPO_PUBLIC_ACCOUNT_CREATED_PREVIEW === '1') {
       // Keep require inside a standalone development branch so Metro excludes

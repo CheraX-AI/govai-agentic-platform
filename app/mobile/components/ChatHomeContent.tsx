@@ -29,7 +29,7 @@ const preloadAssets = { ...chatHomeAssets, ...Object.fromEntries(Object.entries(
 const suggestions = ['How do I renew my NIC?', 'What do I need for a passport?', 'Pay my vehicle licence'];
 
 
-export type ChatHomeProps = { onExit: () => void; mode: 'standalone' | 'demo' | 'authenticated'; authenticatedDisplayName?: string | null; onSendChat?: (message: string, signal: AbortSignal, conversationId?: string) => Promise<ChatReply> };
+export type ChatHomeProps = { onExit: () => void; onOpenProfile?: () => void; active?: boolean; mode: 'standalone' | 'demo' | 'authenticated'; authenticatedDisplayName?: string | null; onSendChat?: (message: string, signal: AbortSignal, conversationId?: string) => Promise<ChatReply> };
 
 // Only a future backend-authenticated adapter should supply this name.
 export function ChatHomeContent(props: ChatHomeProps) {
@@ -37,7 +37,9 @@ export function ChatHomeContent(props: ChatHomeProps) {
   return <ChatHomeBody {...props} />;
 }
 
-function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: ChatHomeProps) {
+function ChatHomeBody({ onExit, onOpenProfile, active = true, mode, authenticatedDisplayName, onSendChat }: ChatHomeProps) {
+  const activeScreen = useRef(active);
+  activeScreen.current = active;
   const name = authenticatedDisplayName?.trim();
   const greeting = name ? `Hello, ${name}` : 'Hello';
   const insets = useSafeAreaInsets();
@@ -248,6 +250,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: Ch
     });
   }
   function scheduleVisibility() {
+    if (!activeScreen.current) return;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {
       frame.current = requestAnimationFrame(() => { frame.current = null; adjustVisibility(); });
@@ -255,9 +258,9 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: Ch
   }
   useEffect(() => {
     const mountedInput = input.current;
-    const show = Keyboard.addListener('keyboardDidShow', event => { keyboardTop.current = event.endCoordinates.screenY; scheduleVisibility(); });
+    const show = Keyboard.addListener('keyboardDidShow', event => { if (!activeScreen.current) return; keyboardTop.current = event.endCoordinates.screenY; scheduleVisibility(); });
     const change = Keyboard.addListener('keyboardDidChangeFrame', event => {
-      if (Keyboard.isVisible() || keyboardTop.current !== null) { keyboardTop.current = event.endCoordinates.screenY; scheduleVisibility(); }
+      if (activeScreen.current && (Keyboard.isVisible() || keyboardTop.current !== null)) { keyboardTop.current = event.endCoordinates.screenY; scheduleVisibility(); }
     });
     const hide = Keyboard.addListener('keyboardDidHide', () => {
       keyboardTop.current = null; setOverlap(0);
@@ -272,6 +275,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: Ch
   }, [ready]);
   useEffect(() => {
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!active) return false;
       if (menuPhase.current !== 'closed') { closeMenu(); return true; }
       if (Keyboard.isVisible()) { Keyboard.dismiss(); return true; }
       if (threadRef.current) { returnToLanding(); return true; }
@@ -281,7 +285,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: Ch
       return true;
     });
     return () => back.remove();
-  }, [onExit, reduceMotion]);
+  }, [onExit, reduceMotion, active]);
 
   return <View style={styles.root}>
     <StatusBar style="dark" />
@@ -337,7 +341,7 @@ function ChatHomeBody({ onExit, mode, authenticatedDisplayName, onSendChat }: Ch
               onFocus={() => { focused.current = true; const metrics = Keyboard.metrics(); if(metrics)keyboardTop.current=metrics.screenY; scheduleVisibility(); }}
               onBlur={() => { focused.current=false; }} onLayout={scheduleVisibility} onContentSizeChange={scheduleVisibility} />
           </View>
-          <View testID="chat-navigation" onLayout={event => measureChrome('navigation',event.nativeEvent.layout.height)}><ChatBottomNavigation assets={chatHomeAssets} onHome={thread ? () => { if(threadRef.current?.id===thread?.id)returnToLanding(); } : undefined} /></View>
+          <View testID="chat-navigation" onLayout={event => measureChrome('navigation',event.nativeEvent.layout.height)}><ChatBottomNavigation assets={chatHomeAssets} onProfile={mode === 'authenticated' ? onOpenProfile : undefined} onHome={thread ? () => { if(threadRef.current?.id===thread?.id)returnToLanding(); } : undefined} /></View>
         </>}
       </ScrollView>
       </View>

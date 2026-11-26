@@ -10,7 +10,8 @@
       "ios"
     ],
     "android": {
-      "package": "lk.govai.mobile"
+      "package": "lk.govai.mobile",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "extra": {
       "eas": {
@@ -18,7 +19,15 @@
       }
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow GovAI to select a profile photo.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "govai"
   }

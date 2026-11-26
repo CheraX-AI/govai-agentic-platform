@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createProfileApi, ProfileError } from '../services/profileApi';
+import { NativeAuthError } from '../services/nativeAuthApi';
 import { sendChat } from '../services/chatApi';
 import { AppState } from 'react-native';
 import { loadMobileApiConfig } from '../services/apiConfig';
@@ -54,5 +56,17 @@ export function useNativeSession(enabled: boolean) {
     if (!config.coreBaseUrl) throw new Error('Chat configuration is unavailable.');
     return (await session()).withAccess(token => sendChat(config.coreBaseUrl!, token, message, signal, undefined, conversationId));
   }
-  return { status, error, login, logout, chat };
+  const profile = useMemo(() => createProfileApi(
+    () => loadMobileApiConfig().authBaseUrl,
+    async send => {
+      try { return await (await session()).withAccess(send); }
+      catch (cause) {
+        if ((cause instanceof ProfileError || cause instanceof NativeAuthError) && cause.status === 401) {
+          await logout();
+        }
+        throw cause;
+      }
+    },
+  ), [enabled]);
+  return { status, error, login, logout, chat, profile };
 }
