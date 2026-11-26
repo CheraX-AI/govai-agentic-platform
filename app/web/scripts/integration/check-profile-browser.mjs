@@ -5,7 +5,8 @@ import { openBrowser, origin, frontendFixturePatterns } from './browserHarness.m
 const b = await openBrowser()
 const { send, evaluate, until, fill, go } = b
 let profile = { full_name: 'Synthetic Citizen', nic: '200322812345', mobile_number: '+94771234567', email: 'citizen@example.test', name_si: '', name_ta: '', date_of_birth: '2003-08-15', gender: 'male', address: { line1: '42 Temple Road', line2: '', city: 'Colombo' }, revision: 0, has_photo: false, photo_url: null }
-let writeStatus = 200, session = true
+let writeStatus = 200, readStatus = 503, session = true
+let photoWrites = 0
 const writes = [], fixtureErrors = []
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII='
 b.socket.addEventListener('message', ({ data }) => {
@@ -26,6 +27,7 @@ b.socket.addEventListener('message', ({ data }) => {
       else if (path.endsWith('/logout')) { session = false; status = 204 }
       else if (path.endsWith('/profile/photo')) {
         if (request.method === 'PUT') {
+          photoWrites++
           assert.equal(headers['x-csrf-token'], 'A'.repeat(43))
           assert.equal(headers['if-match'], `"${profile.revision}"`)
           profile = { ...profile, revision: profile.revision + 1, has_photo: true, photo_url: '/api/v1/web/profile/photo' }
@@ -44,7 +46,7 @@ b.socket.addEventListener('message', ({ data }) => {
           status = writeStatus
           if (status === 200) { assert.equal(payload.revision, profile.revision); profile = { ...profile, ...payload, revision: profile.revision + 1 }; body = profile }
           else body = { code: status === 409 ? 'revision_conflict' : 'dob_nic_mismatch', error: 'private upstream diagnostic' }
-        } else body = profile
+        } else { status = readStatus; body = status === 200 ? profile : { code: 'profile_unavailable', error: 'private upstream diagnostic' } }
       } else { status = 404; body = { code: 'not_found' } }
     }
     await send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders, body: status === 204 ? '' : Buffer.from(JSON.stringify(body)).toString('base64') })
@@ -57,6 +59,11 @@ try {
   await send('Fetch.enable', { patterns: [...frontendFixturePatterns, { urlPattern: 'https://localhost:5001/*' }] })
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
   await go('/app/profile')
+  await until('Boolean(document.querySelector(".profile-loading [role=alert]"))', 'initial load failure')
+  assert.equal(await evaluate('document.body.innerText.includes("private upstream")'), false)
+  assert.equal(await evaluate('Boolean(document.getElementById("profile-city"))'), false)
+  readStatus = 200
+  await evaluate('[...document.querySelectorAll("button")].find(x=>x.textContent==="Try again").click()')
   await until('Boolean(document.getElementById("profile-city"))', 'profile form')
   await evaluate('document.fonts.ready')
   assert.equal(await evaluate('document.getElementById("profile-full-name").readOnly && document.getElementById("profile-nic").readOnly && document.getElementById("profile-mobile").readOnly && document.getElementById("profile-email").readOnly'), true)
@@ -96,11 +103,17 @@ try {
   await evaluate('[...document.querySelectorAll("button")].find(x=>x.textContent==="Discard edits and load latest").click()')
   await until('document.getElementById("profile-city").value === "Galle" && !document.querySelector(".profile-reconcile")', 'discard and reload')
   writeStatus = 200
+  for (const [type, size, message] of [['text/plain', 8, 'valid JPEG or PNG'], ['image/png', 2 * 1024 * 1024 + 1, 'up to 2 MiB']]) {
+    await evaluate(`(()=>{const f=new File([new Uint8Array(${size})],'invalid',{type:${JSON.stringify(type)}});const d=new DataTransfer();d.items.add(f);const i=document.querySelector('input[type=file]');i.files=d.files;i.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+    await until(`document.querySelector('.profile-photo-error')?.textContent.includes(${JSON.stringify(message)})`, 'invalid photo rejected')
+    assert.equal(photoWrites, 0, 'invalid selection must not send an upload')
+  }
   await evaluate(`(()=>{const f=new File([Uint8Array.from(atob('${png}'),c=>c.charCodeAt(0))],'synthetic.png',{type:'image/png'});const d=new DataTransfer();d.items.add(f);const i=document.querySelector('input[type=file]');i.files=d.files;i.dispatchEvent(new Event('change',{bubbles:true}))})()`)
   await until('document.body.innerText.includes("Photo selected")', 'photo preview')
   await evaluate('[...document.querySelectorAll("button")].find(x=>x.textContent==="Upload photo").click()')
   await until('document.body.innerText.includes("profile photo has been saved")', 'photo upload')
   await until('Boolean(document.querySelector(".profile-avatar img")?.naturalWidth)', 'authenticated photo displayed')
+  assert.equal(photoWrites, 1)
   for (const [width, height] of [[1440, 1100], [1024, 900], [768, 900], [390, 844]]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
     assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, `no page overflow at ${width}`)
@@ -112,7 +125,7 @@ try {
   session = false
   await send('Page.reload')
   await until('location.pathname === "/login"', 'expired session leaves profile')
-  console.log('PASS: desktop profile render, read-only fields, save/duplicate guard, fixture persistence, 409 reconcile, 422/503 errors, photo upload/display, responsive overflow, no browser storage and expired-session protection. Synthetic HTTP fixtures; no live integration claim.')
+  console.log('PASS: initial load failure/retry, desktop profile render, read-only fields, save/duplicate guard, fixture persistence, 409 reconcile, 422/503 errors, invalid photo type/size, photo upload/display, responsive overflow, no browser storage and expired-session protection. Synthetic HTTP fixtures; no live integration claim.')
 } catch (error) {
   console.error('Synthetic browser diagnostic:', JSON.stringify({ fixtureErrors, exceptions: b.exceptions }))
   throw error
