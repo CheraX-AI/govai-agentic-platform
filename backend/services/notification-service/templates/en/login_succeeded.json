@@ -1,7 +1,7 @@
 {
   "locale": "en",
   "email": {
-    "subject": "New sign-in to your GovAI account",
+    "subject": "Successful sign-in to your GovAI account",
     "body": [
       "A successful sign-in to your GovAI account was recorded.",
       "",
@@ -12,7 +12,7 @@
     ]
   },
   "in_app": {
-    "title": "New sign-in",
+    "title": "Successful sign-in",
     "body": [
       "A successful sign-in to your GovAI account was recorded.",
       "If this wasn't you, use Forgot password on the login page",

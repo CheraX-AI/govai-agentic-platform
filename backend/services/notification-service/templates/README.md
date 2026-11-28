@@ -54,3 +54,7 @@ Run from the repository root after rebuilding the Docker checks image:
 
 The SMTP MIME compatibility test lives in internal/delivery/email_templates_test.go
 and runs as part of the normal internal/delivery tests. Neither command sends mail.
+
+The approved sign-in heading is Successful sign-in (clarified on 27 November
+2026). It refers to confirmed access to the existing account. Event names and
+authentication/session rules are unchanged.

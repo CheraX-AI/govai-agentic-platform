@@ -29,7 +29,7 @@ func TestAccountCatalog(t *testing.T) {
 		title     string
 		subject   string
 	}{
-		{contract.LoginSucceeded, "New sign-in", "New sign-in to your GovAI account"},
+		{contract.LoginSucceeded, "Successful sign-in", "Successful sign-in to your GovAI account"},
 		{contract.PasswordChanged, "Password changed", "Your GovAI password was changed"},
 		{contract.EmailVerified, "Email verified", "Your GovAI email address is verified"},
 	}
