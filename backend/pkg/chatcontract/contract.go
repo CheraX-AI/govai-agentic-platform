@@ -2,6 +2,7 @@
 package chatcontract
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,9 +75,10 @@ type Source struct {
 // Reply is a chat answer. ConversationID ("" = none) is a canonical UUID and
 // is left out of the JSON when empty.
 type Reply struct {
-	Answer         string   `json:"answer"`
-	Sources        []Source `json:"sources"`
-	ConversationID string   `json:"conversation_id,omitempty"`
+	Answer         string          `json:"answer"`
+	Sources        []Source        `json:"sources"`
+	ConversationID string          `json:"conversation_id,omitempty"`
+	Presentation   json.RawMessage `json:"presentation,omitempty"`
 }
 
 // Format hides the value when it is printed with fmt (Println, Printf, Sprintf).

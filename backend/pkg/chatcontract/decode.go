@@ -103,7 +103,7 @@ func DecodeReply(body []byte) (Reply, error) {
 		return Reply{}, ErrResponse
 	}
 
-	object, err := fields(body, "answer", "sources", conversationIDField)
+	object, err := fields(body, "answer", "sources", conversationIDField, "presentation")
 	if err != nil {
 		return Reply{}, err
 	}
@@ -167,6 +167,9 @@ func DecodeReply(body []byte) (Reply, error) {
 		}
 	}
 
+	if raw := object["presentation"]; validPresentation(raw, reply.Sources) {
+		reply.Presentation = append(json.RawMessage(nil), raw...)
+	}
 	if _, err := Encode(reply); err != nil {
 		return Reply{}, ErrResponse
 	}

@@ -1,0 +1,89 @@
+{
+  "answer": "SYNTHETIC EXAMPLE: prepare, review and confirm the sample guidance. [1]",
+  "sources": [
+    {
+      "number": 1,
+      "title": "Synthetic service guide - not official",
+      "page": 2
+    }
+  ],
+  "presentation": {
+    "version": 1,
+    "blocks": [
+      {
+        "id": "intro",
+        "type": "text",
+        "markdown": "**Synthetic only.** අවශ්‍ය ලේඛන தேவையான ஆவணங்கள்",
+        "source_numbers": [
+          1
+        ]
+      },
+      {
+        "id": "steps",
+        "type": "procedure",
+        "steps": [
+          {
+            "id": "prepare",
+            "title": "Prepare",
+            "detail": "Read the sample guidance.",
+            "source_numbers": [
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "id": "docs",
+        "type": "checklist",
+        "items": [
+          {
+            "id": "form",
+            "text": "Sample form"
+          }
+        ]
+      },
+      {
+        "id": "fees",
+        "type": "table",
+        "columns": [
+          {
+            "id": "service",
+            "label": "Service"
+          },
+          {
+            "id": "fee",
+            "label": "Fee"
+          }
+        ],
+        "rows": [
+          [
+            "Sample service",
+            "Not established by this fixture"
+          ]
+        ],
+        "source_numbers": [
+          1
+        ]
+      },
+      {
+        "id": "note",
+        "type": "notice",
+        "severity": "warning",
+        "text": "Not official guidance.",
+        "date": "2026-11-28",
+        "date_label": "Fixture created"
+      },
+      {
+        "id": "faq",
+        "type": "faq",
+        "items": [
+          {
+            "id": "cost",
+            "question": "What is the fee?",
+            "answer": "This fixture does not establish a fee."
+          }
+        ]
+      }
+    ]
+  }
+}

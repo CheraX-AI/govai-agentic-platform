@@ -197,7 +197,15 @@ func Encode(reply Reply) ([]byte, error) {
 		}
 	}
 
+	if !validPresentation(reply.Presentation, reply.Sources) {
+		reply.Presentation = nil
+	}
 	encoded, err := json.Marshal(reply)
+	// Optional presentation must never make a valid legacy answer unavailable.
+	if len(encoded) > MaxResponseBytes && reply.Presentation != nil {
+		reply.Presentation = nil
+		encoded, err = json.Marshal(reply)
+	}
 	if err != nil || len(encoded) > MaxResponseBytes {
 		return nil, ErrResponse
 	}
