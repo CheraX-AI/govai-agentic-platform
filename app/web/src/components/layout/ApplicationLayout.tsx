@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import { ApplicationHeader } from './ApplicationHeader'
 import { Sidebar } from './Sidebar'
 import type { ApplicationPage } from './Sidebar'
 import { ContentContainer } from './ContentContainer'
+import { TopBar } from './TopBar'
 import '../../styles/application.css'
 
 export function ApplicationLayout({
@@ -76,22 +76,22 @@ export function ApplicationLayout({
       >
         Skip to content
       </a>
-      <ApplicationHeader
-        onLogout={onLogout}
-        onOpenMenu={() => {
-          opener.current = document.querySelector<HTMLElement>('.menu-toggle')
-          dialog.current?.showModal()
-        }}
-      />
       <div className="application-body">
         <aside className="desktop-sidebar">
           <Sidebar
             page={page}
+            onLogout={onLogout}
             onNewChat={onNewChat}
             conversationAvailable={conversationAvailable}
           />
         </aside>
-        <ContentContainer page={page}>{children}</ContentContainer>
+        <div className="application-main">
+          <TopBar onOpenMenu={button => {
+            opener.current = button
+            dialog.current?.showModal()
+          }} />
+          <ContentContainer page={page}>{children}</ContentContainer>
+        </div>
       </div>
       <dialog
         ref={dialog}
@@ -112,16 +112,21 @@ export function ApplicationLayout({
             <h2 id="navigation-title">Navigation</h2>
             <button type="button" autoFocus onClick={closeMenu}>Close menu</button>
           </div>
-          <div onClick={event => {
+          <div className="navigation-content" onClick={event => {
 
             // Navigation commands such as New chat are buttons, not just links.
 
-            if ((event.target as HTMLElement).closest('a[href], button:not(:disabled)')) {
+            // Disclosures stay open; notification navigation closes the drawer.
+            const target = event.target as HTMLElement
+            const disclosure = target.closest('.sidebar-account-settings, .notification-disclosure')
+            const navigate = target.closest('[data-close-navigation]')
+            if (target.closest('a[href], button:not(:disabled)') && (!disclosure || navigate)) {
               closeMenu()
             }
           }}>
             <Sidebar
               page={page}
+              onLogout={onLogout}
               onNewChat={onNewChat}
               conversationAvailable={conversationAvailable}
             />

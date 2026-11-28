@@ -188,3 +188,15 @@ Local browser verification measures sizing, targets, alignment, growth, internal
 scrolling, resize and overflow at widths 1440/768/375/320, plus whitespace,
 Shift+Enter and IME behavior in preview and normal application contexts.
 Preview fixture success is not authenticated backend evidence.
+
+### Citizen notifications (GA-286)
+
+The bottom-left account row now has a notification dropdown and protected inbox/settings
+routes. See [notification handoff](NOTIFICATIONS.md) for structure, editing,
+behavior and integration requirements. The current production service reports
+unavailable until the approved browser BFF and persistent runtime are connected.
+
+Use /preview/notifications on the Vite development server to review the full
+inbox, dropdown, message details and channel settings with labelled sample data.
+The preview is excluded from production and never substitutes for live results.
+Run node scripts/check-notifications.mjs for the standalone contract checks.

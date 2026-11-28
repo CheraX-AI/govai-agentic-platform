@@ -7,6 +7,9 @@ import AppRouter from './routing/AppRouter'
 
 const ChatPreview = import.meta.env.DEV ? lazy(() => import('./dev/ChatPreview')) : null
 
+const NotificationsPreview = import.meta.env.DEV
+  ? lazy(() => import('./dev/NotificationsPreview')) : null
+
 export default function App() {
 
   // Bypass session mounting only for the explicitly isolated development preview.
@@ -15,6 +18,13 @@ export default function App() {
     return ChatPreview ? (
       <Suspense fallback={<p role="status">Loading chat preview...</p>}>
         <ChatPreview />
+      </Suspense>
+    ) : <UnavailablePage />
+  }
+  if (location.pathname === '/preview/notifications') {
+    return NotificationsPreview ? (
+      <Suspense fallback={<p role="status">Loading notification preview…</p>}>
+        <NotificationsPreview />
       </Suspense>
     ) : <UnavailablePage />
   }

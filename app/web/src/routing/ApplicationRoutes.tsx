@@ -3,14 +3,17 @@ import { useAuth } from '../auth/AuthContext'
 import { ProtectedRoute } from '../auth/ProtectedRoute'
 import { useConversation } from '../chat/useConversation'
 import { ApplicationPageLayout } from '../components/layout/ApplicationPageLayout'
+import { NotificationProvider } from '../notifications/NotificationProvider'
 import ChatPage from '../pages/ChatPage'
 import HomePage from '../pages/HomePage'
 import RecentPage from '../pages/RecentPage'
+import NotificationsPage from '../pages/NotificationsPage'
+import NotificationSettingsPage from '../pages/NotificationSettingsPage'
 import { navigate } from './routes'
 import type { ProtectedDestination } from './routes'
 import '../styles/chat.css'
 
-// This owner stays mounted across protected pages, so local messages survive navigation.
+// Shared conversation ownership stays unchanged across the protected destinations.
 
 export default function ApplicationRoutes({ path, onLogout }: {
   path: ProtectedDestination
@@ -20,9 +23,6 @@ export default function ApplicationRoutes({ path, onLogout }: {
   const conversation = useConversation(undefined, () => { void auth.retry() })
   const { reset } = conversation
   const owner = useRef<string | null>(null)
-
-  // Keep context during a check; ProtectedRoute withholds it until confirmation.
-  // Clearing before paint prevents a new identity seeing the previous user's messages.
 
   useLayoutEffect(() => {
     if (auth.state.status === 'authenticated') {
@@ -39,24 +39,31 @@ export default function ApplicationRoutes({ path, onLogout }: {
     reset()
     navigate('/app/home')
   }
-  const page = path === '/app/chat' ? 'chat' : path === '/app/recent' ? 'recent' : 'home'
+  const page = path === '/app/notifications/settings' ? 'notification-settings'
+    : path === '/app/notifications' ? 'notifications'
+      : path === '/app/chat' ? 'chat' : path === '/app/recent' ? 'recent' : 'home'
+  const identity = auth.state.status === 'authenticated' ? auth.state.session.userId : 'none'
 
   return (
     <ProtectedRoute destination={path}>
-      <ApplicationPageLayout
-        page={page}
-        onLogout={onLogout}
-        onNewChat={newChat}
-        conversationAvailable={conversation.messages.length > 0}
-      >
-        {page === 'chat' ? (
-          <ChatPage conversation={conversation} />
-        ) : page === 'recent' ? (
-          <RecentPage conversationAvailable={conversation.messages.length > 0} />
-        ) : (
-          <HomePage conversation={conversation} onOpenChat={openChat} />
-        )}
-      </ApplicationPageLayout>
+
+      {/* Remount on identity changes so one citizen cannot retain another's inbox. */}
+
+      <NotificationProvider key={identity}>
+        <ApplicationPageLayout
+          page={page}
+          onLogout={onLogout}
+          onNewChat={newChat}
+          conversationAvailable={conversation.messages.length > 0}
+        >
+          {page === 'notifications' ? <NotificationsPage />
+            : page === 'notification-settings' ? <NotificationSettingsPage />
+              : page === 'chat' ? <ChatPage conversation={conversation} />
+                : page === 'recent' ? (
+                  <RecentPage conversationAvailable={conversation.messages.length > 0} />
+                ) : <HomePage conversation={conversation} onOpenChat={openChat} />}
+        </ApplicationPageLayout>
+      </NotificationProvider>
     </ProtectedRoute>
   )
 }

@@ -106,7 +106,9 @@ export default function AppRouter() {
   if (
     route.path === '/app/home' ||
     route.path === '/app/recent' ||
-    route.path === '/app/chat'
+    route.path === '/app/chat' ||
+    route.path === '/app/notifications' ||
+    route.path === '/app/notifications/settings'
   ) {
     return <ApplicationRoutes path={route.path} onLogout={() => void logout()} />
   }

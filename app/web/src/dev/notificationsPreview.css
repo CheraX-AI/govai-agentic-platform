@@ -1,0 +1,9 @@
+.notifications-development { height: 100svh; display: flex; flex-direction: column; }
+.notifications-development .application-layout { flex: 1; min-height: 0; height: auto; }
+.notification-preview-note {
+  margin: 22px auto 0;
+  max-width: 1100px;
+  color: #767680;
+  font-size: 11px;
+  text-align: center;
+}

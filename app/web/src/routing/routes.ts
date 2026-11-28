@@ -1,10 +1,14 @@
-export type ProtectedDestination = '/app/home' | '/app/recent' | '/app/chat'
+export type ProtectedDestination =
+  | '/app/home' | '/app/recent' | '/app/chat'
+  | '/app/notifications' | '/app/notifications/settings'
 
 export function allowedReturn(value: string | null | undefined): ProtectedDestination {
 
   // Login return paths are an allowlist, not arbitrary URLs supplied by the address bar.
 
-  return value === '/app/recent' || value === '/app/chat' ? value : '/app/home'
+  return value === '/app/recent' || value === '/app/chat' ||
+    value === '/app/notifications' || value === '/app/notifications/settings'
+    ? value : '/app/home'
 }
 
 export function loginDestination(destination: ProtectedDestination, expired = false) {
@@ -32,6 +36,8 @@ export function pageTitle(path: string) {
     '/app/chat': 'Chat',
     '/app/home': 'Home',
     '/app/recent': 'Recent chats',
+    '/app/notifications': 'Notifications',
+    '/app/notifications/settings': 'Notification settings',
   }
   return titles[path] ?? 'Page not found'
 }
